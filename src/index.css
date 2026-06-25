@@ -1,0 +1,425 @@
+@import url("https://fonts.googleapis.com/css2?family=Gabarito:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-invest-blue: #3384D6;
+  --color-invest-orange: #E84922;
+  --color-invest-aqua: #00A9E0;
+  --font-gabarito: 'Gabarito', sans-serif;
+}
+
+:root {
+  --ui-bg: #f4f7fb;
+  --ui-surface: #ffffff;
+  --ui-surface-2: #f8fafc;
+  --ui-surface-elevated: #fafbfc;
+  --ui-border: #e8ecf0;
+  --ui-border-strong: #d8dee6;
+  --ui-text: #1a2332;
+  --ui-text-soft: #5c6b7a;
+  --ui-text-subtle: #8b99a8;
+  --ui-focus: #3384d6;
+  --ui-radius-sm: 8px;
+  --ui-radius-md: 10px;
+  --ui-radius: 12px;
+  --ui-radius-lg: 12px;
+  --ui-radius-xl: 14px;
+  --ui-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --ui-shadow-md: 0 6px 18px rgba(15, 23, 42, 0.08);
+
+  --brand-primary: #1f4e79;
+  --brand-primary-hover: #173b5c;
+  --brand-secondary: #2f6fa3;
+  --brand-secondary-hover: #245782;
+  --brand-accent: #f08a24;
+  --role-admin-primary: #1f3a5f;
+  --role-admin-accent: #3b82f6;
+
+  --state-success-bg: #ecfdf5;
+  --state-success-text: #065f46;
+  --state-success-border: #a7f3d0;
+  --state-warning-bg: #fffbeb;
+  --state-warning-text: #92400e;
+  --state-warning-border: #fcd34d;
+  --state-danger-bg: #fef2f2;
+  --state-danger-text: #991b1b;
+  --state-danger-border: #fecaca;
+  --state-info-bg: #eff6ff;
+  --state-info-text: #1e40af;
+  --state-info-border: #bfdbfe;
+  --state-neutral-bg: #f8fafc;
+  --state-neutral-text: #334155;
+  --state-neutral-border: #e2e8f0;
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-gabarito, "Gabarito", sans-serif);
+  color: var(--ui-text);
+  background: var(--ui-bg);
+  line-height: 1.45;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+input, select, textarea {
+  border-radius: var(--ui-radius-sm);
+  border: 1px solid var(--ui-border-strong);
+  background: #fff;
+  color: var(--ui-text);
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--ui-focus) !important;
+  box-shadow: 0 0 0 3px rgba(51, 132, 214, 0.16);
+}
+
+button {
+  transition: transform .12s ease, filter .18s ease, box-shadow .18s ease;
+}
+
+button:hover {
+  filter: brightness(1.02);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+/* Normaliza tablas de formularios extensos */
+table {
+  border-collapse: collapse;
+}
+
+th, td {
+  vertical-align: top;
+}
+
+/* Scrollbar legible */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Reutilizable para contenedor principal */
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-top-control {
+  background: #ffffff;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.app-top-select {
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-sm);
+  padding: 8px 10px;
+  font-weight: 600;
+}
+
+/* ---------- Phase 2: Layout + Sidebar System ---------- */
+.role-sidebar {
+  --role-primary: #334155;
+  --role-accent: #e84922;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 16rem;
+  height: 100vh;
+  color: #fff;
+  background: var(--role-primary);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.22);
+}
+
+.role-sidebar-header {
+  padding: 1.4rem 1rem 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.role-sidebar-header img {
+  height: 48px;
+  width: auto;
+  max-width: 150px;
+}
+
+.role-sidebar-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.role-sidebar-subtitle {
+  margin: 0;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.role-sidebar-nav {
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.role-sidebar-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: var(--ui-radius-sm);
+  color: rgba(255, 255, 255, 0.86);
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.role-sidebar-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.role-sidebar-btn-active {
+  background: color-mix(in oklab, var(--role-accent), #000 4%);
+  color: #fff;
+  box-shadow: none;
+}
+
+.role-sidebar-footer {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.role-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.52);
+  z-index: 30;
+}
+
+/* ---------- Phase 2: Page cards, tables, toolbars ---------- */
+.ux-page {
+  padding: 1.5rem;
+  background: transparent;
+}
+
+.ux-card {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.ux-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.ux-search {
+  background: #fff;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.ux-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ux-table thead th {
+  background: var(--ui-surface-2);
+  color: var(--ui-text-subtle);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.ux-table tbody td {
+  padding: 0.95rem 1rem;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.ux-table tbody tr:hover {
+  background: var(--ui-surface-2);
+}
+
+.ux-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ux-status-pill-neutral {
+  background: var(--state-neutral-bg);
+  color: var(--state-neutral-text);
+  border-color: var(--state-neutral-border);
+}
+
+.ux-status-pill-success {
+  background: var(--state-success-bg);
+  color: var(--state-success-text);
+  border-color: var(--state-success-border);
+}
+
+.ux-status-pill-warning {
+  background: var(--state-warning-bg);
+  color: var(--state-warning-text);
+  border-color: var(--state-warning-border);
+}
+
+.ux-status-pill-danger {
+  background: var(--state-danger-bg);
+  color: var(--state-danger-text);
+  border-color: var(--state-danger-border);
+}
+
+.ux-status-pill-info {
+  background: var(--state-info-bg);
+  color: var(--state-info-text);
+  border-color: var(--state-info-border);
+}
+
+.ux-fade-in {
+  animation: ux-fade-in 240ms ease;
+}
+
+.ux-lift {
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.ux-lift:hover {
+  transform: none;
+  box-shadow: var(--ui-shadow-sm);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 2px #A7F3D0; }
+  50% { opacity: 0.6; box-shadow: 0 0 0 5px #D1FAE5; }
+}
+
+@keyframes ux-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- Print: aislar ficha de comité ---------- */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  /* Base: resetear layout del shell */
+  html,
+  body,
+  #root,
+  .app-shell {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Ocultar el shell, switchers y cualquier toolbar marcada */
+  .role-sidebar,
+  .role-mobile-overlay,
+  [data-view-switcher-root="true"],
+  [data-print="hide"],
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* === Modo impresión aislada de la ficha ===
+     Se oculta todo vía visibility, luego se revela solo .ficha-print-root.
+     Usar visibility (no display:none) mantiene el flujo del documento
+     para que el contenido pueda abarcar varias páginas. */
+  body.is-printing-ficha,
+  body.is-printing-ficha * {
+    visibility: hidden !important;
+  }
+
+  body.is-printing-ficha .ficha-print-root {
+    visibility: visible !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    background: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body.is-printing-ficha .ficha-print-root * {
+    visibility: visible !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .ficha-print-root + .ficha-print-root,
+  .ficha-print-root ~ * .ficha-print-root {
+    page-break-before: always;
+  }
+}
+

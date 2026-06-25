@@ -1,0 +1,1 @@
+export type ViewJuridica = 'dashboard' | 'bandeja' | 'historial' | 'calificacion' | 'documentos' | 'proveedores' | 'convocatorias' | 'acta_adjudicacion' | 'contratos' | 'formulario_contractual' | 'powerbi';

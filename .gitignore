@@ -1,0 +1,26 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (nunca al repo)
+.env
+.env.local
+.env.*.local
+
+# Build
+build/
+dist/
+
+# Logs
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.bak
+
+# Claude Code
+.claude/
