@@ -668,7 +668,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
               <div style={{ padding: '8px 20px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
                 <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
                   Ingresar la siguiente información de los posibles proponentes que puedan suplir la contratación.
-                  {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: mínimo 4 proponentes.</strong>}
+                  {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: solo se registra un (1) proponente.</strong>}
                 </p>
               </div>
               {Array.isArray(sol.proponentes) && sol.proponentes.length > 0 ? (
@@ -1198,7 +1198,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
                       {solicitud.codigo}
                     </span>
                     <h3 className="text-lg font-black text-slate-900 leading-tight mt-3 line-clamp-2" style={{ fontFamily: 'Gabarito, sans-serif' }}>
-                      {solicitud.objeto}
+                      {solicitud.titulo_contrato || solicitud.objeto}
                     </h3>
                   </div>
                   <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm">

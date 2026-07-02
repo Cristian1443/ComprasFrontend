@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Printer, Loader2, PencilLine } from 'lucide-react';
+import { ArrowLeft, Printer, Loader2, PencilLine, Lock } from 'lucide-react';
 import { getPresupuestoCertificadoDisplay, getPresupuestoDisplayText } from '../../lib/formatPresupuesto';
 import { getCausalComiteDisplay } from './DetalleSolicitudComite';
 import { BloqueFirma } from '../shared/BloqueFirma';
@@ -38,6 +38,19 @@ interface ActaSesionComiteProps {
   decisionesPorId?: Record<string, DecisionRegistroActa>;
   /** ID de la primera solicitud del acta, usado como ancla para Adobe Sign */
   solicitudPrincipalId?: string;
+  /** ID del registro en actas_comite para persistir textos libres */
+  actaId?: string;
+  desarrolloInicial?: string;
+  conclusionInicial?: string;
+  desarrolloCerradoInicial?: boolean;
+  conclusionCerradaInicial?: boolean;
+  /** Firmantes propios de esta acta (pueden variar de una sesión a otra) */
+  firmanteDirectoraNombreInicial?: string;
+  firmanteDirectoraCargoInicial?: string;
+  firmanteSecretariaNombreInicial?: string;
+  firmanteSecretariaCargoInicial?: string;
+  /** Si true, oculta los botones de edición (vista de historial) */
+  soloLectura?: boolean;
   onBack: () => void;
 }
 
@@ -117,7 +130,7 @@ function EncabezadoInstitucional() {
   return (
     <div style={sx.encabezadoWrap}>
       <img
-        src="/logo-iib.png"
+        src="/logo-iib-oficial.png"
         alt="Invest in Bogotá"
         style={{ height: 62, width: 'auto', display: 'block' }}
       />
@@ -135,19 +148,15 @@ function PieInstitucional() {
   return (
     <div style={sx.pieWrap}>
       <div style={sx.pieFilaPrincipal}>
-        {/* Silueta de Bogotá — filtro escala de grises para coincidir con el estilo del PDF */}
+        {/* Silueta de Bogotá — ilustración institucional del pie de página oficial */}
         <img
-          src="/bogota_bg.png"
+          src="/bogota-skyline.png"
           alt="Bogotá"
           style={{
             height: 58,
-            width: 190,
+            width: 'auto',
             display: 'block',
             flexShrink: 0,
-            objectFit: 'cover',
-            objectPosition: 'center top',
-            filter: 'grayscale(100%) brightness(1.4) contrast(0.65) opacity(0.75)',
-            borderRadius: 0,
           }}
           onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
@@ -178,17 +187,84 @@ export function ActaSesionComite({
   discusionesPorId,
   decisionesPorId = {},
   solicitudPrincipalId,
+  actaId,
+  desarrolloInicial = '',
+  conclusionInicial = '',
+  desarrolloCerradoInicial = false,
+  conclusionCerradaInicial = false,
+  firmanteDirectoraNombreInicial = '',
+  firmanteDirectoraCargoInicial = '',
+  firmanteSecretariaNombreInicial = '',
+  firmanteSecretariaCargoInicial = '',
+  soloLectura = false,
   onBack,
 }: ActaSesionComiteProps) {
   const [detalles, setDetalles] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [firmantesApi, setFirmantesApi] = useState<FirmanteConfig[]>([]);
-  const [desarrolloTexto, setDesarrolloTexto] = useState('');
-  const [conclusionTexto, setConclusionTexto] = useState('');
+  const [desarrolloTexto, setDesarrolloTexto] = useState(desarrolloInicial);
+  const [conclusionTexto, setConclusionTexto] = useState(conclusionInicial);
   const [editandoDesarrollo, setEditandoDesarrollo] = useState(false);
   const [editandoConclusion, setEditandoConclusion] = useState(false);
+  const [desarrolloCerrado, setDesarrolloCerrado] = useState(desarrolloCerradoInicial);
+  const [conclusionCerrada, setConclusionCerrada] = useState(conclusionCerradaInicial);
+  const [guardando, setGuardando] = useState<'desarrollo' | 'conclusion' | null>(null);
   const desarrolloRef = useRef<HTMLTextAreaElement>(null);
   const conclusionRef = useRef<HTMLTextAreaElement>(null);
+
+  /* ── Firmantes propios de esta acta (editables, no dependen de un único valor global) ── */
+  const [firmanteDirectora, setFirmanteDirectora] = useState({
+    nombre: firmanteDirectoraNombreInicial,
+    cargo: firmanteDirectoraCargoInicial,
+  });
+  const [firmanteSecretaria, setFirmanteSecretaria] = useState({
+    nombre: firmanteSecretariaNombreInicial,
+    cargo: firmanteSecretariaCargoInicial,
+  });
+  const [editandoFirmantes, setEditandoFirmantes] = useState(false);
+  const [guardandoFirmantes, setGuardandoFirmantes] = useState(false);
+
+  const guardarTexto = async (
+    campo: 'desarrollo' | 'conclusion',
+    texto: string
+  ) => {
+    if (!actaId) return;
+    setGuardando(campo);
+    try {
+      await fetch(`${API_URL}/api/secretaria/actas/${actaId}/textos`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          campo === 'desarrollo'
+            ? { desarrollo_texto: texto, cerrar_desarrollo: true }
+            : { conclusion_texto: texto, cerrar_conclusion: true }
+        ),
+      });
+      if (campo === 'desarrollo') setDesarrolloCerrado(true);
+      else setConclusionCerrada(true);
+    } catch { /* no-op */ }
+    setGuardando(null);
+  };
+
+  const guardarFirmantes = async () => {
+    setGuardandoFirmantes(true);
+    try {
+      if (actaId) {
+        await fetch(`${API_URL}/api/secretaria/actas/${actaId}/firmantes`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            firmante_directora_nombre: firmanteDirectora.nombre,
+            firmante_directora_cargo: firmanteDirectora.cargo,
+            firmante_secretaria_nombre: firmanteSecretaria.nombre,
+            firmante_secretaria_cargo: firmanteSecretaria.cargo,
+          }),
+        });
+      }
+      setEditandoFirmantes(false);
+    } catch { /* no-op */ }
+    setGuardandoFirmantes(false);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -222,6 +298,24 @@ export function ActaSesionComite({
     return () => { mounted = false; };
   }, [ids]);
 
+  /* Si esta acta no tiene firmantes propios guardados aún, se usa el valor
+     global configurado como punto de partida (editable antes de firmar). */
+  useEffect(() => {
+    if (firmantesApi.length === 0) return;
+    const directoraGlobal = firmantesApi.find((f) => f.rol_firma === 'directora_comite');
+    const secretariaGlobal = firmantesApi.find((f) => f.rol_firma === 'secretaria_comite');
+    setFirmanteDirectora((prev) =>
+      prev.nombre || !directoraGlobal
+        ? prev
+        : { nombre: directoraGlobal.nombre, cargo: directoraGlobal.cargo }
+    );
+    setFirmanteSecretaria((prev) =>
+      prev.nombre || !secretariaGlobal
+        ? prev
+        : { nombre: secretariaGlobal.nombre, cargo: secretariaGlobal.cargo }
+    );
+  }, [firmantesApi]);
+
   /* ── Fecha y hora ── */
   const fechaSesion = fechaSesionISO ? new Date(fechaSesionISO) : new Date();
   const fechaLarga = fechaSesion.toLocaleDateString('es-CO', {
@@ -243,17 +337,19 @@ export function ActaSesionComite({
     p.tipo ? p.tipo === 'invitado' : !!p.esInvitado
   );
 
-  /* ── Firmantes: solo Directora de Comité y Secretaria de Comité ── */
-  const ROLES_FIRMA = ['directora_comite', 'secretaria_comite'];
-  const firmantes: { nombre: string; cargo: string }[] =
-    firmantesApi.length > 0
-      ? firmantesApi
-          .filter((f) => ROLES_FIRMA.includes(f.rol_firma))
-          .map((f) => ({ nombre: f.nombre, cargo: f.cargo }))
-      : [
-          { nombre: '___________________________', cargo: 'Directora de Comité' },
-          { nombre: '___________________________', cargo: 'Secretaria de Comité' },
-        ];
+  /* ── Firmantes: Directora y Secretaria de este comité en particular.
+     Se editan por acta porque las personas en esos cargos pueden cambiar
+     de una sesión a otra (ver botón "Editar firmantes" más abajo). ── */
+  const firmantes: { nombre: string; cargo: string }[] = [
+    {
+      nombre: firmanteDirectora.nombre || '___________________________',
+      cargo: firmanteDirectora.cargo || 'Directora de Comité',
+    },
+    {
+      nombre: firmanteSecretaria.nombre || '___________________________',
+      cargo: firmanteSecretaria.cargo || 'Secretaria de Comité',
+    },
+  ];
 
   /* ── Helpers ── */
   const getMontoTexto = (sol: any): string => {
@@ -263,10 +359,10 @@ export function ActaSesionComite({
     } catch {
       return sol.valor_estimado
         ? new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            maximumFractionDigits: 0,
-          }).format(Number(sol.valor_estimado))
+          style: 'currency',
+          currency: 'COP',
+          maximumFractionDigits: 0,
+        }).format(Number(sol.valor_estimado))
         : 'No registrado';
     }
   };
@@ -423,33 +519,46 @@ export function ActaSesionComite({
               />
               <button
                 data-print="hide"
-                onClick={() => setEditandoDesarrollo(false)}
+                onClick={async () => {
+                  await guardarTexto('desarrollo', desarrolloTexto);
+                  setEditandoDesarrollo(false);
+                }}
                 style={sx.btnGuardar}
+                disabled={guardando === 'desarrollo'}
               >
-                Listo
+                {guardando === 'desarrollo'
+                  ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Guardando...</>
+                  : 'Guardar y cerrar'}
               </button>
             </div>
           ) : (
             <>
               {desarrolloTexto.trim()
                 ? desarrolloTexto
-                    .split(/\n{2,}|\n/)
-                    .filter((par) => par.trim())
-                    .map((parr, i) => (
-                      <p key={i} style={sx.p}>{parr.trim()}</p>
-                    ))
+                  .split(/\n{2,}|\n/)
+                  .filter((par) => par.trim())
+                  .map((parr, i) => (
+                    <p key={i} style={sx.p}>{parr.trim()}</p>
+                  ))
                 : null}
-              <button
-                data-print="hide"
-                onClick={() => {
-                  setEditandoDesarrollo(true);
-                  setTimeout(() => desarrolloRef.current?.focus(), 50);
-                }}
-                style={sx.btnEditarTexto}
-              >
-                <PencilLine size={13} />
-                {desarrolloTexto.trim() ? 'Editar desarrollo' : 'Agregar desarrollo de la sesión'}
-              </button>
+              {!soloLectura && (desarrolloCerrado ? (
+                <div data-print="hide" style={sx.cerradoBadge}>
+                  <Lock size={12} />
+                  Desarrollo cerrado — no editable
+                </div>
+              ) : (
+                <button
+                  data-print="hide"
+                  onClick={() => {
+                    setEditandoDesarrollo(true);
+                    setTimeout(() => desarrolloRef.current?.focus(), 50);
+                  }}
+                  style={sx.btnEditarTexto}
+                >
+                  <PencilLine size={13} />
+                  {desarrolloTexto.trim() ? 'Editar desarrollo' : 'Agregar desarrollo de la sesión'}
+                </button>
+              ))}
             </>
           )}
 
@@ -533,10 +642,16 @@ export function ActaSesionComite({
               />
               <button
                 data-print="hide"
-                onClick={() => setEditandoConclusion(false)}
+                onClick={async () => {
+                  await guardarTexto('conclusion', conclusionTexto);
+                  setEditandoConclusion(false);
+                }}
                 style={sx.btnGuardar}
+                disabled={guardando === 'conclusion'}
               >
-                Listo
+                {guardando === 'conclusion'
+                  ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Guardando...</>
+                  : 'Guardar y cerrar'}
               </button>
             </div>
           ) : (
@@ -549,17 +664,24 @@ export function ActaSesionComite({
                     <p key={i} style={sx.p}>{parr.trim()}</p>
                   ))
               ) : null}
-              <button
-                data-print="hide"
-                onClick={() => {
-                  setEditandoConclusion(true);
-                  setTimeout(() => conclusionRef.current?.focus(), 50);
-                }}
-                style={sx.btnEditarTexto}
-              >
-                <PencilLine size={13} />
-                {conclusionTexto.trim() ? 'Editar conclusión' : 'Personalizar conclusión'}
-              </button>
+              {!soloLectura && (conclusionCerrada ? (
+                <div data-print="hide" style={sx.cerradoBadge}>
+                  <Lock size={12} />
+                  Conclusión cerrada — no editable
+                </div>
+              ) : (
+                <button
+                  data-print="hide"
+                  onClick={() => {
+                    setEditandoConclusion(true);
+                    setTimeout(() => conclusionRef.current?.focus(), 50);
+                  }}
+                  style={sx.btnEditarTexto}
+                >
+                  <PencilLine size={13} />
+                  {conclusionTexto.trim() ? 'Editar conclusión' : 'Personalizar conclusión'}
+                </button>
+              ))}
             </>
           )}
 
@@ -577,16 +699,64 @@ export function ActaSesionComite({
             En constancia firman:
           </p>
 
-          <div style={{ ...sx.sigGrid, gridTemplateColumns: 'repeat(2, 1fr)' }}>
-            {firmantes.map((f, i) => (
-              <div key={i} style={sx.sigBloque}>
-                <div style={sx.sigEspacio} />
-                <div style={sx.sigLinea} />
-                <p style={sx.sigNombre}>{f.nombre}</p>
-                <p style={sx.sigCargo}>{f.cargo}</p>
+          {editandoFirmantes ? (
+            <div data-print="hide" style={sx.firmantesEditWrap}>
+              {[
+                { label: 'Directora del Comité', valor: firmanteDirectora, set: setFirmanteDirectora },
+                { label: 'Secretaria del Comité', valor: firmanteSecretaria, set: setFirmanteSecretaria },
+              ].map((f, i) => (
+                <div key={i} style={sx.firmanteEditFila}>
+                  <p style={sx.firmanteEditLabel}>{f.label}</p>
+                  <input
+                    type="text"
+                    placeholder="Nombre de quien firma"
+                    value={f.valor.nombre}
+                    onChange={(e) => f.set((prev) => ({ ...prev, nombre: e.target.value }))}
+                    style={sx.firmanteInput}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Cargo"
+                    value={f.valor.cargo}
+                    onChange={(e) => f.set((prev) => ({ ...prev, cargo: e.target.value }))}
+                    style={sx.firmanteInput}
+                  />
+                </div>
+              ))}
+              <button
+                onClick={guardarFirmantes}
+                style={sx.btnGuardar}
+                disabled={guardandoFirmantes}
+              >
+                {guardandoFirmantes
+                  ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Guardando...</>
+                  : 'Guardar firmantes'}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div style={{ ...sx.sigGrid, gridTemplateColumns: 'repeat(2, 1fr)' }}>
+                {firmantes.map((f, i) => (
+                  <div key={i} style={sx.sigBloque}>
+                    <div style={sx.sigEspacio} />
+                    <div style={sx.sigLinea} />
+                    <p style={sx.sigNombre}>{f.nombre}</p>
+                    <p style={sx.sigCargo}>{f.cargo}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+              {!soloLectura && (
+                <button
+                  data-print="hide"
+                  onClick={() => setEditandoFirmantes(true)}
+                  style={sx.btnEditarTexto}
+                >
+                  <PencilLine size={13} />
+                  Editar firmantes
+                </button>
+              )}
+            </>
+          )}
 
           {/* Footer de pantalla */}
           <div data-print="hide" style={{ marginTop: 32 }}>
@@ -680,11 +850,11 @@ const sx: Record<string, React.CSSProperties> = {
   pieFilaPrincipal: {
     display: 'flex',
     alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 12,
+    justifyContent: 'center',
+    gap: 20,
   },
   pieContacto: {
-    textAlign: 'right' as const,
+    textAlign: 'left' as const,
     flexShrink: 0,
   },
   pieTitulo: {
@@ -701,7 +871,7 @@ const sx: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
   },
   pieCodigo: {
-    margin: '3px 0 3px',
+    margin: '3px 0 3px -16mm',
     fontSize: 7.5,
     color: '#6b7280',
     lineHeight: 1.4,
@@ -878,6 +1048,52 @@ const sx: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     marginTop: 4,
     marginBottom: 6,
+  },
+  cerradoBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '3px 10px',
+    fontSize: 10,
+    fontWeight: 600,
+    border: '1px solid #D1D5DB',
+    borderRadius: 5,
+    background: '#F3F4F6',
+    color: '#6B7280',
+    marginTop: 4,
+    marginBottom: 6,
+  },
+
+  /* ─── Edición de firmantes ─── */
+  firmantesEditWrap: {
+    border: '1px solid #E84922',
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 16,
+    background: '#FFF7F5',
+  },
+  firmanteEditFila: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  firmanteEditLabel: {
+    margin: 0,
+    fontSize: 11,
+    fontWeight: 700,
+    color: '#111827',
+  },
+  firmanteInput: {
+    padding: '6px 8px',
+    fontSize: 11,
+    fontFamily: "'Calibri', Arial, sans-serif",
+    border: '1px solid #d1d5db',
+    borderRadius: 5,
+    outline: 'none',
+    color: '#111827',
+    boxSizing: 'border-box' as const,
   },
 
   /* ─── Firmas ─── */

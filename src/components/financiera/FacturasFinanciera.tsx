@@ -28,6 +28,7 @@ interface FacturaFinanciera {
   creado_en: string;
   contrato_codigo: string;
   contrato_objeto: string;
+  contrato_titulo: string | null;
   aprobado_supervisor: boolean | null;
   comentario_supervisor: string | null;
   aprobado_gerente: boolean | null;
@@ -38,6 +39,7 @@ interface Contrato {
   id: string;
   codigo: string;
   objeto: string;
+  titulo_contrato: string | null;
   supervisor_nombre: string | null;
   supervisor_email: string | null;
 }
@@ -171,7 +173,7 @@ export function FacturasFinanciera() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           solicitud_id: form.solicitud_id,
-          nombre_solicitud: contrato ? `${contrato.codigo} - ${contrato.objeto}` : null,
+          nombre_solicitud: contrato ? `${contrato.codigo} - ${contrato.titulo_contrato || contrato.objeto}` : null,
           aprobador_1: form.aprobador_1 || null,
           aprobador_2: form.aprobador_2 || null,
           fecha_factura: form.fecha_factura,
@@ -287,7 +289,7 @@ export function FacturasFinanciera() {
                     </span>
                     <EstadoBadge estado={f.estado} />
                   </div>
-                  <p className="text-sm font-semibold text-gray-800 truncate">{f.contrato_objeto}</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{f.contrato_titulo || f.contrato_objeto}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                     <span className="font-mono font-semibold">{f.no_factura_cxc}</span>
                     <span>·</span>
@@ -383,9 +385,12 @@ export function FacturasFinanciera() {
                   style={{ fontFamily: 'Gabarito, sans-serif' }}
                 >
                   <option value="">Selecciona un contrato…</option>
-                  {contratos.map(c => (
-                    <option key={c.id} value={c.id}>{c.codigo} — {c.objeto.slice(0, 60)}{c.objeto.length > 60 ? '…' : ''}</option>
-                  ))}
+                  {contratos.map(c => {
+                    const titulo = c.titulo_contrato || c.objeto;
+                    return (
+                      <option key={c.id} value={c.id}>{c.codigo} — {titulo.slice(0, 60)}{titulo.length > 60 ? '…' : ''}</option>
+                    );
+                  })}
                 </select>
               </div>
 

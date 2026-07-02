@@ -13,10 +13,11 @@ import { ContratosSupervisor } from './ContratosSupervisor';
 import { DetalleContratoSupervisor } from './DetalleContratoSupervisor';
 import { AceptarSupervision } from './AceptarSupervision';
 import { ModalSeleccionModalidad } from './ModalSeleccionModalidad';
+import { CalificacionProponentesSupervisor } from './CalificacionProponentesSupervisor';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-export type ViewSupervisor = 'dashboard' | 'solicitudes' | 'formulario' | 'evaluacion' | 'contratos' | 'detalleContrato' | 'aceptarSupervision' | 'ayuda';
+export type ViewSupervisor = 'dashboard' | 'solicitudes' | 'formulario' | 'evaluacion' | 'contratos' | 'detalleContrato' | 'aceptarSupervision' | 'ayuda' | 'calificacionProponentes';
 
 export function VistasSupervisor() {
   const { instance, accounts } = useMsal();
@@ -73,6 +74,11 @@ export function VistasSupervisor() {
     setCurrentView('contratos');
   };
 
+  const handleCalificarProponentes = (solicitudId: string) => {
+    setSolicitudSeleccionada(solicitudId);
+    setCurrentView('calificacionProponentes');
+  };
+
   // Abre el modal de selección de modalidad
   const handleNuevaSolicitudClick = () => {
     setModalModalidadAbierto(true);
@@ -89,7 +95,9 @@ export function VistasSupervisor() {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <DashboardSupervisor onNewRequest={handleNuevaSolicitudClick} onVerDetalle={handleVerDetalle} onVerContrato={(id) => { if (id) handleVerDetalleContrato(id); else setCurrentView('contratos'); }} userEmail={userEmail} />;
+        return <DashboardSupervisor onNewRequest={handleNuevaSolicitudClick} onVerDetalle={handleVerDetalle} onVerContrato={(id) => { if (id) handleVerDetalleContrato(id); else setCurrentView('contratos'); }} onCalificarProponentes={handleCalificarProponentes} userEmail={userEmail} />;
+      case 'calificacionProponentes':
+        return <CalificacionProponentesSupervisor solicitudId={solicitudSeleccionada} userEmail={userEmail} onBack={() => setCurrentView('dashboard')} />;
       case 'solicitudes':
         return <MisSolicitudes onEdit={handleVerDetalle} onEvaluar={() => setCurrentView('evaluacion')} userEmail={userEmail} />;
       case 'formulario':
@@ -143,7 +151,13 @@ export function VistasSupervisor() {
     <div className="flex h-screen bg-gray-50">
       <SidebarSupervisor
         currentView={currentView}
-        onNavigate={setCurrentView}
+        onNavigate={(view) => {
+          // Navegar desde el menú lateral siempre parte "en limpio" — evita
+          // arrastrar una solicitud/contrato seleccionado de una vista anterior.
+          setSolicitudSeleccionada(null);
+          setContratoSeleccionado(null);
+          setCurrentView(view);
+        }}
         onNuevaSolicitud={handleNuevaSolicitudClick}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}

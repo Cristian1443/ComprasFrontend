@@ -26,9 +26,10 @@ interface PresupuestoGerencia {
   gerencia_nombre: string;
   vigencia: number;
   monto_total: number;
+  comprometido_vigencia_anterior: number; // reservas presupuestales / cuentas por pagar de años anteriores
   comprometido: number;  // firme: finalizado/contratado
   certificado: number;   // CDP emitido, aún en trámite
-  disponible: number;    // total − comprometido − certificado
+  disponible: number;    // total − reservas anteriores − comprometido − certificado
 }
 
 type SemaforoColor = 'green' | 'amber' | 'red' | 'gray';
@@ -73,6 +74,7 @@ export function PresupuestoVigencia() {
   const [showForm, setShowForm] = useState(false);
   const [formGerencia, setFormGerencia] = useState('');
   const [formMonto, setFormMonto] = useState('');
+  const [formReservaAnterior, setFormReservaAnterior] = useState('');
   const [procesando, setProcesando] = useState(false);
 
   const cargarPresupuestos = useCallback(async () => {
@@ -87,6 +89,7 @@ export function PresupuestoVigencia() {
             ? data.map((p: any) => ({
                 ...p,
                 monto_total: Number(p.monto_total),
+                comprometido_vigencia_anterior: Number(p.comprometido_vigencia_anterior ?? 0),
                 comprometido: Number(p.comprometido),
                 certificado: Number(p.certificado),
                 disponible: Number(p.disponible),
@@ -108,24 +111,36 @@ export function PresupuestoVigencia() {
   const abrirEdicion = (p: PresupuestoGerencia) => {
     setFormGerencia(p.gerencia_nombre);
     setFormMonto(p.monto_total > 0 ? String(p.monto_total) : '');
+    setFormReservaAnterior(p.comprometido_vigencia_anterior > 0 ? String(p.comprometido_vigencia_anterior) : '');
     setShowForm(true);
   };
 
   const guardar = async () => {
     if (!formGerencia) { alert('Seleccione una gerencia.'); return; }
     const monto = parseInt(formMonto.replace(/[^0-9]/g, ''), 10);
-    if (!monto || monto <= 0) { alert('Ingrese un monto válido en COP.'); return; }
+    if (!monto || monto <= 0) { alert('Ingrese un monto apropiado válido en COP.'); return; }
+    const reservaAnterior = parseInt(formReservaAnterior.replace(/[^0-9]/g, ''), 10) || 0;
+    if (reservaAnterior > monto) {
+      alert('Las reservas de vigencias anteriores no pueden superar el monto apropiado total.');
+      return;
+    }
     setProcesando(true);
     try {
       const res = await fetch(`${API_URL}/api/financiera/presupuesto-vigencia`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vigencia, gerencia_nombre: formGerencia, monto_total: monto }),
+        body: JSON.stringify({
+          vigencia,
+          gerencia_nombre: formGerencia,
+          monto_total: monto,
+          comprometido_vigencia_anterior: reservaAnterior,
+        }),
       });
       if (res.ok) {
         setShowForm(false);
         setFormGerencia('');
         setFormMonto('');
+        setFormReservaAnterior('');
         await cargarPresupuestos();
       } else {
         const err = await res.json().catch(() => ({}));
@@ -140,7 +155,10 @@ export function PresupuestoVigencia() {
 
   const gerenciasMap = new Map(presupuestos.map((p) => [p.gerencia_nombre, p]));
   const todas: PresupuestoGerencia[] = GERENCIAS_FINANCIERA.map(
-    (n) => gerenciasMap.get(n) ?? { gerencia_nombre: n, vigencia, monto_total: 0, comprometido: 0, certificado: 0, disponible: 0 }
+    (n) => gerenciasMap.get(n) ?? {
+      gerencia_nombre: n, vigencia, monto_total: 0,
+      comprometido_vigencia_anterior: 0, comprometido: 0, certificado: 0, disponible: 0,
+    }
   );
 
   const totalAsignado = todas.reduce((s, p) => s + p.monto_total, 0);
@@ -185,7 +203,7 @@ export function PresupuestoVigencia() {
           </div>
 
           <button
-            onClick={() => { setFormGerencia(''); setFormMonto(''); setShowForm(true); }}
+            onClick={() => { setFormGerencia(''); setFormMonto(''); setFormReservaAnterior(''); setShowForm(true); }}
             className="flex items-center gap-2 px-5 py-2.5 text-white rounded-2xl font-bold text-sm shadow-md transition-all hover:opacity-90 active:scale-95"
             style={{ backgroundColor: '#065F46' }}
           >
@@ -269,7 +287,8 @@ export function PresupuestoVigencia() {
               title={`Certificado (CDP): ${fmt.format(totalCertificado)}`}
             />
           </div>
-          <div className="flex gap-4 mt-2 text-[10px] text-slate-500">
+          <div className="flex flex-wrap gap-4 mt-2 text-[10px] text-slate-500">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block" /> Reservas vig. anterior</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Comprometido firme</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" /> CDP en trámite</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-100 border border-slate-200 inline-block" /> Disponible</span>
@@ -291,7 +310,8 @@ export function PresupuestoVigencia() {
               <X size={18} />
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-end">
+            {/* Gerencia */}
             <div>
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1.5">
                 Gerencia
@@ -305,6 +325,8 @@ export function PresupuestoVigencia() {
                 {GERENCIAS_FINANCIERA.map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
+
+            {/* Monto Apropiado */}
             <div>
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1.5">
                 Monto Apropiado (COP)
@@ -320,11 +342,37 @@ export function PresupuestoVigencia() {
                 />
               </div>
               {formMonto && (
+                <p className="text-[10px] text-slate-400 mt-1">{fmt.format(parseInt(formMonto || '0', 10))}</p>
+              )}
+            </div>
+
+            {/* Reservas de vigencias anteriores */}
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1.5">
+                Reservas Vigencias Anteriores (COP)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">$</span>
+                <input
+                  type="text"
+                  value={formReservaAnterior}
+                  onChange={(e) => setFormReservaAnterior(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="0"
+                  className="w-full pl-7 pr-3 py-2.5 border border-orange-200 rounded-xl text-sm font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-300 font-mono bg-orange-50"
+                />
+              </div>
+              {formReservaAnterior && parseInt(formReservaAnterior, 10) > 0 ? (
+                <p className="text-[10px] text-orange-500 mt-1 font-semibold">
+                  {fmt.format(parseInt(formReservaAnterior, 10))} ya comprometido
+                </p>
+              ) : (
                 <p className="text-[10px] text-slate-400 mt-1">
-                  {fmt.format(parseInt(formMonto || '0', 10))}
+                  Contratos año anterior que consumen esta vigencia
                 </p>
               )}
             </div>
+
+            {/* Botones */}
             <div className="flex gap-2">
               <button
                 onClick={guardar}
@@ -336,7 +384,7 @@ export function PresupuestoVigencia() {
                 Guardar
               </button>
               <button
-                onClick={() => { setShowForm(false); setFormGerencia(''); setFormMonto(''); }}
+                onClick={() => { setShowForm(false); setFormGerencia(''); setFormMonto(''); setFormReservaAnterior(''); }}
                 className="px-4 py-2.5 border border-slate-300 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all"
               >
                 Cancelar
@@ -360,6 +408,7 @@ export function PresupuestoVigencia() {
           {todas.map((p) => {
             const sem = getSemaforo(p.monto_total, p.disponible);
             const c = COLORS[sem.color];
+            const pctReserva = p.monto_total > 0 ? (p.comprometido_vigencia_anterior / p.monto_total) * 100 : 0;
             const pctComp = p.monto_total > 0 ? (p.comprometido / p.monto_total) * 100 : 0;
             const pctCert = p.monto_total > 0 ? (p.certificado / p.monto_total) * 100 : 0;
 
@@ -394,7 +443,7 @@ export function PresupuestoVigencia() {
                   </div>
                 </div>
 
-                {/* Valores — 4 columnas */}
+                {/* Valores — grid de datos */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div className="bg-slate-50 rounded-xl p-3">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Asignado</p>
@@ -408,6 +457,11 @@ export function PresupuestoVigencia() {
                     <p className={`text-xs font-black leading-tight ${c.text}`}>
                       {fmt.format(Math.max(p.disponible, 0))}
                     </p>
+                    {p.comprometido_vigencia_anterior > 0 && (
+                      <p className="text-[8px] text-orange-500 font-semibold mt-1 leading-tight">
+                        ↳ ya descontadas reservas ant.
+                      </p>
+                    )}
                   </div>
                   <div className="bg-emerald-50 rounded-xl p-3">
                     <p className="text-[9px] font-black text-emerald-600 uppercase tracking-wider mb-1">Comprometido</p>
@@ -421,22 +475,54 @@ export function PresupuestoVigencia() {
                   </div>
                 </div>
 
+                {/* Reservas vigencias anteriores — fila completa, solo si existe */}
+                {p.comprometido_vigencia_anterior > 0 && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-black text-orange-500 uppercase tracking-wider">
+                          Reservas Vigencias Anteriores
+                        </p>
+                        <p className="text-xs font-black text-orange-700 truncate">
+                          {fmt.format(p.comprometido_vigencia_anterior)}
+                        </p>
+                      </div>
+                      <p className="text-[9px] text-orange-400 shrink-0 text-right">
+                        Contratos año anterior<br />
+                        <span className="font-bold">{pctReserva.toFixed(1)}% de la apropiación</span>
+                      </p>
+                    </div>
+                    <p className="text-[9px] text-orange-600 font-semibold mt-1.5 pl-5">
+                      ⚠ Este monto ya está descontado del Disponible Real — no es plata libre.
+                    </p>
+                  </div>
+                )}
+
                 {/* Barra segmentada */}
                 {p.monto_total > 0 ? (
                   <div>
                     <div className="flex justify-between items-center text-[9px] text-slate-400 mb-1.5">
                       <span className="font-bold uppercase tracking-wider">Uso presupuestal</span>
-                      <span className="font-black">{(pctComp + pctCert).toFixed(1)}% en uso</span>
+                      <span className="font-black">{(pctReserva + pctComp + pctCert).toFixed(1)}% en uso</span>
                     </div>
                     <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden flex">
+                      {/* Reservas vigencias anteriores - naranja */}
+                      {pctReserva > 0 && (
+                        <div
+                          className="h-full bg-orange-400 transition-all duration-700"
+                          style={{ width: `${Math.min(pctReserva, 100)}%` }}
+                          title={`Reservas vigencias anteriores: ${fmt.format(p.comprometido_vigencia_anterior)}`}
+                        />
+                      )}
                       <div
                         className="h-full bg-emerald-500 transition-all duration-700"
-                        style={{ width: `${Math.min(pctComp, 100)}%` }}
+                        style={{ width: `${Math.min(pctComp, 100 - pctReserva)}%` }}
                         title={`Comprometido firme: ${fmt.format(p.comprometido)}`}
                       />
                       <div
                         className="h-full bg-amber-400 transition-all duration-700"
-                        style={{ width: `${Math.min(pctCert, 100 - pctComp)}%` }}
+                        style={{ width: `${Math.min(pctCert, 100 - pctReserva - pctComp)}%` }}
                         title={`CDP en trámite: ${fmt.format(p.certificado)}`}
                       />
                     </div>

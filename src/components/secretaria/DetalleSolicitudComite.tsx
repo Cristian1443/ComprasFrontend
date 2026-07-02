@@ -180,7 +180,6 @@ export function FichaComite({
     ? getPresupuestoCertificadoDisplay(solicitud)
     : getPresupuestoDisplayText(solicitud);
   const formaPago = getFormaPagoTexto(solicitud.forma_pago) || 'No especificado';
-  const garantias: string = solicitud.garantias || solicitud.amparos || '';
   const riesgos: string = solicitud.riesgos || '';
   const conceptoJuridico: string = solicitud.concepto_juridico || '';
 
@@ -194,8 +193,6 @@ export function FichaComite({
 
   const valorRefMercado: string = solicitud.analisis_presupuesto_oficial || solicitud.analisis_valor_promedio || '';
   const alternativaRecomendada: string = solicitud.alternativa_recomendada || solicitud.analisis_servicios_ofertados || '';
-  const soportes: any[] = Array.isArray(solicitud.anexos_solicitante) ? solicitud.anexos_solicitante : [];
-
   const modalidadLabel = esDirecta ? 'Contratación directa' : 'Proceso competitivo';
   const causalCode = String(solicitud.modalidad_seleccion || '').toLowerCase().trim();
   const causalNombre = causalCode ? CAUSALES_DIRECTA[causalCode] || '' : '';
@@ -263,16 +260,6 @@ export function FichaComite({
                     <span style={fc.cLabel}>Proveedor propuesto:</span>{' '}
                     {proveedorPropuesto ? <span style={fc.panelText}>{proveedorPropuesto}</span> : ph('[Razón social, NIT, representante legal]')}
                   </div>
-                  <div style={fc.panelRow}>
-                    <span style={fc.cLabel}>Concepto jurídico:</span>{' '}
-                    {conceptoJuridico ? <span style={fc.panelText}>{conceptoJuridico}</span> : ph('[Pronunciamiento: causal procedente / inhabilidades verificadas / observaciones]')}
-                  </div>
-                  <div style={{ ...fc.panelRow, marginTop: 6 }}>
-                    <span style={fc.cLabel}>Soportes adjuntos:</span>{' '}
-                    {soportes.length > 0
-                      ? <span style={fc.panelText}>{soportes.map((s: any) => s.nombre || s.nombre_almacenado || '').filter(Boolean).join(', ')}</span>
-                      : ph('[Ej: certificado de exclusividad, dos actas de proceso desierto, comunicación del proveedor]')}
-                  </div>
                 </>
               ) : (
                 <>
@@ -336,10 +323,6 @@ export function FichaComite({
               <p style={fc.contractRow}><span style={fc.cLabel}>Rubro presupuestal:</span> {rubroPresupuestal}</p>
             </div>
             <div style={fc.garantiasArea}>
-              <p style={fc.contractRow}>
-                <span style={fc.cLabel}>Garantías:</span>{' '}
-                {garantias || ph('[Amparos: cumplimiento 10%, calidad 10%, salarios 5% — o justificación de no exigencia]')}
-              </p>
               <p style={fc.contractRow}>
                 <span style={fc.cLabel}>Riesgos principales:</span>{' '}
                 {riesgos || ph('[Riesgo 1: probabilidad / impacto / mitigación. Riesgo 2: ...]')}
@@ -859,7 +842,7 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
                   <div style={{ padding: '8px 20px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
                     <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
                       Ingresar la siguiente información de los posibles proponentes que puedan suplir la contratación.
-                      {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: mínimo 4 proponentes.</strong>}
+                      {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: solo se registra un (1) proponente.</strong>}
                     </p>
                   </div>
                   {Array.isArray(solicitud.proponentes) && solicitud.proponentes.length > 0 ? (

@@ -259,6 +259,12 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
     const plazoTexto = `${s.plazo_ejecucion_meses || 0} meses${(s.plazo_ejecucion_dias || 0) > 0 ? ` y ${s.plazo_ejecucion_dias} días` : ''}`;
 
     const esDirecta = String(s.modalidad || '').toLowerCase() === 'directa';
+    const puedeDecidir = s.estado === 'enviado_gerente';
+    const estadoBadge = puedeDecidir
+        ? { texto: 'Pendiente de decisión', clase: 'bg-amber-100 text-amber-800 border-amber-300' }
+        : s.estado === 'devuelto_al_solicitante'
+            ? { texto: 'Devuelta al solicitante', clase: 'bg-rose-100 text-rose-800 border-rose-300' }
+            : { texto: 'Ya decidida', clase: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
 
     return (
         <div className="ux-page p-4 lg:p-8" style={{ fontFamily: 'Gabarito, sans-serif' }}>
@@ -295,8 +301,8 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
                         <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold border border-purple-300">
                             Revisión Gerencial
                         </span>
-                        <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-semibold border border-amber-300">
-                            Pendiente de decisión
+                        <span className={`px-3 py-1 rounded-full text-sm font-semibold border ${estadoBadge.clase}`}>
+                            {estadoBadge.texto}
                         </span>
                         <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-semibold border border-slate-200">
                             {diasDesdeRadicacion} días en bandeja
@@ -485,7 +491,7 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
                         <div style={{ padding: '8px 20px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
                             <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
                                 Ingresar la siguiente información de los posibles proponentes que puedan suplir la contratación.
-                                {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: mínimo 4 proponentes.</strong>}
+                                {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: solo se registra un (1) proponente.</strong>}
                             </p>
                         </div>
 
@@ -812,7 +818,8 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
                         usuarioActual={usuarioActual}
                     />
 
-                    {/* PANEL DECISIÓN GERENCIAL */}
+                    {/* PANEL DECISIÓN GERENCIAL — solo si aún está pendiente de esta etapa */}
+                    {puedeDecidir && (
                     <div className="rounded-2xl text-white overflow-hidden shadow-lg" style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)' }}>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
                             {/* Contexto y mini info solicitante */}
@@ -884,6 +891,7 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
                             </div>
                         </div>
                     </div>
+                    )}
 
                 </div>
             </div>

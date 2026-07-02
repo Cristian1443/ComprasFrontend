@@ -595,7 +595,7 @@ export function FormularioSolicitud({
   const esTDR = modalidadNormalizada === 'tdr';
   const esInvitacionOTdr = esInvitacion || esTDR;
 
-  const numProponentes = esDirecta ? 4 : 3;
+  const numProponentes = esDirecta ? 1 : 3;
 
   const proponenteVacio = (): Proponente => ({
     nombreProveedor: '', correo: '', datosContacto: '', requisitosTecnicos: '',
@@ -610,8 +610,11 @@ export function FormularioSolicitud({
   // Sync proponentes cuando cambia modalidad
   const handleModalidadChange = (nuevaModalidad: string) => {
     const esModDirecta = normalizarModalidad(nuevaModalidad) === 'directa';
-    const nuevasCantidad = esModDirecta ? 4 : 3;
+    const nuevasCantidad = esModDirecta ? 1 : 3;
     setProponentes(prev => {
+      if (esModDirecta) {
+        return prev.length > nuevasCantidad ? prev.slice(0, nuevasCantidad) : prev;
+      }
       if (prev.length < nuevasCantidad) {
         return [...prev, ...Array.from({ length: nuevasCantidad - prev.length }, proponenteVacio)];
       }
@@ -760,11 +763,12 @@ export function FormularioSolicitud({
   };
 
   const agregarProponente = () => {
+    if (esDirecta && proponentes.length >= 1) return;
     setProponentes(prev => [...prev, proponenteVacio()]);
   };
 
   const eliminarProponente = (i: number) => {
-    if (proponentes.length > (esDirecta ? 4 : 3)) {
+    if (proponentes.length > (esDirecta ? 1 : 3)) {
       setProponentes(prev => prev.filter((_, idx) => idx !== i));
     }
   };
@@ -1516,7 +1520,7 @@ export function FormularioSolicitud({
                   <div style={{ padding: '8px 20px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
                     <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
                       Ingresar la siguiente información de los posibles proponentes que puedan suplir la contratación.
-                      {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: mínimo 4 proponentes.</strong>}
+                      {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: solo se registra un (1) proponente.</strong>}
                     </p>
                   </div>
 
@@ -1740,7 +1744,7 @@ export function FormularioSolicitud({
                                   <td style={{ border: '1px solid #e5e7eb', padding: '6px', textAlign: 'center', fontWeight: 700, color: '#374151', verticalAlign: 'top' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                                       <span>{i + 1}</span>
-                                      {proponentes.length > 4 && (
+                                      {proponentes.length > 1 && (
                                         <button type="button" onClick={() => eliminarProponente(i)}
                                           title="Eliminar proponente"
                                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '0.9rem', lineHeight: 1, padding: 0 }}>✕</button>
@@ -1784,13 +1788,6 @@ export function FormularioSolicitud({
                           </table>
                         );
                       })()}
-                      {/* Botón agregar proponente — Directa */}
-                      <div style={{ padding: '10px 16px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'flex-end' }}>
-                        <button type="button" onClick={agregarProponente}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', border: '1px solid var(--brand-primary)', borderRadius: 6, color: 'var(--brand-primary)', backgroundColor: '#fff', cursor: 'pointer', fontSize: '0.8rem', fontFamily: 'Gabarito, sans-serif', fontWeight: 600 }}>
-                          <Plus size={14} /> Agregar proponente
-                        </button>
-                      </div>
                     </div>
                   )}
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Clock, CheckCircle2, XCircle, Send, Loader2, AlertTriangle,
-  Lock, FileText, Building2, Mail, Phone, User, Info
+  Lock, FileText, Building2, Mail, Phone, User, Info, ShieldCheck, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
@@ -54,6 +54,9 @@ export function PostulacionPublica() {
   const [telefono, setTelefono] = useState('');
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [cedula, setCedula] = useState('');
+  const [tipoProponente, setTipoProponente] = useState<'empresa' | 'persona'>('empresa');
+  const [aceptaTratamientoDatos, setAceptaTratamientoDatos] = useState(false);
+  const [mostrarPolitica, setMostrarPolitica] = useState(false);
 
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
@@ -94,7 +97,7 @@ export function PostulacionPublica() {
 
   const handlePostular = async () => {
     setErrorEnvio('');
-    const esPersona = data?.tipo_proponente === 'persona';
+    const esPersona = tipoProponente === 'persona';
     if (esPersona) {
       if (!nombreCompleto.trim()) { setErrorEnvio('El nombre completo es obligatorio.'); return; }
       if (!cedula.trim()) { setErrorEnvio('La cédula es obligatoria.'); return; }
@@ -103,12 +106,13 @@ export function PostulacionPublica() {
     }
     if (!email.trim()) { setErrorEnvio('El correo electrónico es obligatorio.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setErrorEnvio('El correo electrónico no es válido.'); return; }
+    if (!aceptaTratamientoDatos) { setErrorEnvio('Debes aceptar la Política de Tratamiento de Datos Personales para continuar.'); return; }
 
     setEnviando(true);
     try {
       const cuerpo = esPersona
-        ? { nombre_completo: nombreCompleto.trim(), cedula: cedula.trim(), email: email.trim(), telefono: telefono.trim() || undefined }
-        : { nombre_empresa: nombreEmpresa.trim(), nombre_contacto: nombreContacto.trim() || undefined, nit: nit.trim() || undefined, email: email.trim(), telefono: telefono.trim() || undefined };
+        ? { nombre_completo: nombreCompleto.trim(), cedula: cedula.trim(), email: email.trim(), telefono: telefono.trim() || undefined, acepta_tratamiento_datos: true }
+        : { nombre_empresa: nombreEmpresa.trim(), nombre_contacto: nombreContacto.trim() || undefined, nit: nit.trim() || undefined, email: email.trim(), telefono: telefono.trim() || undefined, acepta_tratamiento_datos: true };
       const resp = await fetch(`${API_URL}/api/convocatoria-publica/${convId}/postular`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +216,7 @@ export function PostulacionPublica() {
               ¡Registro exitoso!
             </h2>
             <p style={{ fontFamily: FONT, fontSize: 14, color: '#334155', marginBottom: 16 }}>
-              <strong>{data.tipo_proponente === 'persona' ? nombreCompleto : nombreEmpresa}</strong> quedó registrado(a) en la convocatoria:<br />
+              <strong>{tipoProponente === 'persona' ? nombreCompleto : nombreEmpresa}</strong> quedó registrado(a) en la convocatoria:<br />
               <em>{data.asunto}</em>
             </p>
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '16px 20px', textAlign: 'left', marginBottom: 16 }}>
@@ -313,11 +317,38 @@ export function PostulacionPublica() {
 
         {/* Formulario */}
         <div style={p.formSection}>
+          {/* Selector de tipo de proponente */}
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', margin: '0 0 8px' }}>
+              ¿Cómo te vas a registrar?
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {(['empresa', 'persona'] as const).map(tipo => (
+                <button
+                  key={tipo}
+                  type="button"
+                  onClick={() => setTipoProponente(tipo)}
+                  style={{
+                    padding: '10px 20px', borderRadius: 10,
+                    border: `2px solid ${tipoProponente === tipo ? '#3384D6' : '#e2e8f0'}`,
+                    background: tipoProponente === tipo ? '#EFF6FF' : '#fff',
+                    color: tipoProponente === tipo ? '#1D4ED8' : '#64748b',
+                    fontFamily: FONT, fontSize: 14,
+                    fontWeight: tipoProponente === tipo ? 800 : 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {tipo === 'empresa' ? '🏢 Empresa' : '👤 Persona natural'}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <h3 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: '#1e293b', margin: '0 0 16px' }}>
-            {data.tipo_proponente === 'persona' ? '👤 Tus datos personales' : '🏢 Datos de tu empresa'}
+            {tipoProponente === 'persona' ? '👤 Tus datos personales' : '🏢 Datos de tu empresa'}
           </h3>
 
-          {data.tipo_proponente === 'persona' ? (
+          {tipoProponente === 'persona' ? (
             /* ── Persona natural ── */
             <>
               <div style={p.fieldGroup}>
@@ -441,6 +472,56 @@ export function PostulacionPublica() {
             </p>
           </div>
 
+          {/* Tratamiento de datos personales — Habeas Data (Ley 1581 de 2012) */}
+          <div style={p.datosPersonalesBox}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={aceptaTratamientoDatos}
+                onChange={e => setAceptaTratamientoDatos(e.target.checked)}
+                style={{ width: 18, height: 18, marginTop: 1, flexShrink: 0, cursor: 'pointer' }}
+              />
+              <span style={{ fontFamily: FONT, fontSize: 13, color: '#1e293b', lineHeight: 1.5 }}>
+                <strong>Autorizo el tratamiento de mis datos personales</strong> por parte de Invest in Bogotá, de acuerdo con la Ley 1581 de 2012, su Decreto reglamentario 1377 de 2013 y la <span
+                  onClick={ev => { ev.preventDefault(); setMostrarPolitica(v => !v); }}
+                  style={{ color: '#1D4ED8', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+                >
+                  Política de Tratamiento de Datos Personales
+                </span>. *
+              </span>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => setMostrarPolitica(v => !v)}
+              style={p.togglePolitica}
+            >
+              <ShieldCheck size={13} />
+              {mostrarPolitica ? 'Ocultar' : 'Ver'} descripción completa
+              {mostrarPolitica ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+
+            {mostrarPolitica && (
+              <div style={p.politicaBox}>
+                <p style={p.politicaParrafo}>
+                  <strong>Responsable del tratamiento:</strong> Invest in Bogotá (Agencia de Cooperación e Inversión de Bogotá), a través del portal de Compras y Contratación.
+                </p>
+                <p style={p.politicaParrafo}>
+                  <strong>Finalidad:</strong> los datos personales suministrados en este formulario (nombre, identificación, correo electrónico, teléfono y demás información de contacto) serán utilizados exclusivamente para: (i) gestionar tu registro como proponente en la presente convocatoria, (ii) enviarte el enlace personal para la presentación de tu propuesta, (iii) verificar tu identidad y la de tu empresa, y (iv) comunicarte novedades relacionadas con el proceso de contratación.
+                </p>
+                <p style={p.politicaParrafo}>
+                  <strong>Derechos del titular:</strong> conforme a la Ley 1581 de 2012, tienes derecho a conocer, actualizar, rectificar y suprimir tus datos personales, así como a revocar la autorización otorgada, mediante solicitud dirigida al correo de contacto del área jurídica de Invest in Bogotá.
+                </p>
+                <p style={p.politicaParrafo}>
+                  <strong>Confidencialidad y seguridad:</strong> tus datos no serán compartidos con terceros distintos a los involucrados en el proceso de contratación y serán conservados únicamente durante el tiempo necesario para las finalidades aquí descritas, aplicando las medidas de seguridad razonables para evitar su alteración, pérdida o acceso no autorizado.
+                </p>
+                <p style={{ ...p.politicaParrafo, marginBottom: 0 }}>
+                  Al marcar la casilla y hacer clic en "Registrarme en esta convocatoria", declaras que has leído y aceptas voluntaria, previa e informadamente el tratamiento de tus datos personales conforme a lo aquí descrito.
+                </p>
+              </div>
+            )}
+          </div>
+
           {errorEnvio && (
             <div style={p.errorEnvio}>
               <XCircle size={14} /> {errorEnvio}
@@ -448,7 +529,7 @@ export function PostulacionPublica() {
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-            <button onClick={handlePostular} disabled={enviando} style={p.btnEnviar}>
+            <button onClick={handlePostular} disabled={enviando || !aceptaTratamientoDatos} style={{ ...p.btnEnviar, opacity: (enviando || !aceptaTratamientoDatos) ? 0.5 : 1, cursor: (enviando || !aceptaTratamientoDatos) ? 'not-allowed' : 'pointer' }}>
               {enviando ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />}
               {enviando ? 'Registrando...' : 'Registrarme en esta convocatoria'}
             </button>
@@ -496,4 +577,8 @@ const p: Record<string, React.CSSProperties> = {
   btnEnviar: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 28px', borderRadius: 10, background: '#E84922', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer', fontSize: 14, fontFamily: FONT },
   footer: { textAlign: 'center' as const, padding: '16px 28px', borderTop: '1px solid #f1f5f9', color: '#94a3b8', fontSize: 11, fontFamily: FONT },
   stepBadge: { minWidth: 22, height: 22, borderRadius: '50%', background: '#3384D6', color: '#fff', fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: FONT },
+  datosPersonalesBox: { padding: '14px 16px', borderRadius: 10, background: '#F8FAFC', border: '1px solid #E2E8F0', marginTop: 8, marginBottom: 16 },
+  togglePolitica: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 28, padding: '4px 0', background: 'none', border: 'none', color: '#3384D6', fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer' },
+  politicaBox: { marginTop: 10, marginLeft: 28, padding: '14px 16px', borderRadius: 8, background: '#fff', border: '1px solid #E2E8F0' },
+  politicaParrafo: { fontFamily: FONT, fontSize: 12, color: '#475569', lineHeight: 1.6, margin: '0 0 10px' },
 };

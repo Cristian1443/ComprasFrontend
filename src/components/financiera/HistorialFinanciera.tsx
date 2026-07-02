@@ -26,6 +26,7 @@ interface SolicitudHistorial {
     id: string;
     codigo: string;
     objeto: string;
+    titulo_contrato?: string;
     actualizado_en: string;
     valor_en_cop: number;
     valor_estimado?: number;
@@ -137,6 +138,7 @@ export function HistorialFinanciera() {
 
     const filteredHistory = historial.filter(h =>
         h.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        h.titulo_contrato?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         h.objeto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         h.solicitante_nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         h.gerencia_nombre?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -170,16 +172,28 @@ export function HistorialFinanciera() {
                 return { label: 'En Proceso', color: 'bg-amber-50 text-amber-600 border-amber-100', icon: Clock };
             case 'aprobado_financiera':
             case 'aprobado_comite':
-            case 'enviado_juridica':
-            case 'finalizado':
                 return { label: 'Aprobado', color: 'bg-emerald-50 text-emerald-600 border-emerald-100', icon: CheckCircle2 };
+            case 'en_juridica':
+            case 'enviado_juridica':
+                return { label: 'En Jurídica', color: 'bg-amber-50 text-amber-600 border-amber-100', icon: Clock };
+            case 'aprobado_juridica':
+            case 'contratado':
+            case 'finalizado':
+                return { label: 'Contrato Aprobado', color: 'bg-emerald-50 text-emerald-600 border-emerald-100', icon: CheckCircle2 };
+            case 'cerrado':
+                return { label: 'Cerrado', color: 'bg-slate-100 text-slate-600 border-slate-200', icon: CheckCircle2 };
             case 'rechazado_financiera':
             case 'rechazado_comite':
+            case 'rechazado_juridica':
                 return { label: 'Rechazado', color: 'bg-rose-50 text-rose-600 border-rose-100', icon: XCircle };
             default:
-                return { label: estado, color: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: Clock };
+                return { label: estado, color: 'bg-slate-100 text-slate-600 border-slate-200', icon: Clock };
         }
     };
+
+    // Sólo con jurídica aprobada el contrato queda firmado y se pueden registrar facturas.
+    const ESTADOS_CONTRATO_FIRMADO = ['aprobado_juridica', 'contratado', 'finalizado', 'cerrado'];
+    const contratoFirmado = (estado: string) => ESTADOS_CONTRATO_FIRMADO.includes(estado);
 
     if (loading) {
         return (
@@ -219,7 +233,7 @@ export function HistorialFinanciera() {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-700 transition-colors" size={18} />
                     <input
                         type="text"
-                        placeholder="Buscar por código, objeto, solicitante o gerencia..."
+                        placeholder="Buscar por código, título, solicitante o gerencia..."
                         className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-700/20 focus:border-emerald-700 transition-all font-medium text-slate-700 placeholder:text-slate-400"
                         style={{ fontFamily: 'Gabarito, sans-serif' }}
                         value={searchTerm}
@@ -244,7 +258,7 @@ export function HistorialFinanciera() {
                     <thead>
                         <tr className="bg-slate-50/50">
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Código Solicitud</th>
-                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Proyecto / Bien / Servicio</th>
+                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Título</th>
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Origen (Gerencia)</th>
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Monto Aprobado</th>
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Estado Presupuestal</th>
@@ -268,7 +282,7 @@ export function HistorialFinanciera() {
                                         </td>
                                         <td className="px-6 py-5">
                                             <div className="flex flex-col min-w-[200px]">
-                                                <span className="text-sm font-bold text-slate-800 leading-tight line-clamp-1">{row.objeto}</span>
+                                                <span className="text-sm font-bold text-slate-800 leading-tight line-clamp-1">{row.titulo_contrato || row.objeto}</span>
                                                 <span className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-wider">
                                                     {new Date(row.actualizado_en).toLocaleString('es-CO', {
                                                         day: 'numeric', month: 'numeric', year: 'numeric',
@@ -346,13 +360,19 @@ export function HistorialFinanciera() {
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <button
-                                                                onClick={() => setShowFormFor(showFormFor === row.id ? null : row.id)}
-                                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg transition-all hover:opacity-90"
-                                                                style={{ backgroundColor: 'var(--brand-secondary)' }}
-                                                            >
-                                                                <Plus size={12} /> Registrar factura
-                                                            </button>
+                                                            {contratoFirmado(row.estado) ? (
+                                                                <button
+                                                                    onClick={() => setShowFormFor(showFormFor === row.id ? null : row.id)}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white rounded-lg transition-all hover:opacity-90"
+                                                                    style={{ backgroundColor: 'var(--brand-secondary)' }}
+                                                                >
+                                                                    <Plus size={12} /> Registrar factura
+                                                                </button>
+                                                            ) : (
+                                                                <span className="text-[10px] text-slate-400 italic text-right max-w-[220px]">
+                                                                    Disponible cuando jurídica apruebe el contrato
+                                                                </span>
+                                                            )}
                                                         </div>
 
                                                         {/* Resumen ejecución */}
@@ -506,6 +526,14 @@ export function HistorialFinanciera() {
                         </div>
                     ) : detalleData ? (
                         <div className="p-6 space-y-5">
+                            {/* Título */}
+                            {detalleData.titulo_contrato && (
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Título</p>
+                                    <p className="text-sm font-bold text-slate-800 leading-relaxed">{detalleData.titulo_contrato}</p>
+                                </div>
+                            )}
+
                             {/* Objeto */}
                             <div>
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Objeto / Descripción</p>

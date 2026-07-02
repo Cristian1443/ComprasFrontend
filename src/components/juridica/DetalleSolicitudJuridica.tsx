@@ -16,6 +16,7 @@ import {
   construirEstadoFlujo,
   flujoCompleto,
   mensajeFlujoIncompleto,
+  ordenPasosParaModalidad,
   pasoAccesible,
   requiereFlujoSecuencial,
 } from '../../lib/flujoJuridico';
@@ -227,7 +228,8 @@ export function DetalleSolicitudJuridica({
   );
 
   const esFlujoSecuencial = requiereFlujoSecuencial(solicitud?.modalidad);
-  const checklistCompleto = !esFlujoSecuencial || flujoCompleto(estadoFlujo);
+  const ordenPasos = ordenPasosParaModalidad(solicitud?.modalidad);
+  const checklistCompleto = !esFlujoSecuencial || flujoCompleto(estadoFlujo, ordenPasos);
 
   const handleConfirmarRevision = async () => {
     if (!solicitud?.id) return;
@@ -257,8 +259,8 @@ export function DetalleSolicitudJuridica({
   };
 
   const abrirPaso = (paso: 'invitacion' | 'calificacion' | 'adjudicacion' | 'documentos_finales') => {
-    if (!pasoAccesible(paso, estadoFlujo)) {
-      setMensaje(mensajeFlujoIncompleto(estadoFlujo));
+    if (!pasoAccesible(paso, estadoFlujo, ordenPasos)) {
+      setMensaje(mensajeFlujoIncompleto(estadoFlujo, ordenPasos));
       return;
     }
     if (paso === 'invitacion') onOpenConvocatorias?.(solicitud.id);
@@ -269,7 +271,7 @@ export function DetalleSolicitudJuridica({
 
   const handleDecision = async (decision: 'aprobado' | 'rechazado') => {
     if (decision === 'aprobado' && esFlujoSecuencial && !checklistCompleto) {
-      setMensaje(mensajeFlujoIncompleto(estadoFlujo));
+      setMensaje(mensajeFlujoIncompleto(estadoFlujo, ordenPasos));
       return;
     }
     setRegistrando(decision);
@@ -600,7 +602,7 @@ export function DetalleSolicitudJuridica({
               <div style={{ padding: '8px 20px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
                 <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
                   Ingresar la siguiente información de los posibles proponentes que puedan suplir la contratación.
-                  {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: mínimo 4 proponentes.</strong>}
+                  {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: solo se registra un (1) proponente.</strong>}
                 </p>
               </div>
               {Array.isArray(solicitud.proponentes) && solicitud.proponentes.length > 0 ? (
@@ -972,6 +974,7 @@ export function DetalleSolicitudJuridica({
             {esFlujoSecuencial && (
               <PasosFlujoJuridica
                 estado={estadoFlujo}
+                modalidad={solicitud?.modalidad}
                 procesandoRevision={procesandoRevision}
                 onConfirmarRevision={handleConfirmarRevision}
                 onInvitacion={() => abrirPaso('invitacion')}

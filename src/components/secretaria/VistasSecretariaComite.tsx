@@ -50,10 +50,19 @@ interface ActaSnapshot {
   actaNumero: string;
   fechaSesionISO: string;
   decisiones: Record<string, DecisionRegistro>;
+  actaId?: string;
 }
 
 interface ActaHistorial extends ActaSnapshot {
   savedAt: string;
+  desarrolloTexto?: string;
+  conclusionTexto?: string;
+  desarrolloCerrado?: boolean;
+  conclusionCerrada?: boolean;
+  firmanteDirectoraNombre?: string;
+  firmanteDirectoraCargo?: string;
+  firmanteSecretariaNombre?: string;
+  firmanteSecretariaCargo?: string;
 }
 
 type Fase = 'config' | 'seleccion' | 'sesion' | 'acta';
@@ -538,27 +547,32 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
       decisiones: decisionesFinal,
     };
 
-    // Guardar en historial local (localStorage) y en la API
-    const nuevaEntrada: ActaHistorial = { ...snapshot, savedAt: new Date().toISOString() };
+    // Persistir en base de datos y capturar el ID generado
+    let actaId: string | undefined;
+    try {
+      const r = await fetch(`${API_URL}/api/secretaria/actas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acta_numero: snapshot.actaNumero,
+          fecha_sesion: snapshot.fechaSesionISO,
+          participantes: snapshot.participantes,
+          solicitudes_ids: snapshot.ids,
+          decisiones: snapshot.decisiones,
+        }),
+      });
+      if (r.ok) { const data = await r.json(); actaId = data.id; }
+    } catch (e) { console.error('No se pudo guardar acta en la BD:', e); }
+
+    const snapshotConId: ActaSnapshot = { ...snapshot, actaId };
+
+    // Guardar en historial local (localStorage)
+    const nuevaEntrada: ActaHistorial = { ...snapshotConId, savedAt: new Date().toISOString() };
     const historialActualizado = [nuevaEntrada, ...actasHistorial];
     setActasHistorial(historialActualizado);
-    try {
-      localStorage.setItem(ACTAS_HISTORIAL_KEY, JSON.stringify(historialActualizado));
-    } catch { /* no-op */ }
-    // Persistir en base de datos (no bloqueante)
-    fetch(`${API_URL}/api/secretaria/actas`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        acta_numero: snapshot.actaNumero,
-        fecha_sesion: snapshot.fechaSesionISO,
-        participantes: snapshot.participantes,
-        solicitudes_ids: snapshot.ids,
-        decisiones: snapshot.decisiones,
-      }),
-    }).catch((e) => console.error('No se pudo guardar acta en la BD:', e));
+    try { localStorage.setItem(ACTAS_HISTORIAL_KEY, JSON.stringify(historialActualizado)); } catch { /* no-op */ }
 
-    setActaSnapshot(snapshot);
+    setActaSnapshot(snapshotConId);
     setFase('acta');
   };
 
@@ -581,6 +595,16 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
         fechaSesionISO={actaHistorialVisualizando.fechaSesionISO}
         discusionesPorId={discusionesPorId}
         decisionesPorId={actaHistorialVisualizando.decisiones}
+        actaId={actaHistorialVisualizando.actaId}
+        desarrolloInicial={actaHistorialVisualizando.desarrolloTexto}
+        conclusionInicial={actaHistorialVisualizando.conclusionTexto}
+        desarrolloCerradoInicial={actaHistorialVisualizando.desarrolloCerrado}
+        conclusionCerradaInicial={actaHistorialVisualizando.conclusionCerrada}
+        firmanteDirectoraNombreInicial={actaHistorialVisualizando.firmanteDirectoraNombre}
+        firmanteDirectoraCargoInicial={actaHistorialVisualizando.firmanteDirectoraCargo}
+        firmanteSecretariaNombreInicial={actaHistorialVisualizando.firmanteSecretariaNombre}
+        firmanteSecretariaCargoInicial={actaHistorialVisualizando.firmanteSecretariaCargo}
+        soloLectura
         onBack={() => setActaHistorialVisualizando(null)}
       />
     );
@@ -613,6 +637,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
         discusionesPorId={discusionesPorId}
         decisionesPorId={actaSnapshot.decisiones}
         solicitudPrincipalId={actaSnapshot.ids[0]}
+        actaId={actaSnapshot.actaId}
         onBack={volverDeActa}
       />
     );

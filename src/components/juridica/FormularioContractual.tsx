@@ -367,8 +367,8 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
             <SectionHeader title="VIII. Evaluación de Proponentes" icon={Scale} />
             <Row label="Proponente recomendado" value={
-              calificacion.evaluacion.ganador_nombre
-                ? <span className="font-semibold text-green-700">★ {calificacion.evaluacion.ganador_nombre}</span>
+              (proveedorGanador?.nombre_proveedor || calificacion.evaluacion.ganador_nombre)
+                ? <span className="font-semibold text-green-700">★ {proveedorGanador?.nombre_proveedor || calificacion.evaluacion.ganador_nombre}</span>
                 : null
             } />
             <Row label="Estado de evaluación" value={

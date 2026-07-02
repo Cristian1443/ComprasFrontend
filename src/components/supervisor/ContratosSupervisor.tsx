@@ -11,6 +11,7 @@ interface Contrato {
   id: string;
   codigo: string;
   objeto: string;
+  titulo_contrato?: string | null;
   estado: string;
   moneda?: string;
   valor_en_cop: number | null;
@@ -144,7 +145,7 @@ export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSuperv
       filtro === 'vencidos'   ? (dias !== null && dias < 0) :
       true;
     const q = search.toLowerCase();
-    return matchFiltro && (!q || (c.codigo||'').toLowerCase().includes(q) || (c.objeto||'').toLowerCase().includes(q) || (c.proveedor_nombre||'').toLowerCase().includes(q));
+    return matchFiltro && (!q || (c.codigo||'').toLowerCase().includes(q) || (c.titulo_contrato||'').toLowerCase().includes(q) || (c.objeto||'').toLowerCase().includes(q) || (c.proveedor_nombre||'').toLowerCase().includes(q));
   });
 
   const porVencer = contratos.filter(c => { const d = getDiasRestantes(c); return d !== null && d >= 0 && d <= 30; }).length;
@@ -303,7 +304,7 @@ export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSuperv
 
                     {/* Objeto */}
                     <div className="min-w-0 pr-3">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{c.objeto || 'Sin objeto'}</p>
+                      <p className="text-sm font-semibold text-gray-800 truncate">{c.titulo_contrato || c.objeto || 'Sin objeto'}</p>
                     </div>
 
                     {/* Proveedor */}
@@ -354,7 +355,7 @@ export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSuperv
                         <span className="text-[10px] font-black" style={{ color: BRAND }}>{c.codigo}</span>
                         <EstadoContrato contrato={c} />
                       </div>
-                      <p className="text-sm font-semibold text-gray-800 truncate">{c.objeto || 'Sin objeto'}</p>
+                      <p className="text-sm font-semibold text-gray-800 truncate">{c.titulo_contrato || c.objeto || 'Sin objeto'}</p>
                       <p className="text-xs text-gray-500 truncate">{c.proveedor_nombre || '-'}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                         {valor && <span className="font-semibold text-gray-700">{valor.moneda} {valor.valor}</span>}

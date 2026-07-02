@@ -71,7 +71,7 @@ export function ListaAprobaciones({ userEmail, onActionSuccess }: { userEmail: s
         : solicitudes.filter(s => s.estado === 'enviado_gerente');
 
     const filteredSolicitudes = displayedSolicitudes.filter(sol =>
-    (sol.objeto?.toLowerCase().includes(busqueda.toLowerCase()) ||
+    ((sol.titulo_contrato || sol.objeto)?.toLowerCase().includes(busqueda.toLowerCase()) ||
         sol.codigo?.toLowerCase().includes(busqueda.toLowerCase()) ||
         sol.solicitante_nombre?.toLowerCase().includes(busqueda.toLowerCase()))
     );
@@ -139,7 +139,7 @@ export function ListaAprobaciones({ userEmail, onActionSuccess }: { userEmail: s
                     <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 transition-colors group-focus-within:text-[var(--brand-secondary)]" size={20} />
                     <input
                         type="text"
-                        placeholder="Buscar por código, objeto o solicitante..."
+                        placeholder="Buscar por código, título o solicitante..."
                         className="w-full pl-16 pr-8 py-4 bg-white border border-gray-200 rounded-2xl focus:outline-none transition-all font-medium text-slate-800 shadow-sm shadow-slate-200/50"
                         value={busqueda}
                         onChange={(e) => setBusqueda(e.target.value)}
@@ -163,7 +163,7 @@ export function ListaAprobaciones({ userEmail, onActionSuccess }: { userEmail: s
                                 <thead className="border-b border-gray-100">
                                     <tr>
                                         <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Código</th>
-                                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Objeto / Solicitante</th>
+                                        <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Título / Solicitante</th>
                                         <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Estado</th>
                                         <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Valor Estimado</th>
                                         <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Acción</th>
@@ -184,7 +184,7 @@ export function ListaAprobaciones({ userEmail, onActionSuccess }: { userEmail: s
                                             </td>
                                             <td className="px-6 py-6 max-w-md">
                                                 <p className="text-sm font-bold text-gray-900 line-clamp-1 mb-1 transition-colors group-hover:text-[var(--brand-secondary)]">
-                                                    {sol.titulo_contrato || sol.objeto || 'Sin objeto'}
+                                                    {sol.titulo_contrato || sol.objeto || 'Sin título'}
                                                 </p>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[10px] font-bold text-gray-400 uppercase">{sol.solicitante_nombre}</span>

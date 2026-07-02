@@ -6,6 +6,7 @@ import {
   PanelRightClose, PanelRightOpen
 } from 'lucide-react';
 import { FichaComite } from './DetalleSolicitudComite';
+import { TrazabilidadFlujo } from '../shared/TrazabilidadFlujo';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -607,6 +608,12 @@ export function SesionComite({
             <div style={sx.presentBody}>
               <div style={sx.presentBodyInner}>
                 <FichaComite solicitud={fichaSolicitud} showToolbar={false} />
+                <TrazabilidadFlujo
+                  solicitud={currentSol}
+                  variant="card"
+                  titulo="Flujo de aprobación"
+                  subtitulo="Estado actual de cada etapa de aprobación de esta solicitud."
+                />
               </div>
 
               {/* Botón flotante para revelar el panel cuando está oculto */}

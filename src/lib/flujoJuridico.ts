@@ -14,6 +14,17 @@ export const ORDEN_PASOS_FLUJO: PasoFlujoJuridico[] = [
   'documentos_finales',
 ];
 
+/** Directa no requiere invitación/calificación/adjudicación: no hay competencia entre proponentes. */
+export const ORDEN_PASOS_FLUJO_DIRECTA: PasoFlujoJuridico[] = [
+  'revision_inicial',
+  'documentos_finales',
+];
+
+export function ordenPasosParaModalidad(modalidad: string | null | undefined): PasoFlujoJuridico[] {
+  const m = String(modalidad || '').toLowerCase();
+  return m === 'directa' ? ORDEN_PASOS_FLUJO_DIRECTA : ORDEN_PASOS_FLUJO;
+}
+
 export const PASO_META: Record<PasoFlujoJuridico, { numero: number; titulo: string; descripcion: string }> = {
   revision_inicial: {
     numero: 1,
@@ -55,7 +66,7 @@ export interface EstadoFlujoJuridica {
 
 export function requiereFlujoSecuencial(modalidad: string | null | undefined): boolean {
   const m = String(modalidad || '').toLowerCase();
-  return m === 'tdr' || m === 'invitacion';
+  return m === 'directa' || m === 'tdr' || m === 'invitacion';
 }
 
 export function pasoCompletado(paso: PasoFlujoJuridico, estado: EstadoFlujoJuridica): boolean {
@@ -75,30 +86,35 @@ export function pasoCompletado(paso: PasoFlujoJuridico, estado: EstadoFlujoJurid
   }
 }
 
-export function pasoAnterior(paso: PasoFlujoJuridico): PasoFlujoJuridico | null {
-  const idx = ORDEN_PASOS_FLUJO.indexOf(paso);
-  return idx > 0 ? ORDEN_PASOS_FLUJO[idx - 1] : null;
+export function pasoAnterior(paso: PasoFlujoJuridico, orden: PasoFlujoJuridico[] = ORDEN_PASOS_FLUJO): PasoFlujoJuridico | null {
+  const idx = orden.indexOf(paso);
+  return idx > 0 ? orden[idx - 1] : null;
 }
 
-export function pasoAccesible(paso: PasoFlujoJuridico, estado: EstadoFlujoJuridica): boolean {
-  const prev = pasoAnterior(paso);
+export function pasoAccesible(paso: PasoFlujoJuridico, estado: EstadoFlujoJuridica, orden: PasoFlujoJuridico[] = ORDEN_PASOS_FLUJO): boolean {
+  const prev = pasoAnterior(paso, orden);
   if (!prev) return true;
   return pasoCompletado(prev, estado);
 }
 
-export function mensajeBloqueoPaso(paso: PasoFlujoJuridico, estado: EstadoFlujoJuridica): string | null {
-  if (pasoAccesible(paso, estado)) return null;
-  const prev = pasoAnterior(paso);
+/** Número de orden de un paso dentro de la secuencia dada (1-indexado), no el número fijo de PASO_META. */
+export function numeroPaso(paso: PasoFlujoJuridico, orden: PasoFlujoJuridico[] = ORDEN_PASOS_FLUJO): number {
+  return orden.indexOf(paso) + 1;
+}
+
+export function mensajeBloqueoPaso(paso: PasoFlujoJuridico, estado: EstadoFlujoJuridica, orden: PasoFlujoJuridico[] = ORDEN_PASOS_FLUJO): string | null {
+  if (pasoAccesible(paso, estado, orden)) return null;
+  const prev = pasoAnterior(paso, orden);
   if (!prev) return null;
-  return `Complete primero el paso ${PASO_META[prev].numero}: ${PASO_META[prev].titulo}.`;
+  return `Complete primero el paso ${numeroPaso(prev, orden)}: ${PASO_META[prev].titulo}.`;
 }
 
-export function flujoCompleto(estado: EstadoFlujoJuridica): boolean {
-  return ORDEN_PASOS_FLUJO.every((p) => pasoCompletado(p, estado));
+export function flujoCompleto(estado: EstadoFlujoJuridica, orden: PasoFlujoJuridico[] = ORDEN_PASOS_FLUJO): boolean {
+  return orden.every((p) => pasoCompletado(p, estado));
 }
 
-export function pasoActual(estado: EstadoFlujoJuridica): PasoFlujoJuridico | null {
-  for (const paso of ORDEN_PASOS_FLUJO) {
+export function pasoActual(estado: EstadoFlujoJuridica, orden: PasoFlujoJuridico[] = ORDEN_PASOS_FLUJO): PasoFlujoJuridico | null {
+  for (const paso of orden) {
     if (!pasoCompletado(paso, estado)) return paso;
   }
   return null;
@@ -125,8 +141,8 @@ export function construirEstadoFlujo(input: {
   };
 }
 
-export function mensajeFlujoIncompleto(estado: EstadoFlujoJuridica): string {
-  const actual = pasoActual(estado);
+export function mensajeFlujoIncompleto(estado: EstadoFlujoJuridica, orden: PasoFlujoJuridico[] = ORDEN_PASOS_FLUJO): string {
+  const actual = pasoActual(estado, orden);
   if (!actual) return 'Complete todos los pasos del flujo jurídico antes de aprobar.';
-  return `Complete el paso ${PASO_META[actual].numero} (${PASO_META[actual].titulo}) antes de aprobar legalmente.`;
+  return `Complete el paso ${numeroPaso(actual, orden)} (${PASO_META[actual].titulo}) antes de aprobar legalmente.`;
 }

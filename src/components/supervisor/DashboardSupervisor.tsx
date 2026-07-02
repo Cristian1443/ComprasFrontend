@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   Plus, FileText, Clock, XCircle, CheckCircle2, ArrowRight,
-  Receipt, AlertTriangle, Building2, RotateCcw, Layers, ChevronRight,
+  Receipt, AlertTriangle, Building2, RotateCcw, Layers, ChevronRight, ClipboardCheck,
 } from 'lucide-react';
 
 interface DashboardSupervisorProps {
   onNewRequest: () => void;
   onVerDetalle: (id: string) => void;
   onVerContrato?: (id: string) => void;
+  onCalificarProponentes?: (id: string) => void;
   userEmail?: string;
 }
 
@@ -63,10 +64,11 @@ function EstadoBadge({ estado }: { estado: string }) {
   );
 }
 
-export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato, userEmail }: DashboardSupervisorProps) {
+export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato, onCalificarProponentes, userEmail }: DashboardSupervisorProps) {
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [contratos, setContratos] = useState<any[]>([]);
   const [facturasPendientes, setFacturasPendientes] = useState<any[]>([]);
+  const [calificacionesPendientes, setCalificacionesPendientes] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
   const [filtroKpi, setFiltroKpi] = useState<'todas' | 'accion' | 'revision' | 'cerradas'>('todas');
 
@@ -79,10 +81,12 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
       fetch(`${API_URL}/api/solicitudes?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(`${API_URL}/api/supervisor/contratos?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(`${API_URL}/api/supervisor/facturas-pendientes?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([sols, cons, facts]) => {
+      fetch(`${API_URL}/api/supervisor/solicitudes-en-calificacion?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([sols, cons, facts, califs]) => {
       setSolicitudes(Array.isArray(sols) ? sols : []);
       setContratos(Array.isArray(cons) ? cons : []);
       setFacturasPendientes(Array.isArray(facts) ? facts : []);
+      setCalificacionesPendientes(Array.isArray(califs) ? califs.filter((c: any) => !c.supervisor_finalizada) : []);
     }).finally(() => setCargando(false));
   }, [email]);
 
@@ -159,6 +163,34 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
 
       {/* ── CONTENIDO ── */}
       <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-7 space-y-7">
+
+        {/* Alerta calificación de proponentes pendiente */}
+        {calificacionesPendientes.length > 0 && (
+          <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
+            <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
+              <ClipboardCheck size={18} className="text-blue-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-blue-900 text-sm">
+                {calificacionesPendientes.length === 1
+                  ? 'Tiene 1 solicitud pendiente de su calificación como supervisor'
+                  : `Tiene ${calificacionesPendientes.length} solicitudes pendientes de su calificación como supervisor`}
+              </p>
+              <p className="text-blue-700 text-xs truncate mt-0.5">
+                Jurídica está evaluando los proponentes — su calificación se registra en paralelo. {calificacionesPendientes.slice(0, 3).map((c: any) => c.codigo).filter(Boolean).join(' · ')}
+              </p>
+            </div>
+            {onCalificarProponentes && (
+              <button
+                onClick={() => onCalificarProponentes(calificacionesPendientes[0].id)}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition-colors text-white"
+                style={{ background: BRAND }}
+              >
+                Calificar <ArrowRight size={12} />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Alerta facturas */}
         {facturasPendientes.length > 0 && (

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Search, Download, Eye, CheckCircle2, XCircle, Clock, Loader2, Receipt
 } from 'lucide-react';
+import { DetalleAprobacion } from './DetalleAprobacion';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 const BRAND = '#2f6fa3';
@@ -10,6 +11,7 @@ interface SolicitudHistorial {
     id: string;
     codigo: string;
     objeto: string;
+    titulo_contrato?: string;
     actualizado_en: string;
     valor_en_cop: number;
     valor_estimado?: number;
@@ -64,16 +66,39 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
     const [loadingFac, setLoadingFac]   = useState(true);
     const [historial, setHistorial]     = useState<SolicitudHistorial[]>([]);
     const [facturas, setFacturas]       = useState<FacturaHistorial[]>([]);
+    const [usuarioActual, setUsuarioActual] = useState<any | null>(null);
+    const [solicitudSeleccionada, setSolicitudSeleccionada] = useState<SolicitudHistorial | null>(null);
 
-    useEffect(() => {
+    const cargarHistorial = () => {
         if (!userEmail) return;
         fetch(`${API_URL}/api/gerente/historial?email=${userEmail}`)
             .then(r => r.ok ? r.json() : [])
             .then(setHistorial).catch(() => {}).finally(() => setLoadingSol(false));
+    };
+
+    useEffect(() => {
+        if (!userEmail) return;
+        fetch(`${API_URL}/api/usuarios/me?email=${userEmail}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(setUsuarioActual).catch(() => {});
+        cargarHistorial();
         fetch(`${API_URL}/api/gerente/historial-facturas?email=${userEmail}`)
             .then(r => r.ok ? r.json() : [])
             .then(setFacturas).catch(() => {}).finally(() => setLoadingFac(false));
     }, [userEmail]);
+
+    if (solicitudSeleccionada) {
+        return (
+            <DetalleAprobacion
+                solicitud={solicitudSeleccionada}
+                usuarioActual={usuarioActual}
+                onBack={() => {
+                    setSolicitudSeleccionada(null);
+                    cargarHistorial();
+                }}
+            />
+        );
+    }
 
     const fmtFecha = (iso: string) =>
         new Date(iso).toLocaleString('es-CO', {
@@ -90,7 +115,7 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
     };
 
     const filteredSol = historial.filter(h =>
-        [h.codigo, h.objeto, h.solicitante_nombre].some(f =>
+        [h.codigo, h.titulo_contrato, h.objeto, h.solicitante_nombre].some(f =>
             f?.toLowerCase().includes(searchTerm.toLowerCase())
         )
     );
@@ -153,7 +178,7 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                         placeholder={tab === 'solicitudes'
-                            ? 'Buscar por código, objeto o solicitante...'
+                            ? 'Buscar por código, título o solicitante...'
                             : 'Buscar por factura, concepto o contrato...'}
                         className="w-full pl-11 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-all"
                         style={{ fontFamily: 'Gabarito, sans-serif', '--tw-ring-color': BRAND } as any}
@@ -171,7 +196,7 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
                         <table className="w-full text-left">
                             <thead>
                                 <tr className="border-b border-gray-100 bg-gray-50/70">
-                                    {['Código', 'Proyecto / Objeto', 'Solicitante', 'Monto', 'Estado', ''].map(h => (
+                                    {['Código', 'Título', 'Solicitante', 'Monto', 'Estado', ''].map(h => (
                                         <th key={h} className="px-5 py-3.5 text-[10px] font-black uppercase tracking-widest text-gray-400">
                                             {h}
                                         </th>
@@ -180,7 +205,7 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {filteredSol.length > 0 ? filteredSol.map(row => (
-                                    <tr key={row.id} className="hover:bg-gray-50/50 transition-colors">
+                                    <tr key={row.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => setSolicitudSeleccionada(row)}>
                                         <td className="px-5 py-4 whitespace-nowrap">
                                             <span className="text-xs font-black font-mono text-white px-2.5 py-1 rounded-md"
                                                 style={{ backgroundColor: BRAND }}>
@@ -188,7 +213,7 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
                                             </span>
                                         </td>
                                         <td className="px-5 py-4 max-w-xs">
-                                            <p className="text-sm font-bold text-gray-800 truncate">{row.objeto}</p>
+                                            <p className="text-sm font-bold text-gray-800 truncate">{row.titulo_contrato || row.objeto}</p>
                                             <p className="text-[10px] text-gray-400 font-medium mt-0.5">{fmtFecha(row.actualizado_en)}</p>
                                         </td>
                                         <td className="px-5 py-4 whitespace-nowrap">
@@ -211,7 +236,10 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
                                             <StatusBadge estado={getSolicitudStatus(row.estado)} />
                                         </td>
                                         <td className="px-5 py-4 text-right">
-                                            <button className="p-2 text-gray-300 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setSolicitudSeleccionada(row); }}
+                                                className="p-2 text-gray-300 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+                                            >
                                                 <Eye size={16} />
                                             </button>
                                         </td>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, FileText, HelpCircle, Menu, X, Plus, LogOut, FileCheck2 } from 'lucide-react';
+import { Home, FileText, HelpCircle, Menu, X, Plus, LogOut, FileCheck2, ClipboardCheck } from 'lucide-react';
 import { ViewSupervisor } from './VistasSupervisor';
 
 interface SidebarSupervisorProps {
@@ -17,6 +17,7 @@ export function SidebarSupervisor({ currentView, onNavigate, onNuevaSolicitud, i
   const menuItems = [
     { id: 'dashboard' as ViewSupervisor, label: 'Panel', icon: Home },
     { id: 'solicitudes' as ViewSupervisor, label: 'Mis Solicitudes', icon: FileText },
+    { id: 'calificacionProponentes' as ViewSupervisor, label: 'Calificar Proponentes', icon: ClipboardCheck },
     { id: 'contratos' as ViewSupervisor, label: 'Supervision', icon: FileCheck2 },
     { id: 'ayuda' as ViewSupervisor, label: 'Ayuda', icon: HelpCircle },
   ];

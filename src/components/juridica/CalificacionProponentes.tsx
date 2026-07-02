@@ -62,6 +62,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
     otros_criterios_puntos: { enabled: false, max: 0, label: 'Otros Criterios' }
   });
   const [proponentesEditados, setProponentesEditados] = useState<Record<string, any>>({});
+  const [habilitantesRevisados, setHabilitantesRevisados] = useState<Set<number>>(new Set());
   const [isAutosaving, setIsAutosaving] = useState(false);
   const [calificacionFinalizada, setCalificacionFinalizada] = useState(false);
   const [generandoPdf, setGenerandoPdf] = useState(false);
@@ -162,13 +163,15 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
         setFirmaDirectorNombre(String(ev?.firmas?.director?.nombre || ''));
         setCalificacionGuardada(Array.isArray(ev?.calificaciones) && ev.calificaciones.length > 0);
         setCalificacionFinalizada(Boolean(ev?.finalizada));
+        setHabilitantesRevisados(new Set(Array.isArray(ev?.habilitantes_revisados) ? ev.habilitantes_revisados.map(Number) : []));
 
         const currentData = JSON.stringify({
           calificaciones: initial,
           configPuntajes: ev.config_puntajes || configPuntajes,
           evaluacionConsolidada: String(ev.evaluacion_consolidada || ''),
           ccRecomendado: String(ev.cc_recomendado || ''),
-          proponentesEditados: initialProps
+          proponentesEditados: initialProps,
+          habilitantesRevisados: Array.isArray(ev?.habilitantes_revisados) ? ev.habilitantes_revisados.map(Number) : []
         });
         lastSavedRef.current = currentData;
 
@@ -228,7 +231,8 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
       configPuntajes,
       evaluacionConsolidada,
       ccRecomendado,
-      proponentesEditados
+      proponentesEditados,
+      habilitantesRevisados: Array.from(habilitantesRevisados)
     };
     const draftStr = JSON.stringify(current);
 
@@ -242,7 +246,24 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [calificaciones, configPuntajes, evaluacionConsolidada, ccRecomendado, proponentesEditados, selectedId, calificacionFinalizada]);
+  }, [calificaciones, configPuntajes, evaluacionConsolidada, ccRecomendado, proponentesEditados, habilitantesRevisados, selectedId, calificacionFinalizada]);
+
+  // La calificación del supervisor se guarda en paralelo, de forma independiente.
+  // Se refresca periódicamente para reflejar su avance sin pisar lo que Jurídica está editando.
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelado = false;
+    const refrescarSupervisor = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`);
+        if (!res.ok || cancelado) return;
+        const data = await res.json();
+        setDetalle((prev: any) => prev ? { ...prev, evaluacion: { ...prev.evaluacion, supervisor: data?.evaluacion?.supervisor || null } } : prev);
+      } catch { /* no-op */ }
+    };
+    const interval = setInterval(refrescarSupervisor, 20000);
+    return () => { cancelado = true; clearInterval(interval); };
+  }, [selectedId]);
 
   const restaurarBorrador = () => {
     try {
@@ -254,6 +275,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
       setEvaluacionConsolidada(draft.evaluacionConsolidada);
       setCcRecomendado(draft.ccRecomendado);
       if (draft.proponentesEditados) setProponentesEditados(draft.proponentesEditados);
+      if (Array.isArray(draft.habilitantesRevisados)) setHabilitantesRevisados(new Set(draft.habilitantesRevisados.map(Number)));
       setHayBorrador(false);
       alert('Borrador restaurado correctamente.');
     } catch (e) {
@@ -267,7 +289,9 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
   }, [detalle]);
 
   const proponentes = Array.isArray(detalle?.proponentes) ? detalle.proponentes : [];
-  const proponentesVista = proponentes;
+  // Un proponente que no respondió a la invitación no tiene nada que calificar —
+  // no debe ocupar una columna en el formato.
+  const proponentesVista = proponentes.filter((p: any) => p.respondida);
 
   const handleScoreChange = (numero: number, key: string, value: number) => {
     const safe = Math.max(0, Math.min(100, Number(value || 0)));
@@ -302,6 +326,14 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
     return Number(sum.toFixed(2));
   };
 
+  // Calificación del supervisor (en paralelo) — solo lectura, informativa para Jurídica.
+  const supervisorEval = detalle?.evaluacion?.supervisor || null;
+  const supervisorTotal = (numero: number): number | null => {
+    const c = (Array.isArray(supervisorEval?.calificaciones) ? supervisorEval.calificaciones : [])
+      .find((c: any) => Number(c?.numero) === Number(numero));
+    return c ? Number(c.total || 0) : null;
+  };
+
   // Ganador: solo entre proponentes que respondieron y tienen puntaje > 0
   const proponentesQueRespondieron = proponentesVista.filter((p: any) => p.respondida);
   const ganadorNumero: number | null = proponentesQueRespondieron.length > 0
@@ -311,6 +343,21 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
       ).numero
     : null;
 
+  // Discrepancia: Jurídica y el Supervisor recomiendan proponentes distintos.
+  // La decisión final la toma Jurídica (es quien finaliza y genera el Acta de Adjudicación),
+  // pero debe quedar por escrito el porqué en la evaluación consolidada.
+  const supervisorRecomendadoNumero = supervisorEval?.proponente_recomendado_numero != null
+    ? Number(supervisorEval.proponente_recomendado_numero)
+    : null;
+  const hayDiscrepancia = ganadorNumero != null && supervisorRecomendadoNumero != null
+    && ganadorNumero !== supervisorRecomendadoNumero;
+
+  // Es obligatorio abrir el detalle de requisitos habilitantes de cada proponente
+  // que respondió antes de poder cerrar (finalizar) la calificación.
+  const proponentesPendientesRevision = proponentesQueRespondieron.filter(
+    (p: any) => !habilitantesRevisados.has(Number(p.numero))
+  );
+
   const guardar = async (silencioso = false, finalizar = false) => {
     if (!selectedId || !esModalidadCalificable) return;
     if (calificacionFinalizada) return;
@@ -318,8 +365,16 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
     const totalPuntaje = Object.values(configPuntajes).reduce((acc, c) => acc + (c.enabled ? c.max : 0), 0);
 
     if (finalizar) {
+      if (proponentesPendientesRevision.length > 0) {
+        alert(`Debe revisar el detalle de requisitos habilitantes de todos los proponentes antes de finalizar. Falta revisar: ${proponentesPendientesRevision.map((p: any) => `Proponente ${p.numero}`).join(', ')}.`);
+        return;
+      }
       if (totalPuntaje !== 100) {
         alert(`Para finalizar, la suma de pesos debe ser exactamente 100%. Actualmente es ${totalPuntaje}%.`);
+        return;
+      }
+      if (hayDiscrepancia && !evaluacionConsolidada.trim()) {
+        alert(`Jurídica recomienda al Proponente ${ganadorNumero} y el Supervisor recomienda al Proponente ${supervisorRecomendadoNumero}. Antes de finalizar debe justificar por escrito en "Evaluación consolidada / Justificación" por qué se decide por uno u otro.`);
         return;
       }
       const ok = window.confirm('¿Está seguro de FINALIZAR la calificación? El documento quedará bloqueado y no podrá modificarse.');
@@ -361,7 +416,8 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
           director: { nombre: firmaDirectorNombre, cargo: 'Director ejecutivo' }
         },
         email: userEmail,
-        finalizada: finalizar
+        finalizada: finalizar,
+        habilitantes_revisados: Array.from(habilitantesRevisados)
       };
 
       const res = await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`, {
@@ -543,6 +599,15 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                   <RotateCcw size={10} className="animate-spin" /> AUTOGUARDADO EN SERVIDOR
                 </span>
               )}
+              <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                supervisorEval?.finalizada
+                  ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                  : supervisorEval
+                    ? 'text-amber-700 bg-amber-50 border-amber-200'
+                    : 'text-gray-500 bg-gray-50 border-gray-200'
+              }`}>
+                SUPERVISOR: {supervisorEval?.finalizada ? '✓ CALIFICACIÓN FINALIZADA' : supervisorEval ? '⏳ BORRADOR EN PROGRESO' : 'AÚN NO HA CALIFICADO'}
+              </span>
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -572,8 +637,28 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                 <button onClick={() => guardar(false, false)} disabled={saving} className="bg-red-600 text-white px-4 py-2 rounded flex items-center gap-2">
                   {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} Guardar borrador
                 </button>
-                <button onClick={() => guardar(false, true)} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded font-bold text-white" style={{ backgroundColor: '#1d4ed8' }}>
+                <button
+                  onClick={() => guardar(false, true)}
+                  disabled={saving || proponentesPendientesRevision.length > 0 || (hayDiscrepancia && !evaluacionConsolidada.trim())}
+                  title={proponentesPendientesRevision.length > 0
+                    ? `Debe revisar el detalle de requisitos habilitantes de: ${proponentesPendientesRevision.map((p: any) => `Proponente ${p.numero}`).join(', ')}`
+                    : (hayDiscrepancia && !evaluacionConsolidada.trim())
+                      ? 'Debe justificar en "Evaluación consolidada" la discrepancia con el Supervisor antes de finalizar'
+                      : undefined}
+                  className="flex items-center gap-2 px-4 py-2 rounded font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: '#1d4ed8' }}
+                >
                   <CheckCircle2 size={16} /> Guardar y Finalizar
+                  {proponentesPendientesRevision.length > 0 && (
+                    <span className="text-[10px] font-normal bg-white/20 px-1.5 py-0.5 rounded">
+                      Falta revisar {proponentesPendientesRevision.length}
+                    </span>
+                  )}
+                  {proponentesPendientesRevision.length === 0 && hayDiscrepancia && !evaluacionConsolidada.trim() && (
+                    <span className="text-[10px] font-normal bg-white/20 px-1.5 py-0.5 rounded">
+                      Falta justificar discrepancia
+                    </span>
+                  )}
                 </button>
               </>
             )}
@@ -635,7 +720,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                   <thead>
                     <tr>
                       <th style={{ ...thCell, background: '#334155', color: '#fff', width: 350, textAlign: 'left', paddingLeft: 16 }}>CRITERIO / REQUISITO</th>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <th key={p.numero} style={{ ...thCell, background: '#F04B23', color: '#fff', padding: '10px 5px' }}>
                           <div className="flex flex-col items-center gap-1">
                             <span className="text-xs font-black">PROPONENTE {p.numero}</span>
@@ -659,7 +744,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                     <tr>
                       <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16, fontWeight: 500, verticalAlign: 'top' }}>Datos de contacto</td>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <td key={p.numero} style={{ ...tdCell, padding: 0, verticalAlign: 'top' }}>
                           <textarea
                             value={proponentesEditados[String(p.numero)]?.datos_contacto || ''}
@@ -672,7 +757,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                     <tr>
                       <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Requisitos técnicos propuestos</td>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
                           <textarea 
                             value={proponentesEditados[String(p.numero)]?.requisitos_tecnicos || ''}
@@ -685,7 +770,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                     <tr>
                       <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Experiencia acreditada</td>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
                           <input 
                             type="text"
@@ -699,7 +784,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                     <tr>
                       <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Criterios habilitantes (Sugeridos)</td>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
                           <input 
                             type="text"
@@ -713,7 +798,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                     <tr>
                       <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Valor de la propuesta + Impuestos</td>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
                           <div className="flex items-center">
                             <input 
@@ -730,7 +815,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                     <tr>
                       <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Valor agregado</td>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
                           <textarea 
                             value={proponentesEditados[String(p.numero)]?.valor_agregado || ''}
@@ -743,7 +828,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                     <tr>
                       <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Anexos / Observaciones</td>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
                           <div className="flex flex-col h-full">
                             <textarea 
@@ -771,7 +856,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                     <tr>
                       <td style={{ ...tdCell, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, background: '#fff' }}>DOCUMENTOS RECIBIDOS (Vínculos Graph)</td>
-                      {proponentesVista.map(p => {
+                      {proponentesVista.map((p: any) => {
                         const resp = respuestasProponentes[p.email || p.datos_contacto];
                         return (
                           <td key={p.numero} style={{ ...tdCell, fontSize: 11, textAlign: 'left', verticalAlign: 'top' }}>
@@ -795,7 +880,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     {requisitosLegales.map(r => (
                       <tr key={r.key}>
                         <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16 }}>{r.label}</td>
-                        {proponentesVista.map(p => {
+                        {proponentesVista.map((p: any) => {
                           const chk = calificaciones[String(p.numero)]?.checklist || {};
                           return (
                             <td key={p.numero} style={tdCell}>
@@ -818,13 +903,33 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     ))}
 
                     <tr>
-                      <td style={{ ...tdCell, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16 }}>¿CUMPLE REQUISITOS HABILITANTES?</td>
-                      {proponentesVista.map(p => {
+                      <td style={{ ...tdCell, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16 }}>
+                        ¿CUMPLE REQUISITOS HABILITANTES?
+                        <p style={{ fontWeight: 400, fontSize: 9, color: '#6B7280', marginTop: 2 }}>
+                          Debe revisar el detalle de cada proponente para poder finalizar
+                        </p>
+                      </td>
+                      {proponentesVista.map((p: any) => {
                         const chk = calificaciones[String(p.numero)]?.checklist || {};
                         const cumple = requisitosLegales.every(r => (chk[r.key] || 'SI') !== 'NO') ? 'SI' : 'NO';
+                        const revisado = habilitantesRevisados.has(Number(p.numero));
                         return (
-                          <td key={p.numero} style={{ ...tdCell, background: cumple === 'SI' ? '#86EFAC' : '#FCA5A5', fontWeight: 'bold', fontSize: 14, cursor: 'pointer' }} onClick={() => setProponenteAbiertoDetalle(p.numero)}>
+                          <td
+                            key={p.numero}
+                            style={{ ...tdCell, background: cumple === 'SI' ? '#86EFAC' : '#FCA5A5', fontWeight: 'bold', fontSize: 14, cursor: 'pointer' }}
+                            onClick={() => {
+                              setProponenteAbiertoDetalle(p.numero);
+                              if (p.respondida) {
+                                setHabilitantesRevisados(prev => new Set(prev).add(Number(p.numero)));
+                              }
+                            }}
+                          >
                             {cumple} <span className="text-[10px] block font-normal underline">Ver Detalle</span>
+                            {p.respondida && (
+                              <span className={`text-[9px] block font-bold mt-0.5 ${revisado ? 'text-emerald-800' : 'text-red-700'}`}>
+                                {revisado ? '✓ REVISADO' : '⚠ PENDIENTE DE REVISAR'}
+                              </span>
+                            )}
                           </td>
                         );
                       })}
@@ -869,7 +974,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                             )}
                           </div>
                         </td>
-                        {proponentesVista.map(p => (
+                        {proponentesVista.map((p: any) => (
                           <td key={p.numero} style={{ ...tdCell, background: !p.respondida ? '#fafafa' : config.enabled ? '#fff' : '#f1f5f9' }}>
                             {!p.respondida ? (
                               <span className="text-gray-300 text-[10px] italic">Sin respuesta</span>
@@ -896,7 +1001,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
 
                     <tr>
                       <td style={{ ...tdCell, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, background: '#334155', color: '#fff' }}>TOTAL PUNTAJE OBTENIDO</td>
-                      {proponentesVista.map(p => (
+                      {proponentesVista.map((p: any) => (
                         <td key={p.numero} style={{ ...tdCell, background: p.respondida ? '#F04B23' : '#E5E7EB', color: p.respondida ? '#fff' : '#9CA3AF', fontWeight: 'bold', fontSize: p.respondida ? 16 : 12 }}>
                           {p.respondida ? total(p.numero) : 'N/A'}
                         </td>
@@ -917,6 +1022,42 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                             style={{ ...tdCell, background: esGanador ? '#86EFAC' : !p.respondida ? '#fafafa' : '#fff', fontWeight: 'bold', color: esGanador ? '#065f46' : '#D1D5DB', fontSize: 14 }}
                           >
                             {!p.respondida ? <span className="text-[10px] italic text-gray-300">No elegible</span> : esGanador ? '★ GANADOR' : '—'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+
+                    {/* CALIFICACIÓN DEL SUPERVISOR — informativa, en paralelo a la de Jurídica */}
+                    <tr>
+                      <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#eff6ff', borderTop: '2px solid #2f6fa3' }}>
+                        <div className="flex items-center justify-between px-4 py-2">
+                          <span className="font-bold text-blue-700 text-sm">CALIFICACIÓN DEL SUPERVISOR (informativa, en paralelo)</span>
+                          <span className={`px-3 py-1 rounded text-white font-bold text-xs ${supervisorEval?.finalizada ? 'bg-emerald-600' : supervisorEval ? 'bg-amber-500' : 'bg-gray-400'}`}>
+                            {supervisorEval?.finalizada ? 'FINALIZADA' : supervisorEval ? 'BORRADOR' : 'AÚN NO HA CALIFICADO'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ ...tdCell, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16 }}>PUNTAJE DEL SUPERVISOR</td>
+                      {proponentesVista.map((p: any) => {
+                        const st = supervisorTotal(p.numero);
+                        return (
+                          <td key={p.numero} style={{ ...tdCell, background: '#eff6ff', color: '#2f6fa3', fontWeight: 'bold', fontSize: st != null ? 16 : 12 }}>
+                            {st != null ? st : <span className="text-gray-300 text-[10px] italic">Sin calificar</span>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr>
+                      <td style={{ ...tdCell, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, background: '#f0fdf4', color: '#065f46', fontSize: 12 }}>
+                        RECOMENDADO POR EL SUPERVISOR
+                      </td>
+                      {proponentesVista.map((p: any) => {
+                        const esRecomendadoSupervisor = supervisorEval && Number(supervisorEval.proponente_recomendado_numero) === Number(p.numero);
+                        return (
+                          <td key={p.numero} style={{ ...tdCell, background: esRecomendadoSupervisor ? '#86EFAC' : '#fff', fontWeight: 'bold', color: esRecomendadoSupervisor ? '#065f46' : '#D1D5DB', fontSize: 14 }}>
+                            {esRecomendadoSupervisor ? '★ RECOMENDADO' : '—'}
                           </td>
                         );
                       })}
@@ -1025,6 +1166,32 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                 );
               })
             )}
+
+            {hayDiscrepancia && (
+              <div className="mt-6 flex items-start gap-3 px-4 py-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800">
+                <span className="text-xl leading-none">⚠</span>
+                <div>
+                  <p className="font-bold text-sm">Discrepancia entre Jurídica y el Supervisor</p>
+                  <p className="text-sm mt-0.5">
+                    Jurídica recomienda al <strong>Proponente {ganadorNumero}</strong>, mientras que el Supervisor recomienda al <strong>Proponente {supervisorRecomendadoNumero}</strong>.
+                    La decisión final la toma Jurídica, pero antes de finalizar debe justificar por escrito el motivo en el campo de abajo.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6">
+              <p className="font-bold text-gray-700 mb-2 text-sm">
+                Evaluación consolidada / Justificación
+                {hayDiscrepancia && <span className="text-amber-600 ml-1">(obligatorio por la discrepancia con el Supervisor)</span>}
+              </p>
+              <textarea
+                value={evaluacionConsolidada}
+                onChange={e => setEvaluacionConsolidada(e.target.value)}
+                placeholder="Registre aquí el análisis consolidado de la evaluación y, si aplica, la justificación de por qué se elige un proponente distinto al recomendado por el supervisor..."
+                className={`w-full border rounded p-3 text-sm min-h-[100px] outline-none focus:border-blue-500 ${hayDiscrepancia && !evaluacionConsolidada.trim() ? 'border-amber-400 bg-amber-50/40' : ''}`}
+              />
+            </div>
 
             </div>{/* end pointer-events wrapper */}
           </div>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { CheckCircle2, Circle, Lock, Loader2 } from 'lucide-react';
 import {
-  ORDEN_PASOS_FLUJO,
+  ordenPasosParaModalidad,
   PASO_META,
   PasoFlujoJuridico,
   EstadoFlujoJuridica,
@@ -9,10 +9,12 @@ import {
   pasoAccesible,
   mensajeBloqueoPaso,
   pasoActual,
+  numeroPaso,
 } from '../../lib/flujoJuridico';
 
 interface PasosFlujoJuridicaProps {
   estado: EstadoFlujoJuridica;
+  modalidad?: string | null;
   procesandoRevision?: boolean;
   onConfirmarRevision?: () => void;
   onInvitacion?: () => void;
@@ -23,6 +25,7 @@ interface PasosFlujoJuridicaProps {
 
 export function PasosFlujoJuridica({
   estado,
+  modalidad,
   procesandoRevision = false,
   onConfirmarRevision,
   onInvitacion,
@@ -30,10 +33,11 @@ export function PasosFlujoJuridica({
   onAdjudicacion,
   onDocumentos,
 }: PasosFlujoJuridicaProps) {
-  const actual = pasoActual(estado);
+  const pasos = ordenPasosParaModalidad(modalidad);
+  const actual = pasoActual(estado, pasos);
 
   const accionPaso = (paso: PasoFlujoJuridico) => {
-    if (!pasoAccesible(paso, estado)) return null;
+    if (!pasoAccesible(paso, estado, pasos)) return null;
 
     const done = pasoCompletado(paso, estado);
     const esActual = actual === paso;
@@ -116,12 +120,12 @@ export function PasosFlujoJuridica({
         </p>
       </div>
 
-      {ORDEN_PASOS_FLUJO.map((paso) => {
+      {pasos.map((paso) => {
         const meta = PASO_META[paso];
         const done = pasoCompletado(paso, estado);
-        const accesible = pasoAccesible(paso, estado);
+        const accesible = pasoAccesible(paso, estado, pasos);
         const esActual = actual === paso;
-        const bloqueo = !accesible ? mensajeBloqueoPaso(paso, estado) : null;
+        const bloqueo = !accesible ? mensajeBloqueoPaso(paso, estado, pasos) : null;
 
         let detalleExtra: React.ReactNode = null;
         if (paso === 'documentos_finales') {
@@ -162,7 +166,7 @@ export function PasosFlujoJuridica({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-black text-slate-800" style={{ fontFamily: 'Gabarito, sans-serif' }}>
-                  {meta.numero}. {meta.titulo}
+                  {numeroPaso(paso, pasos)}. {meta.titulo}
                 </p>
                 <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{meta.descripcion}</p>
                 {detalleExtra}

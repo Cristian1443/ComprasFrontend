@@ -23,6 +23,7 @@ interface SolicitudHistorial {
     id: string;
     codigo: string;
     objeto: string;
+    titulo_contrato?: string;
     actualizado_en: string;
     estado: string;
     modalidad: string;
@@ -128,6 +129,7 @@ export function HistorialJuridica({ onSelect }: { onSelect?: (id: string) => voi
 
     const filteredHistory = historial.filter(h =>
         h.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        h.titulo_contrato?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         h.objeto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         h.solicitante_nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         h.gerencia_nombre?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -161,7 +163,7 @@ export function HistorialJuridica({ onSelect }: { onSelect?: (id: string) => voi
                 <Search size={18} className="text-slate-400 shrink-0" />
                 <input
                     type="text"
-                    placeholder="Buscar por código, objeto, solicitante o gerencia..."
+                    placeholder="Buscar por código, título, solicitante o gerencia..."
                     className="w-full bg-transparent border-none outline-none font-medium text-slate-700 placeholder:text-slate-400"
                     style={{ fontFamily: 'Gabarito, sans-serif' }}
                     value={searchTerm}

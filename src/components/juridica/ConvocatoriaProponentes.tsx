@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, Send, Clock, Users, Mail, Copy, CheckCircle2,
   XCircle, Loader2, Plus, Trash2, Eye, Globe,
-  File, Download, EyeOff, ShieldCheck, Lock, Unlock, AlertTriangle, Upload
+  File, Download, EyeOff, ShieldCheck, Lock, Unlock, AlertTriangle, Upload, Pencil,
+  Info, X, IdCard, Calendar, Building2, Phone, User
 } from 'lucide-react';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
@@ -32,6 +33,11 @@ interface Invitacion {
   es_postulacion_publica?: boolean;
   telefono?: string;
   link_enviado_en?: string;
+  cedula_nit?: string;
+  acepta_tratamiento_datos?: boolean;
+  acepta_tratamiento_datos_en?: string;
+  creado_en?: string;
+  tipo_persona?: 'persona' | 'empresa';
 }
 interface Convocatoria {
   id: string;
@@ -104,11 +110,17 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
   const [detalleConv, setDetalleConv] = useState<Convocatoria | null>(null);
   const [detalleInvitaciones, setDetalleInvitaciones] = useState<Invitacion[]>([]);
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null);
+  const [proponenteInfo, setProponenteInfo] = useState<Invitacion | null>(null);
 
   /* ─── Envío masivo (Fase 2) ─── */
   const [enviandoMasivo, setEnviandoMasivo] = useState(false);
   const [resultadoMasivo, setResultadoMasivo] = useState<{ total: number; mensaje: string } | null>(null);
   const [fechaLimiteMasivo, setFechaLimiteMasivo] = useState('');  // fecha límite para propuestas en Fase 2
+
+  /* ─── Ampliar plazo Fase 2 (después de enviar invitaciones) ─── */
+  const [editandoFechaFase2, setEditandoFechaFase2] = useState(false);
+  const [nuevaFechaFase2, setNuevaFechaFase2] = useState('');
+  const [guardandoFechaFase2, setGuardandoFechaFase2] = useState(false);
 
   /* ─── Link público ─── */
   const [togglingLink, setTogglingLink] = useState(false);
@@ -119,6 +131,8 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
   const [copiado, setCopiado] = useState<string | null>(null);
   const [eliminandoInv, setEliminandoInv] = useState<string | null>(null);
   const [eliminandoConv, setEliminandoConv] = useState<string | null>(null);
+  const [reenviando, setReenviando] = useState<string | null>(null);
+  const [reenviadoOk, setReenviadoOk] = useState<string | null>(null);
 
   /* ─── Fase 1 — envío de notificación ─── */
   const [enviandoFase1, setEnviandoFase1] = useState(false);
@@ -129,8 +143,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
   const [guardandoReq] = useState(false);
   const [guardadoReq] = useState(false);
 
-  /* ─── Tipo de proponente y documento adjunto (formulario crear) ─── */
-  const [tipoProponente, setTipoProponente] = useState<'empresa' | 'persona'>('empresa');
+  /* ─── Documento adjunto (formulario crear) ─── */
   const [docAdjunto, setDocAdjunto] = useState<{ url: string; nombre: string } | null>(null);
   const [subiendoDoc, setSubiendoDoc] = useState(false);
   const [errorDoc, setErrorDoc] = useState('');
@@ -219,7 +232,6 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
         fecha_limite_registro: fechaLimiteRegistro,
         proponentes: propsFiltrados,
         creada_por: userEmail || 'juridica',
-        tipo_proponente: tipoProponente,
         documento_adjunto_url: docAdjunto?.url || null,
         documento_adjunto_nombre: docAdjunto?.nombre || null,
       }),
@@ -227,6 +239,44 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Error al crear');
     return data.convocatoria.id as string;
+  };
+
+  const reenviarInvitacion = async (invId: string) => {
+    if (!detalleConv) return;
+    setReenviando(invId);
+    try {
+      const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}/invitaciones/${invId}/enviar-link`, {
+        method: 'POST',
+      });
+      if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Error al reenviar'); }
+      setReenviadoOk(invId);
+      setTimeout(() => setReenviadoOk(null), 3000);
+      await verDetalle(detalleConv.id);
+    } catch (e: any) {
+      alert(e.message || 'Error al reenviar la invitación.');
+    } finally {
+      setReenviando(null);
+    }
+  };
+
+  const guardarFechaFase2 = async () => {
+    if (!nuevaFechaFase2 || !detalleConv) return;
+    if (new Date(nuevaFechaFase2) <= new Date()) { alert('La nueva fecha debe ser en el futuro.'); return; }
+    setGuardandoFechaFase2(true);
+    try {
+      const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha_limite: new Date(nuevaFechaFase2).toISOString() }),
+      });
+      if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Error al actualizar'); }
+      setDetalleConv(prev => prev ? { ...prev, fecha_limite: new Date(nuevaFechaFase2).toISOString() } : null);
+      setEditandoFechaFase2(false);
+    } catch (e: any) {
+      alert(e.message || 'Error al ampliar el plazo.');
+    } finally {
+      setGuardandoFechaFase2(false);
+    }
   };
 
   const refrescarListaYDetalle = async (convId: string) => {
@@ -238,8 +288,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
     await verDetalle(convId);
   };
 
-  /* Botón "Enviar Fase 1" — crea + activa link + notifica proponentes conocidos.
-     NO cambia a la vista de detalle para que el usuario pueda completar y enviar Fase 2 en la misma sesión. */
+  /* Botón "Enviar Fase 1" — crea + activa link + notifica proponentes conocidos. */
   const handleEnviarFase1Nuevo = async () => {
     setErrorCrear('');
     if (!asunto.trim()) { setErrorCrear('El asunto es obligatorio'); return; }
@@ -254,13 +303,8 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario_email: userEmail }),
       });
-      // Quedar en el formulario de creación para que el usuario pueda enviar Fase 2
-      setConvIdCreado(convId);
-      // Actualizar lista en segundo plano
-      const listUrl = solicitudId
-        ? `${API_URL}/api/convocatorias?solicitud_id=${solicitudId}`
-        : `${API_URL}/api/convocatorias`;
-      fetch(listUrl).then(r => r.json()).then(d => setConvocatorias(Array.isArray(d) ? d : [])).catch(() => {});
+      // Navegar al detalle (desde allí también se puede enviar Fase 2)
+      await refrescarListaYDetalle(convId);
     } catch (err: any) {
       setErrorCrear(err.message || 'Error al enviar la Fase 1');
     } finally {
@@ -524,6 +568,9 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
       ? ahora > new Date(detalleConv.fecha_limite_registro)
       : false;
     const invitacionEnviada = detalleConv.fase_invitacion_enviada === true;
+    const plazoPropuestaVencido = invitacionEnviada && detalleConv.fecha_limite
+      ? ahora > new Date(detalleConv.fecha_limite)
+      : false;
 
     const registradosPublicos = detalleInvitaciones.filter(i => i.es_postulacion_publica);
     const registradosDirectos = detalleInvitaciones.filter(i => !i.es_postulacion_publica);
@@ -668,10 +715,58 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
               <p style={{ fontFamily: FONT, fontSize: 13, color: '#065F46', fontWeight: 700, margin: '0 0 12px' }}>
                 ¡Invitación formal enviada el {fmtFecha(detalleConv.invitacion_enviada_en)}!
               </p>
+
+              {plazoPropuestaVencido && !editandoFechaFase2 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', marginBottom: 14 }}>
+                  <AlertTriangle size={16} color="#DC2626" style={{ flexShrink: 0 }} />
+                  <p style={{ fontFamily: FONT, fontSize: 12, color: '#991B1B', margin: 0, flex: 1 }}>
+                    El plazo para presentar propuestas venció el {fmtFecha(detalleConv.fecha_limite)}.
+                  </p>
+                  <button
+                    onClick={() => { setNuevaFechaFase2(enNDias(7)); setEditandoFechaFase2(true); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px', borderRadius: 6, border: 'none', background: '#DC2626', color: '#fff', fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    <Unlock size={12} /> Reabrir plazo
+                  </button>
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                 <div style={s.infoChip}>
-                  <p style={s.infoChipLabel}>Fecha límite para propuesta</p>
-                  <p style={{ ...s.infoChipVal, color: '#E84922' }}>{fmtFecha(detalleConv.fecha_limite)}</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <p style={{ ...s.infoChipLabel, margin: 0 }}>Fecha límite para propuesta</p>
+                    {!editandoFechaFase2 && (
+                      <button
+                        onClick={() => { setNuevaFechaFase2(new Date(detalleConv.fecha_limite).toISOString().slice(0, 16)); setEditandoFechaFase2(true); }}
+                        title="Ampliar plazo"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#3384D6', display: 'flex', alignItems: 'center' }}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                  </div>
+                  {editandoFechaFase2 ? (
+                    <div>
+                      <input
+                        type="datetime-local"
+                        value={nuevaFechaFase2}
+                        min={new Date().toISOString().slice(0, 16)}
+                        onChange={e => setNuevaFechaFase2(e.target.value)}
+                        style={{ ...s.input, fontSize: 12, padding: '6px 10px', marginBottom: 6 }}
+                      />
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={guardarFechaFase2} disabled={guardandoFechaFase2} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px', borderRadius: 6, border: 'none', background: '#10B981', color: '#fff', fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                          {guardandoFechaFase2 ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={12} />}
+                          Guardar
+                        </button>
+                        <button onClick={() => setEditandoFechaFase2(false)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px', borderRadius: 6, border: 'none', background: '#f1f5f9', color: '#475569', fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                          <XCircle size={12} /> Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ ...s.infoChipVal, color: '#E84922', margin: 0 }}>{fmtFecha(detalleConv.fecha_limite)}</p>
+                  )}
                 </div>
                 <div style={s.infoChip}>
                   <p style={s.infoChipLabel}>Total invitados</p>
@@ -828,6 +923,13 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
                 : '#E5E7EB';
               return (
                 <div key={i} style={{ ...s.invRow, borderLeft: `4px solid ${estadoColor}`, position: 'relative' as const }}>
+                  <button
+                    onClick={() => setProponenteInfo(inv)}
+                    title="Ver información del proponente"
+                    style={{ position: 'absolute' as const, top: 8, right: inv.id ? 32 : 8, background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center' }}
+                  >
+                    <Info size={15} />
+                  </button>
                   {inv.id && (
                     <button
                       onClick={() => eliminarInvitacion(inv.id!)}
@@ -841,6 +943,11 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' as const }}>
                       <p style={{ ...s.invNombre, margin: 0 }}>{inv.proponente_nombre || inv.proponente_email}</p>
+                      {inv.tipo_persona && (
+                        <span style={{ ...s.estadoBadge, background: inv.tipo_persona === 'persona' ? '#F5F3FF' : '#FFF7ED', color: inv.tipo_persona === 'persona' ? '#6D28D9' : '#9A3412' }}>
+                          {inv.tipo_persona === 'persona' ? <><User size={10} /> Persona natural</> : <><Building2 size={10} /> Empresa</>}
+                        </span>
+                      )}
                       {inv.es_postulacion_publica && (
                         <span style={{ ...s.estadoBadge, background: '#EFF6FF', color: '#1D4ED8' }}>
                           <Globe size={10} /> Registrado público
@@ -924,7 +1031,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
                             : 'Pendiente de abrir el enlace'}
                         </p>
                         {inv.token && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' as const }}>
                             <span style={{ fontFamily: FONT, fontSize: 11, color: '#94a3b8', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '3px 8px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
                               {`${window.location.origin}/respuesta-proponente?token=${inv.token}`}
                             </span>
@@ -934,13 +1041,41 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
                             >
                               {copiado === inv.token ? <><CheckCircle2 size={11} /> Copiado</> : <><Copy size={11} /> Copiar link</>}
                             </button>
+                            {inv.id && (
+                              <button
+                                onClick={() => reenviarInvitacion(inv.id!)}
+                                disabled={reenviando === inv.id}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: reenviadoOk === inv.id ? '#D1FAE5' : '#fff', color: reenviadoOk === inv.id ? '#065F46' : '#3384D6', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}
+                              >
+                                {reenviando === inv.id
+                                  ? <><Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> Enviando...</>
+                                  : reenviadoOk === inv.id
+                                    ? <><CheckCircle2 size={11} /> Enviado</>
+                                    : <><Send size={11} /> Reenviar</>}
+                              </button>
+                            )}
                           </div>
                         )}
                       </>
                     ) : (
-                      <p style={{ ...s.invStatus, color: '#94a3b8' }}>
-                        Registrado — invitación pendiente de envío
-                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                        <p style={{ ...s.invStatus, color: '#94a3b8', margin: 0 }}>
+                          Registrado — invitación pendiente de envío
+                        </p>
+                        {inv.id && (
+                          <button
+                            onClick={() => reenviarInvitacion(inv.id!)}
+                            disabled={reenviando === inv.id}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: reenviadoOk === inv.id ? '#D1FAE5' : '#fff', color: reenviadoOk === inv.id ? '#065F46' : '#3384D6', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}
+                          >
+                            {reenviando === inv.id
+                              ? <><Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> Enviando...</>
+                              : reenviadoOk === inv.id
+                                ? <><CheckCircle2 size={11} /> Enviado</>
+                                : <><Send size={11} /> Enviar invitación</>}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -948,6 +1083,81 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
             })
           )}
         </div>
+
+        {/* ── Modal: información del proponente ── */}
+        {proponenteInfo && (
+          <div
+            onClick={() => setProponenteInfo(null)}
+            style={{ position: 'fixed' as const, inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ background: '#fff', borderRadius: 16, maxWidth: 460, width: '100%', maxHeight: '85vh', overflowY: 'auto' as const, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '20px 24px', borderBottom: '1px solid #f1f5f9' }}>
+                <div>
+                  <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, margin: '0 0 4px' }}>
+                    Información del proponente
+                  </p>
+                  <h3 style={{ fontFamily: FONT, fontSize: 17, fontWeight: 900, color: '#1e293b', margin: 0 }}>
+                    {proponenteInfo.proponente_nombre || proponenteInfo.proponente_email}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setProponenteInfo(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4, flexShrink: 0 }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column' as const, gap: 14 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+                  {proponenteInfo.tipo_persona && (
+                    <span style={{ ...s.estadoBadge, background: proponenteInfo.tipo_persona === 'persona' ? '#F5F3FF' : '#FFF7ED', color: proponenteInfo.tipo_persona === 'persona' ? '#6D28D9' : '#9A3412' }}>
+                      {proponenteInfo.tipo_persona === 'persona' ? <><User size={10} /> Persona natural</> : <><Building2 size={10} /> Empresa</>}
+                    </span>
+                  )}
+                  {proponenteInfo.es_postulacion_publica && (
+                    <span style={{ ...s.estadoBadge, background: '#EFF6FF', color: '#1D4ED8' }}>
+                      <Globe size={10} /> Registrado vía link público
+                    </span>
+                  )}
+                </div>
+                {[
+                  { icon: <Mail size={14} />, label: 'Correo electrónico', value: proponenteInfo.proponente_email },
+                  proponenteInfo.telefono && { icon: <Phone size={14} />, label: 'Teléfono', value: proponenteInfo.telefono },
+                  proponenteInfo.cedula_nit && {
+                    icon: <IdCard size={14} />,
+                    label: proponenteInfo.tipo_persona === 'persona' ? 'Cédula' : proponenteInfo.tipo_persona === 'empresa' ? 'NIT' : 'Cédula / NIT',
+                    value: proponenteInfo.cedula_nit
+                  },
+                  proponenteInfo.creado_en && { icon: <Calendar size={14} />, label: 'Fecha de registro', value: fmtFecha(proponenteInfo.creado_en) },
+                  proponenteInfo.primer_acceso_en && {
+                    icon: <ShieldCheck size={14} />, label: 'Primer acceso',
+                    value: `${fmtFecha(proponenteInfo.primer_acceso_en)}${(proponenteInfo.total_accesos ?? 0) > 1 ? ` · ${proponenteInfo.total_accesos} visitas` : ''}`
+                  },
+                  proponenteInfo.acepta_tratamiento_datos && {
+                    icon: <ShieldCheck size={14} />, label: 'Tratamiento de datos',
+                    value: `Autorizado${proponenteInfo.acepta_tratamiento_datos_en ? ` el ${fmtFecha(proponenteInfo.acepta_tratamiento_datos_en)}` : ''}`
+                  },
+                  proponenteInfo.respondida && { icon: <CheckCircle2 size={14} />, label: 'Respondió', value: fmtFecha(proponenteInfo.respondida_en || '') },
+                ].filter(Boolean).map((row: any, ri) => (
+                  <div key={ri} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <div style={{ color: '#94a3b8', marginTop: 2, flexShrink: 0 }}>{row.icon}</div>
+                    <div>
+                      <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, margin: '0 0 2px' }}>
+                        {row.label}
+                      </p>
+                      <p style={{ fontFamily: FONT, fontSize: 13, color: '#1e293b', margin: 0, fontWeight: 600 }}>
+                        {row.value}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -985,28 +1195,6 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
             </>
           )}
 
-          <label style={{ ...s.label, marginTop: 12 }}>Tipo de proponente</label>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-            {(['empresa', 'persona'] as const).map(tipo => (
-              <button
-                key={tipo}
-                type="button"
-                onClick={() => setTipoProponente(tipo)}
-                style={{
-                  padding: '8px 18px', borderRadius: 8,
-                  border: `2px solid ${tipoProponente === tipo ? '#3384D6' : '#e2e8f0'}`,
-                  background: tipoProponente === tipo ? '#EFF6FF' : '#fff',
-                  color: tipoProponente === tipo ? '#1D4ED8' : '#64748b',
-                  fontFamily: FONT, fontSize: 13, fontWeight: tipoProponente === tipo ? 800 : 600, cursor: 'pointer'
-                }}
-              >
-                {tipo === 'empresa' ? '🏢 Empresa' : '👤 Persona natural'}
-              </button>
-            ))}
-          </div>
-          <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 0' }}>
-            Define si el proceso aplica para empresas o personas naturales. Esto determina los campos del formulario de registro público.
-          </p>
         </div>
 
         {/* ─── FASE 1: Registro Público ─── */}
