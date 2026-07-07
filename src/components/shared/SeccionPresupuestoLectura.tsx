@@ -145,12 +145,17 @@ export function SeccionPresupuestoLectura({
   const n3 = esDirecta ? '5.3' : '4.3';
   const rubroMostrar = rubroFinanciera || solicitud.rubro_presupuestal || solicitud.rubro;
 
-  const filasExtra: React.ReactNode[] = [];
-  if (presupuestoAprobado) {
-    filasExtra.push(
-      <DataRow key="presupuesto-aprobado" label="Presupuesto certificado (Financiera)" value={presupuestoAprobado} />
-    );
-  }
+  /* El presupuesto certificado por Financiera se muestra dentro del propio
+     campo 5.1 (no como fila aparte), junto con el análisis del solicitante si existe. */
+  const efectoTexto = solicitud.efecto_estimar_presupuesto;
+  const valorPresupuesto5_1 = (efectoTexto || presupuestoAprobado)
+    ? (
+      <>
+        {efectoTexto && <p style={{ margin: presupuestoAprobado ? '0 0 10px' : 0 }}>{efectoTexto}</p>}
+        {presupuestoAprobado}
+      </>
+    )
+    : undefined;
 
   return (
     <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
@@ -158,7 +163,7 @@ export function SeccionPresupuestoLectura({
 
       <DataRow
         label={`${n1} Presupuesto para la contratación:`}
-        value={solicitud.efecto_estimar_presupuesto}
+        value={valorPresupuesto5_1}
       />
 
       <DataRow
@@ -170,8 +175,6 @@ export function SeccionPresupuestoLectura({
             : undefined
         }
       />
-
-      {filasExtra}
 
       <div style={{ ...rowStyle, borderBottom: solicitud.forma_pago === 'anticipo' && solicitud.justificacion_anticipo ? '1px solid #e5e7eb' : 'none' }}>
         <div style={labelCellStyle}>{`${n3} Forma de pago:`}</div>

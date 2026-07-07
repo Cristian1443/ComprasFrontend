@@ -231,7 +231,7 @@ export function ControlPagos() {
         <div className="flex items-center gap-3 mb-2">
           <CreditCard style={{ color: '#3D2B86' }} size={32} />
           <h1 className="text-3xl font-semibold text-gray-900" style={{ fontFamily: 'Gabarito, sans-serif' }}>
-            Control de Pagos
+            Aprobación de Facturas
           </h1>
         </div>
         <p className="text-gray-600" style={{ fontFamily: 'Gabarito, sans-serif' }}>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Clock, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Clock, ShieldCheck, XCircle } from 'lucide-react';
 
 export type EtapaEstampa = 'gerente' | 'financiera' | 'juridica';
 
@@ -12,7 +12,7 @@ interface EstampaAprobacionProps {
 
 const ETAPA_META: Record<
   EtapaEstampa,
-  { titulo: string; rol: string; fechaKey: string; nombreKey: string; comentarioKey: string; accent: string; bg: string; border: string }
+  { titulo: string; rol: string; fechaKey: string; nombreKey: string; comentarioKey: string; accent: string; bg: string; border: string; estadosRechazo: string[]; estadoEnCurso: string }
 > = {
   gerente: {
     titulo: 'Aprobación Gerencial',
@@ -23,6 +23,8 @@ const ETAPA_META: Record<
     accent: '#1E40AF',
     bg: '#EFF6FF',
     border: '#BFDBFE',
+    estadosRechazo: ['rechazado_gerente', 'devuelto_al_solicitante'],
+    estadoEnCurso: 'enviado_gerente',
   },
   financiera: {
     titulo: 'Aprobación Financiera',
@@ -33,6 +35,8 @@ const ETAPA_META: Record<
     accent: '#065F46',
     bg: '#ECFDF5',
     border: '#A7F3D0',
+    estadosRechazo: ['rechazado_financiera'],
+    estadoEnCurso: 'en_financiera',
   },
   juridica: {
     titulo: 'Revisión Jurídica',
@@ -43,8 +47,12 @@ const ETAPA_META: Record<
     accent: '#5B21B6',
     bg: '#F5F3FF',
     border: '#DDD6FE',
+    estadosRechazo: ['rechazado_juridica'],
+    estadoEnCurso: 'en_juridica',
   },
 };
+
+const RECHAZO_META = { accent: '#991B1B', bg: '#FEF2F2', border: '#FECACA' };
 
 const formatearFechaHora = (iso: string | null | undefined): string | null => {
   if (!iso) return null;
@@ -57,13 +65,19 @@ const formatearFechaHora = (iso: string | null | undefined): string | null => {
 
 export function EstampaAprobacion({ etapa, solicitud, usuarioActual, compacto = false }: EstampaAprobacionProps) {
   const meta = ETAPA_META[etapa];
-  const fecha = solicitud?.[meta.fechaKey] as string | null | undefined;
-  const aprobado = Boolean(fecha);
-  const nombre = (solicitud?.[meta.nombreKey] as string | undefined) || usuarioActual?.nombre || '—';
-  const comentario = solicitud?.[meta.comentarioKey] as string | null | undefined;
+  const estadoActual = String(solicitud?.estado || '');
+  const rechazado = meta.estadosRechazo.includes(estadoActual);
+  // Si volvió a "en curso" (p. ej. tras devolver y que el solicitante reenvíe), la fecha/nombre/
+  // comentario que quedan en la solicitud son de la decisión ANTERIOR — no cuentan como decidido.
+  const enCurso = estadoActual === meta.estadoEnCurso;
+  const decidido = !enCurso && Boolean(solicitud?.[meta.fechaKey]);
+  const fecha = decidido ? (solicitud?.[meta.fechaKey] as string | null | undefined) : null;
+  const nombre = (decidido && (solicitud?.[meta.nombreKey] as string | undefined)) || usuarioActual?.nombre || '—';
+  const comentario = decidido ? (solicitud?.[meta.comentarioKey] as string | null | undefined) : null;
   const fechaTexto = formatearFechaHora(fecha);
+  const colores = rechazado ? RECHAZO_META : meta;
 
-  if (!aprobado) {
+  if (!decidido) {
     return (
       <div style={{ ...s.wrap, ...(compacto ? s.wrapCompacto : {}), background: '#F8FAFC', borderColor: '#E2E8F0' }}>
         <div style={s.head}>
@@ -89,17 +103,17 @@ export function EstampaAprobacion({ etapa, solicitud, usuarioActual, compacto = 
       style={{
         ...s.wrap,
         ...(compacto ? s.wrapCompacto : {}),
-        background: meta.bg,
-        borderColor: meta.border,
+        background: colores.bg,
+        borderColor: colores.border,
       }}
     >
       <div style={s.stampRow}>
-        <div style={{ ...s.seal, borderColor: meta.accent, color: meta.accent }}>
-          <CheckCircle2 size={22} strokeWidth={2.2} />
-          <span style={s.sealText}>APROBADO</span>
+        <div style={{ ...s.seal, borderColor: colores.accent, color: colores.accent }}>
+          {rechazado ? <XCircle size={22} strokeWidth={2.2} /> : <CheckCircle2 size={22} strokeWidth={2.2} />}
+          <span style={s.sealText}>{rechazado ? (etapa === 'gerente' ? 'DEVUELTA' : 'RECHAZADA') : 'APROBADO'}</span>
         </div>
         <div style={s.stampBody}>
-          <p style={{ ...s.stampTitulo, color: meta.accent }}>{meta.titulo}</p>
+          <p style={{ ...s.stampTitulo, color: colores.accent }}>{meta.titulo}</p>
           <p style={s.stampRol}>{meta.rol}</p>
           <p style={s.stampNombre}>{nombre}</p>
           {fechaTexto && (

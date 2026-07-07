@@ -316,7 +316,7 @@ export function FichaComite({
         <div style={fc.lowerSection}>
           <div style={fc.lowerLeft}>
             <div style={fc.contractFields}>
-              <p style={fc.contractRow}><span style={fc.cLabel}>Monto:</span> {montoTexto}</p>
+              <p style={fc.contractRow}><span style={fc.cLabel}>Monto total:</span> {montoTexto}</p>
               <p style={fc.contractRow}><span style={fc.cLabel}>Plazo:</span> {plazoTexto}</p>
               <p style={fc.contractRow}><span style={fc.cLabel}>Forma de pago:</span> {formaPago}</p>
               <p style={fc.contractRow}><span style={fc.cLabel}>Origen de PPTO:</span> {origenPpto}</p>
@@ -844,7 +844,7 @@ const fc: Record<string, React.CSSProperties> = {
   },
 
   paper: {
-    maxWidth: 950,
+    maxWidth: 1200,
     margin: '24px auto 40px',
     background: '#ffffff',
     padding: '28px 32px',
@@ -876,19 +876,19 @@ const fc: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
 
-  /* Upper section: Contexto | Estudio/Sustentación */
+  /* Upper section: Contexto | Estudio/Sustentación — apiladas a ancho completo
+     para que un texto largo en "Contexto" no deje la columna vecina con un
+     hueco en blanco enorme (se veía roto cuando la descripción era extensa). */
   upperSection: {
     display: 'flex',
+    flexDirection: 'column' as const,
     border: '2px solid #E84922',
-    minHeight: 160,
   },
   upperLeft: {
-    flex: '1 1 44%',
     padding: '12px 14px',
-    borderRight: '1px solid #E84922',
+    borderBottom: '1px solid #E84922',
   },
   upperRight: {
-    flex: '1 1 56%',
     display: 'flex',
     flexDirection: 'column' as const,
   },

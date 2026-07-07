@@ -121,38 +121,40 @@ export function construirEtapasFlujo(solicitud: SolicitudFlujo): EtapaFlujo[] {
     clave: 'gerente',
     titulo: 'Aprobación Gerente de Área',
     rol: 'Gerente',
-    persona: solicitud?.gerente_nombre || null,
-    fecha: solicitud?.fecha_respuesta_gerente || null,
+    // Si se devolvió y volvió a enviarse, la fecha/nombre/comentario de la decisión anterior
+    // siguen en la solicitud — por eso "en curso" se evalúa antes que "ya tiene fecha".
+    persona: estado === 'enviado_gerente' ? null : (solicitud?.gerente_nombre || null),
+    fecha: estado === 'enviado_gerente' ? null : (solicitud?.fecha_respuesta_gerente || null),
     estado:
-      estado === 'rechazado_gerente'
+      estado === 'enviado_gerente'
+        ? 'en_proceso'
+        : (estado === 'rechazado_gerente' || estado === 'devuelto_al_solicitante')
         ? 'rechazado'
         : solicitud?.fecha_respuesta_gerente
         ? 'aprobado'
-        : estado === 'enviado_gerente'
-        ? 'en_proceso'
         : llegoA(estado, 'aprobado_gerente')
         ? 'aprobado'
         : 'pendiente',
-    comentario: solicitud?.comentario_gerente || null,
+    comentario: estado === 'enviado_gerente' ? null : (solicitud?.comentario_gerente || null),
   });
 
   etapas.push({
     clave: 'financiera',
     titulo: 'Aprobación Financiera',
     rol: 'Financiera',
-    persona: solicitud?.financiera_nombre || null,
-    fecha: solicitud?.fecha_respuesta_financiera || null,
+    persona: estado === 'en_financiera' ? null : (solicitud?.financiera_nombre || null),
+    fecha: estado === 'en_financiera' ? null : (solicitud?.fecha_respuesta_financiera || null),
     estado:
-      estado === 'rechazado_financiera'
+      estado === 'en_financiera'
+        ? 'en_proceso'
+        : estado === 'rechazado_financiera'
         ? 'rechazado'
         : solicitud?.fecha_respuesta_financiera
         ? 'aprobado'
-        : estado === 'en_financiera'
-        ? 'en_proceso'
         : llegoA(estado, 'aprobado_financiera')
         ? 'aprobado'
         : 'pendiente',
-    comentario: solicitud?.comentario_financiera || null,
+    comentario: estado === 'en_financiera' ? null : (solicitud?.comentario_financiera || null),
   });
 
   etapas.push({

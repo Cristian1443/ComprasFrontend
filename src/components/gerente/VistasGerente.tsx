@@ -9,6 +9,7 @@ import { DashboardGerente } from './DashboardGerente';
 import { HistorialAprobaciones } from './HistorialAprobaciones';
 import { ChatSoporteGerente } from './ChatSoporteGerente';
 import { FacturasGerente } from './FacturasGerente';
+import { ContratosGerente } from './ContratosGerente';
 
 export function VistasGerente() {
     const { instance, accounts } = useMsal();
@@ -73,6 +74,8 @@ export function VistasGerente() {
                 />;
             case 'pendientes':
                 return <ListaAprobaciones userEmail={userEmail} onActionSuccess={fetchMetrics} />;
+            case 'contratos':
+                return <ContratosGerente userEmail={userEmail} />;
             case 'historial':
                 return <HistorialAprobaciones userEmail={userEmail} />;
             case 'facturas':

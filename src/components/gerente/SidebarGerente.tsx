@@ -1,7 +1,7 @@
 import React from 'react';
-import { Home, ClipboardCheck, History, Menu, X, LogOut, MessageSquare, Receipt } from 'lucide-react';
+import { Home, ClipboardCheck, History, Menu, X, LogOut, MessageSquare, Receipt, FileCheck2 } from 'lucide-react';
 
-export type ViewGerente = 'dashboard' | 'pendientes' | 'historial' | 'ayuda' | 'facturas';
+export type ViewGerente = 'dashboard' | 'pendientes' | 'contratos' | 'historial' | 'ayuda' | 'facturas';
 
 interface SidebarGerenteProps {
     currentView: ViewGerente;
@@ -18,6 +18,7 @@ export function SidebarGerente({ currentView, onNavigate, isOpen, onToggle, user
     const menuItems = [
         { id: 'dashboard' as ViewGerente, label: 'Panel Principal', icon: Home },
         { id: 'pendientes' as ViewGerente, label: 'Por Aprobar', icon: ClipboardCheck },
+        { id: 'contratos' as ViewGerente, label: 'Contratos', icon: FileCheck2 },
         { id: 'facturas' as ViewGerente, label: 'Facturas', icon: Receipt },
         { id: 'historial' as ViewGerente, label: 'Mi Historial', icon: History },
         { id: 'ayuda' as ViewGerente, label: 'Chat de Ayuda', icon: MessageSquare },

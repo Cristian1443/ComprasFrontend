@@ -19,7 +19,7 @@ export function SidebarFinanciera({ currentView, onNavigate, isOpen, onToggle, u
     { id: 'aprobacion' as ViewFinanciera, label: 'Carga Presupuestal', icon: DollarSign },
     { id: 'vigencia' as ViewFinanciera, label: 'Presupuesto Vigencia', icon: Gauge },
     { id: 'historial' as ViewFinanciera, label: 'Historial', icon: History },
-    { id: 'pagos' as ViewFinanciera, label: 'Control de Pagos', icon: CreditCard },
+    { id: 'pagos' as ViewFinanciera, label: 'Aprobación de Facturas', icon: CreditCard },
     { id: 'confirmacion_pagos' as ViewFinanciera, label: 'Confirmación de Pagos', icon: BadgeCheck },
     { id: 'reportes' as ViewFinanciera, label: 'Reportes', icon: BarChart3 },
   ];

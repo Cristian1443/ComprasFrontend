@@ -52,36 +52,45 @@ export function InstanciasAprobacion({ solicitud, className }: InstanciasAprobac
   const estado = String(solicitud?.estado || '').toLowerCase();
   const numeroSeccion = esDirecta ? 'IX' : 'VIII';
 
+  // Al devolver/rechazar y volver a enviar, el backend conserva la fecha/comentario/nombre de la
+  // decisión anterior — por eso el estado "en curso" (enviado_gerente / en_financiera) se evalúa
+  // primero, y solo se muestran esos datos históricos cuando el resultado ya quedó zanjado.
+  const estadoGerente: EstadoInstancia =
+    estado === 'enviado_gerente' ? 'en_proceso'
+    : (estado === 'rechazado_gerente' || estado === 'devuelto_al_solicitante') ? 'rechazado'
+    : solicitud?.fecha_respuesta_gerente ? 'aprobado'
+    : 'pendiente';
+  const zanjadoGerente = estadoGerente === 'aprobado' || estadoGerente === 'rechazado';
+
+  const estadoFinanciera: EstadoInstancia =
+    estado === 'en_financiera' ? 'en_proceso'
+    : estado === 'rechazado_financiera' ? 'rechazado'
+    : solicitud?.fecha_respuesta_financiera ? 'aprobado'
+    : 'pendiente';
+  const zanjadoFinanciera = estadoFinanciera === 'aprobado' || estadoFinanciera === 'rechazado';
+
   const aprobadores: Aprobador[] = [
     {
       numero: 1,
       rol: 'Gerente',
       subtitulo: 'Gerente de Área Solicitante',
-      estado:
-        estado === 'rechazado_gerente' ? 'rechazado'
-        : solicitud?.fecha_respuesta_gerente ? 'aprobado'
-        : estado === 'enviado_gerente' ? 'en_proceso'
-        : 'pendiente',
+      estado: estadoGerente,
       comentarioLabel: 'Comentario',
-      comentario: solicitud?.comentario_gerente || null,
+      comentario: zanjadoGerente ? (solicitud?.comentario_gerente || null) : null,
       identificadorLabel: 'Nombre',
-      identificador: solicitud?.gerente_nombre || null,
-      fecha: solicitud?.fecha_respuesta_gerente || null,
+      identificador: zanjadoGerente ? (solicitud?.gerente_nombre || null) : null,
+      fecha: zanjadoGerente ? (solicitud?.fecha_respuesta_gerente || null) : null,
     },
     {
       numero: 2,
       rol: 'Financiera',
       subtitulo: 'Aprobación de presupuesto',
-      estado:
-        estado === 'rechazado_financiera' ? 'rechazado'
-        : solicitud?.fecha_respuesta_financiera ? 'aprobado'
-        : estado === 'en_financiera' ? 'en_proceso'
-        : 'pendiente',
+      estado: estadoFinanciera,
       comentarioLabel: 'Comentario',
-      comentario: solicitud?.comentario_financiera || null,
+      comentario: zanjadoFinanciera ? (solicitud?.comentario_financiera || null) : null,
       identificadorLabel: 'Nombre',
-      identificador: solicitud?.financiera_nombre || null,
-      fecha: solicitud?.fecha_respuesta_financiera || null,
+      identificador: zanjadoFinanciera ? (solicitud?.financiera_nombre || null) : null,
+      fecha: zanjadoFinanciera ? (solicitud?.fecha_respuesta_financiera || null) : null,
     },
   ];
 
