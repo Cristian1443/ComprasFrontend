@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useMsal } from '@azure/msal-react';
 import {
   ArrowLeft, FileText, Printer, Sparkles, Loader2, CheckCircle2, XCircle,
-  MapPin, Clock, ChevronRight, Building2, AlertTriangle,
-  BarChart3, FolderOpen
+  ChevronRight, AlertTriangle,
+  BarChart3
 } from 'lucide-react';
 import { SeccionPresupuestoLectura } from '../shared/SeccionPresupuestoLectura';
-import { TrazabilidadFlujo } from '../shared/TrazabilidadFlujo';
+import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
 import { BloqueFirma } from '../shared/BloqueFirma';
+import { DetallePlaneacionContractualParte1, DetallePlaneacionContractualParte2 } from '../shared/DetallePlaneacionContractual';
 import { FormatoPlaneacionImprimible } from './FormatoPlaneacionImprimible';
 import {
   getPresupuestoCertificadoDisplay,
@@ -368,31 +369,6 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
     return [];
   };
 
-  const getDocumentoUrl = (file: any): string | null => {
-    const rawCandidates = [
-      file?.url,
-      file?.path,
-      file?.ruta,
-      file?.nombre_almacenado ? `/api/uploads/solicitudes/${file.nombre_almacenado}` : null,
-      file?.nombre_almacenado ? `/api/uploads/convocatorias/${file.nombre_almacenado}` : null,
-      file?.nombre ? `/api/uploads/solicitudes/${encodeURIComponent(file.nombre)}` : null,
-      file?.nombre ? `/api/uploads/convocatorias/${encodeURIComponent(file.nombre)}` : null,
-    ].filter(Boolean) as string[];
-
-    if (rawCandidates.length === 0) return null;
-    const first = rawCandidates[0];
-    return first.startsWith('http') ? first : `${API_URL}${first}`;
-  };
-
-  const abrirDocumento = (file: any) => {
-    const url = getDocumentoUrl(file);
-    if (!url) {
-      alert('Este soporte no tiene una ruta válida para abrirse.');
-      return;
-    }
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
   const [solicitud, setSolicitud] = useState<SolicitudDetalle | null>(null);
   const [cargando, setCargando] = useState(true);
   const [verFicha, setVerFicha] = useState(false);
@@ -464,7 +440,6 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
   const presupuestoPanelTexto = solicitud.presupuesto_aprobado
     ? getPresupuestoCertificadoDisplay(solicitud)
     : getPresupuestoDisplayText(solicitud);
-  const anexosSolicitante = parseAnexosSolicitante(solicitud.anexos_solicitante);
   const pasoActual = resultadoComite ? 3 : (fichaGenerada ? 2 : 1);
 
   const handleComite = async (resultado: 'aprobado' | 'rechazado') => {
@@ -622,32 +597,6 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
 
         <div className="space-y-6">
 
-          {/* Encabezado automático (estilo morado Secretaría) */}
-          <div className="bg-white rounded-lg shadow-lg border-2 overflow-hidden" style={{ borderColor: '#3D2B86' }}>
-            <div className="p-4 border-b" style={{ background: 'linear-gradient(135deg, #1e1040 0%, #3D2B86 100%)' }}>
-              <h2 className="text-lg font-semibold text-white">Información Automática (Office 365)</h2>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[
-                  { icon: <Building2 size={20} />, label: 'Gerencia', value: solicitud.gerencia_nombre || '—' },
-                  { icon: <MapPin size={20} />, label: 'Solicitante', value: solicitud.solicitante_nombre || '—' },
-                  { icon: <Clock size={20} />, label: 'Fecha de Solicitud', value: solicitud.creado_en ? new Date(solicitud.creado_en).toLocaleDateString('es-CO') : '—' },
-                ].map(({ icon, label, value }) => (
-                  <div key={label}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span style={{ color: '#3D2B86' }}>{icon}</span>
-                      <label className="block text-sm font-semibold text-gray-700">{label}</label>
-                    </div>
-                    <div className="px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg">
-                      <p className="text-gray-900">{value}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
           {/* Completitud (banner mini ancho) */}
           <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
             <div className="flex items-center gap-3 mb-3">
@@ -678,320 +627,13 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
           {/* Secciones de datos — mismo orden que el formulario del solicitante */}
           {/* ══════════════════════════════════════════════════════════════════ */}
           {(() => {
-            const monedaSol = String(solicitud.moneda || 'COP').toUpperCase();
-            const valorOriginalMoneda =
-              monedaSol === 'USD' ? solicitud.valor_moneda_usd_texto :
-                monedaSol === 'EUR' ? solicitud.valor_moneda_eur_texto :
-                  solicitud.valor_moneda_cop_texto;
-            const presupuestoTexto = valorOriginalMoneda
-              ? `${monedaSol} ${valorOriginalMoneda}`
-              : new Intl.NumberFormat('es-CO', {
-                style: 'currency',
-                currency: monedaSol === 'COMBINADA' ? 'COP' : monedaSol,
-                maximumFractionDigits: 0
-              }).format(Number(solicitud.valor_estimado || 0));
-            const plazoTexto = `${solicitud.plazo_ejecucion_meses || 0} meses${(solicitud.plazo_ejecucion_dias || 0) > 0 ? ` y ${solicitud.plazo_ejecucion_dias} días` : ''}`;
             const esDirecta = String(solicitud.modalidad || '').toLowerCase() === 'directa';
 
             return (
               <div style={dd.sectionsWrap}>
 
-                {/* ── SECCIÓN I — condicional por modalidad ── */}
-                {esDirecta ? (() => {
-                  const pdfLabel: React.CSSProperties = {
-                    width: 180, minWidth: 160, padding: '12px 14px', fontWeight: 700,
-                    fontSize: '0.8rem', color: '#1F2937', borderRight: '1px solid #d1d5db',
-                    display: 'flex', alignItems: 'center', lineHeight: 1.4, flexShrink: 0,
-                    fontFamily: 'Gabarito, sans-serif', backgroundColor: '#fafafa',
-                  };
-                  const pdfCell: React.CSSProperties = { flex: 1, padding: '12px 14px', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#1F2937', whiteSpace: 'pre-wrap', wordBreak: 'break-word' };
-                  const rowB: React.CSSProperties = { display: 'flex', borderBottom: '1px solid #d1d5db' };
-                  const autoTag = (v: string) => <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', color: '#374151', fontSize: '0.85rem' }}>{v || '—'}</span>;
-                  return (
-                    <div className="rounded-xl overflow-hidden shadow-md" style={{ border: '1px solid #e5e7eb' }}>
-                      <div style={{ backgroundColor: 'var(--brand-primary)', padding: '11px 20px', textAlign: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>FORMATO PLANEACIÓN CONTRACTUAL</span>
-                      </div>
-                      <div style={rowB}>
-                        <div style={pdfLabel}>Nombre del proceso:</div>
-                        <div style={pdfCell}>{solicitud.titulo_contrato || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}</div>
-                      </div>
-                      <div style={rowB}>
-                        <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                          <div style={pdfLabel}>Fecha de solicitud:</div>
-                          <div style={pdfCell}>{autoTag(solicitud.creado_en ? new Date(solicitud.creado_en).toLocaleDateString('es-CO') : '')}</div>
-                        </div>
-                        <div style={{ flex: 1, display: 'flex' }}>
-                          <div style={pdfLabel}>Fecha del Comité:</div>
-                          <div style={pdfCell}>{solicitud.fecha_comite ? autoTag(new Date(`${solicitud.fecha_comite}T00:00:00`).toLocaleDateString('es-CO')) : <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Pendiente asignación</span>}</div>
-                        </div>
-                      </div>
-                      <div style={rowB}>
-                        <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                          <div style={pdfLabel}>Gerencia solicitante:</div>
-                          <div style={pdfCell}>{autoTag(solicitud.gerencia_nombre || '')}</div>
-                        </div>
-                        <div style={{ flex: 1, display: 'flex' }}>
-                          <div style={pdfLabel}>Supervisor del contrato:</div>
-                          <div style={pdfCell}>{solicitud.supervision_nombre || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No asignado</span>}</div>
-                        </div>
-                      </div>
-                      <div style={rowB}>
-                        <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                          <div style={{ ...pdfLabel, lineHeight: 1.35 }}>Fecha estimada solicitud de propuestas:</div>
-                          <div style={pdfCell}>{solicitud.fecha_estimada_solicitud ? new Date(`${solicitud.fecha_estimada_solicitud}T00:00:00`).toLocaleDateString('es-CO') : <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>—</span>}</div>
-                        </div>
-                        <div style={{ flex: 1, display: 'flex' }}>
-                          <div style={{ ...pdfLabel, lineHeight: 1.35 }}>Fecha estimada recepción de propuestas:</div>
-                          <div style={pdfCell}>{(solicitud as any).fecha_estimada_recepcion ? new Date(`${(solicitud as any).fecha_estimada_recepcion}T00:00:00`).toLocaleDateString('es-CO') : <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>—</span>}</div>
-                        </div>
-                      </div>
-                      <div style={rowB}>
-                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>Objeto:</div>
-                        <div style={pdfCell}>{solicitud.objeto || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}</div>
-                      </div>
-                      <div style={{ backgroundColor: 'var(--brand-primary)', padding: '8px 20px', textAlign: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>I. Justificación y Descripción de la Necesidad</span>
-                      </div>
-                      <div style={rowB}>
-                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.1 Justificación:</div>
-                        <div style={pdfCell}>{solicitud.justificacion || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}</div>
-                      </div>
-                      <div style={{ display: 'flex' }}>
-                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.2 Descripción de la necesidad:</div>
-                        <div style={pdfCell}>{solicitud.descripcion_necesidad_detalle || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}</div>
-                      </div>
-                    </div>
-                  );
-                })() : (() => {
-                  const pdfLabel: React.CSSProperties = {
-                    width: 180, minWidth: 160, padding: '12px 14px', fontWeight: 700,
-                    fontSize: '0.8rem', color: '#1F2937', borderRight: '1px solid #d1d5db',
-                    display: 'flex', alignItems: 'center', lineHeight: 1.4, flexShrink: 0,
-                    fontFamily: 'Gabarito, sans-serif', backgroundColor: '#fafafa',
-                  };
-                  const pdfCell: React.CSSProperties = { flex: 1, padding: '12px 14px', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#1F2937', whiteSpace: 'pre-wrap', wordBreak: 'break-word' };
-                  const rowB: React.CSSProperties = { display: 'flex', borderBottom: '1px solid #d1d5db' };
-                  const autoTag = (v: string) => <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', color: '#374151', fontSize: '0.85rem' }}>{v || '—'}</span>;
-                  return (
-                    <div className="rounded-xl overflow-hidden shadow-md" style={{ border: '1px solid #e5e7eb' }}>
-                      <div style={{ backgroundColor: 'var(--brand-primary)', padding: '11px 20px', textAlign: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>FORMATO PLANEACIÓN CONTRACTUAL</span>
-                      </div>
-                      <div style={rowB}>
-                        <div style={pdfLabel}>Nombre del proceso:</div>
-                        <div style={pdfCell}>{solicitud.titulo_contrato || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}</div>
-                      </div>
-                      <div style={rowB}>
-                        <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                          <div style={pdfLabel}>Fecha de solicitud:</div>
-                          <div style={pdfCell}>{autoTag(solicitud.creado_en ? new Date(solicitud.creado_en).toLocaleDateString('es-CO') : '')}</div>
-                        </div>
-                        <div style={{ flex: 1, display: 'flex' }}>
-                          <div style={pdfLabel}>Modalidad de contratación:</div>
-                          <div style={pdfCell}>{autoTag(String(solicitud.modalidad || '').charAt(0).toUpperCase() + String(solicitud.modalidad || '').slice(1))}</div>
-                        </div>
-                      </div>
-                      <div style={rowB}>
-                        <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                          <div style={pdfLabel}>Gerencia solicitante:</div>
-                          <div style={pdfCell}>{autoTag(solicitud.gerencia_nombre || '')}</div>
-                        </div>
-                        <div style={{ flex: 1, display: 'flex' }}>
-                          <div style={pdfLabel}>Supervisor del contrato:</div>
-                          <div style={pdfCell}>{solicitud.supervision_nombre || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No asignado</span>}</div>
-                        </div>
-                      </div>
-                      {solicitud.fecha_estimada_solicitud && (
-                        <div style={rowB}>
-                          <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                            <div style={{ ...pdfLabel, lineHeight: 1.35 }}>Fecha estimada en la que se requiere el contrato:</div>
-                            <div style={pdfCell}>{new Date(`${solicitud.fecha_estimada_solicitud}T00:00:00`).toLocaleDateString('es-CO')}</div>
-                          </div>
-                          <div style={{ flex: 1 }} />
-                        </div>
-                      )}
-                      <div style={rowB}>
-                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>Objeto:</div>
-                        <div style={pdfCell}>{solicitud.objeto || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}</div>
-                      </div>
-                      <div style={{ backgroundColor: 'var(--brand-primary)', padding: '8px 20px', textAlign: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>I. Justificación y Descripción de la Necesidad</span>
-                      </div>
-                      <div style={{ display: 'flex' }}>
-                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>Descripción de la necesidad:</div>
-                        <div style={pdfCell}>{solicitud.justificacion || solicitud.criterios_contratacion || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}</div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* ── SECCIÓN II — Plazo y Lugar ── */}
-                <div className="rounded-xl overflow-hidden shadow-md" style={{ border: '1px solid #e5e7eb' }}>
-                  <SectionHeader title="II. DESCRIPCIÓN DEL PLAZO Y LUGAR DE EJECUCIÓN." />
-                  <DataRow label="2.1 Plazo de ejecución" value={plazoTexto} />
-                  <DataRow label="2.2 Lugar de ejecución" value={solicitud.lugar_ejecucion} last />
-                </div>
-
-                {/* ── SECCIÓN III — Investigación de Mercado ── */}
-                <div className="rounded-xl overflow-hidden shadow-md" style={{ border: '1px solid #e5e7eb' }}>
-                  {esDirecta
-                    ? <SectionHeader title="III. INVESTIGACIÓN DE MERCADO." />
-                    : <div style={{ backgroundColor: 'var(--brand-primary)', color: '#fff', fontWeight: 700, fontSize: '0.82rem', textAlign: 'center', padding: '10px 24px', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'Gabarito, sans-serif' }}>DATOS DEL CONTACTO / ESTUDIO DE MERCADO</div>
-                  }
-                  <div style={{ padding: '8px 20px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
-                    <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
-                      Ingresar la siguiente información de los posibles proponentes que puedan suplir la contratación.
-                      {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: solo se registra un (1) proponente.</strong>}
-                    </p>
-                  </div>
-                  {Array.isArray(solicitud.proponentes) && solicitud.proponentes.length > 0 ? (
-                    esDirecta ? (
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', fontFamily: 'Gabarito, sans-serif', tableLayout: 'fixed' }}>
-                          <colgroup>
-                            <col style={{ width: '6%' }} /><col style={{ width: '18%' }} /><col style={{ width: '18%' }} />
-                            <col style={{ width: '14%' }} /><col style={{ width: '14%' }} /><col style={{ width: '14%' }} />
-                            <col style={{ width: '12%' }} /><col style={{ width: '14%' }} />
-                          </colgroup>
-                          <thead>
-                            <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                              <th style={{ border: '1px solid #d97458', padding: '8px 6px', color: '#fff', textAlign: 'center' }}>No.</th>
-                              {['Nombre del proveedor', 'Datos de contacto', 'Requisitos técnicos', 'Experiencia', 'Criterios habilitantes', 'Valor + Impuestos', 'Anexo / Observaciones (Valor agregado)'].map(h => (
-                                <th key={h} style={{ border: '1px solid #d97458', padding: '8px', color: '#fff', textAlign: 'center', lineHeight: 1.2, fontWeight: 700 }}>{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {solicitud.proponentes.map((p: any, i: number) => {
-                              const e = (v: string) => v || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>—</span>;
-                              return (
-                                <tr key={p.id || i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fdf9f8' }}>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: '#374151', verticalAlign: 'top' }}>{i + 1}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e(p.nombre_proveedor || p.nombreProveedor || '')}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e(p.datos_contacto || p.datosContacto || '')}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e(p.requisitos_tecnicos || p.requisitosTecnicos || '')}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e(p.experiencia || '')}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e(p.criterios_habilitantes || p.criteriosHabilitantes || '')}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e(p.valor_con_impuestos || p.valorConImpuestos || p.valorImpuestos || '')}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e(p.observaciones || '')}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', fontFamily: 'Gabarito, sans-serif', tableLayout: 'fixed' }}>
-                          <colgroup>
-                            <col style={{ width: '4%' }} /><col style={{ width: '27%' }} />
-                            <col style={{ width: '27%' }} /><col style={{ width: '22%' }} /><col style={{ width: '20%' }} />
-                          </colgroup>
-                          <thead>
-                            <tr>
-                              <th colSpan={5} style={{ border: '1px solid #d1d5db', padding: '7px 10px', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#374151', backgroundColor: '#fff' }}>INVITADOS</th>
-                            </tr>
-                            <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                              <th style={{ border: '1px solid #d97458', padding: '6px 4px', color: '#fff', textAlign: 'center' }}>No.</th>
-                              {['Nombre del proveedor', 'Datos de contacto', 'Valor de cotización', 'Plazo'].map(h => (
-                                <th key={h} style={{ border: '1px solid #d97458', padding: '6px 8px', color: '#fff', textAlign: 'left' }}>{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {solicitud.proponentes.map((p: any, i: number) => {
-                              const pm = p.plazo_meses ?? p.plazoMeses ?? '';
-                              const pd = p.plazo_dias ?? p.plazoDias ?? '';
-                              const plazoStr = [pm ? `${pm} m` : '', pd ? `${pd} d` : ''].filter(Boolean).join(' / ') || '—';
-                              return (
-                                <tr key={p.id || i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fdf9f8' }}>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: '#374151', verticalAlign: 'top' }}>{i + 1}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{p.nombre_proveedor || p.nombreProveedor || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>—</span>}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{p.datos_contacto || p.datosContacto || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>—</span>}</td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', textAlign: 'right', verticalAlign: 'top', fontWeight: 700, color: '#065F46' }}>
-                                    {p.valor_cotizacion ? fmtCOP(p.valor_cotizacion) : <span style={{ color: '#9CA3AF', fontStyle: 'italic', fontWeight: 400 }}>—</span>}
-                                  </td>
-                                  <td style={{ border: '1px solid #e5e7eb', padding: '8px', textAlign: 'center', verticalAlign: 'top' }}>{plazoStr}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )
-                  ) : (
-                    <div style={{ padding: 24, textAlign: 'center', color: '#9CA3AF', fontStyle: 'italic', fontSize: '0.85rem' }}>
-                      No se registraron proponentes en la investigación de mercado.
-                    </div>
-                  )}
-                  {!esDirecta && (
-                    <div style={{ borderTop: '2px solid #e5e7eb' }}>
-                      <div style={{ backgroundColor: '#1a3a5c', color: '#fff', fontWeight: 700, fontSize: '0.82rem', textAlign: 'center', padding: '10px 24px', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'Gabarito, sans-serif' }}>
-                        ANÁLISIS DEL MERCADO
-                      </div>
-                      <div style={{ borderBottom: '1px solid #e5e7eb' }}>
-                        <div style={{ backgroundColor: '#fafafa', padding: '8px 14px', borderBottom: '1px solid #e5e7eb' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1F2937', fontFamily: 'Gabarito, sans-serif' }}>SERVICIOS OFERTADOS</span>
-                        </div>
-                        <div style={{ padding: '12px 14px', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#1F2937', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: 48 }}>
-                          {solicitud.analisis_servicios_ofertados || <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}
-                        </div>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #e5e7eb' }}>
-                        <div style={{ borderRight: '1px solid #e5e7eb' }}>
-                          <div style={{ backgroundColor: '#fafafa', padding: '8px 14px', borderBottom: '1px solid #e5e7eb' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1F2937', fontFamily: 'Gabarito, sans-serif' }}>VALOR PROMEDIO</span>
-                          </div>
-                          <div style={{ padding: '12px 14px', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', minHeight: 48 }}>
-                            {solicitud.analisis_valor_promedio
-                              ? <span style={{ fontWeight: 800, color: '#065F46', fontSize: '1rem' }}>{fmtCOP(solicitud.analisis_valor_promedio)}</span>
-                              : <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ backgroundColor: '#fafafa', padding: '8px 14px', borderBottom: '1px solid #e5e7eb' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1F2937', fontFamily: 'Gabarito, sans-serif' }}>PLAZO PROMEDIO</span>
-                          </div>
-                          <div style={{ padding: '12px 14px', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', minHeight: 48 }}>
-                            {(() => {
-                              const pm = solicitud.analisis_plazo_promedio_meses;
-                              const pd = solicitud.analisis_plazo_promedio_dias;
-                              const texto = [pm ? `${pm} meses` : '', pd ? `${pd} días` : ''].filter(Boolean).join(' y ');
-                              return texto
-                                ? <span style={{ fontWeight: 800, color: '#065F46', fontSize: '1rem' }}>{texto}</span>
-                                : <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>;
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ backgroundColor: '#fafafa', padding: '8px 14px', borderBottom: '1px solid #e5e7eb' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1F2937', fontFamily: 'Gabarito, sans-serif' }}>PRESUPUESTO OFICIAL</span>
-                        </div>
-                        <div style={{ padding: '12px 14px', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', minHeight: 48 }}>
-                          {solicitud.analisis_presupuesto_oficial
-                            ? <span style={{ fontWeight: 800, color: '#065F46', fontSize: '1rem' }}>{fmtCOP(solicitud.analisis_presupuesto_oficial)}</span>
-                            : <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── SECCIÓN IV — Modalidad de Selección (solo Directa) ── */}
-                {esDirecta && (
-                  <div className="rounded-xl overflow-hidden shadow-md" style={{ border: '1px solid #e5e7eb' }}>
-                    <SectionHeader title="IV. IDENTIFICACIÓN DEL CONTRATO A CELEBRAR Y MODALIDAD DE SELECCIÓN." />
-                    <DataRow label="4.1 Modalidad de selección:" value={getCausalTexto(solicitud.modalidad_seleccion)} />
-                    <DataRow
-                      label="Fecha del Comité"
-                      value={solicitud.fecha_comite ? new Date(`${solicitud.fecha_comite}T00:00:00`).toLocaleDateString('es-CO') : ''}
-                      hint="Asignado por el Comité de Contrataciones."
-                      last
-                    />
-                  </div>
-                )}
+                {/* ── FORMATO PLANEACIÓN CONTRACTUAL — documento unificado con el Solicitante (encabezado + Secciones I a VIII) ── */}
+                <DetallePlaneacionContractualParte1 solicitud={solicitud} />
 
                 <SeccionPresupuestoLectura
                   solicitud={solicitud}
@@ -1009,168 +651,7 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
                   ) : undefined}
                 />
 
-                {/* ── SECCIÓN VI/V — Supervisión y Entregables ── */}
-                <div className="rounded-xl overflow-hidden shadow-md" style={{ border: '1px solid #e5e7eb' }}>
-                  <SectionHeader title={`${esDirecta ? 'VI' : 'V'}. SUPERVISIÓN Y ENTREGABLES DEL CONTRATO.`} />
-                  <DataRow label={`${esDirecta ? '6.1' : '5.1'} Posibilidad de Supervisión`} value={solicitud.supervision_nombre} />
-                  {!esDirecta && (() => {
-                    const obs: { descripcion: string }[] = (() => {
-                      try { return Array.isArray(solicitud.obligaciones_especificas) ? solicitud.obligaciones_especificas : JSON.parse(solicitud.obligaciones_especificas || '[]'); } catch { return []; }
-                    })().filter((o: any) => o?.descripcion?.trim());
-                    return (
-                      <div style={{ ...rowStyle }}>
-                        <div style={labelCellStyle}>5.2 Obligaciones Específicas</div>
-                        <div style={valueCellStyle}>
-                          {obs.length === 0
-                            ? <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>
-                            : <ol style={{ margin: 0, paddingLeft: 20 }}>
-                                {obs.map((o, i) => (
-                                  <li key={i} style={{ marginBottom: 6, lineHeight: 1.5 }}>{o.descripcion}</li>
-                                ))}
-                              </ol>}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  {(() => {
-                    const ents: { descripcion: string; porcentaje: string; sinPorcentaje: boolean }[] = (() => {
-                      try { return Array.isArray(solicitud.entregables_detalle) ? solicitud.entregables_detalle : JSON.parse(solicitud.entregables_detalle || '[]'); } catch { return []; }
-                    })().filter((e: any) => e?.descripcion?.trim());
-                    const hayPct = ents.some(e => !e.sinPorcentaje && e.porcentaje);
-                    return (
-                      <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                        <div style={labelCellStyle}>{`${esDirecta ? '6.3' : '5.3'} Entregables`}</div>
-                        <div style={{ ...valueCellStyle, padding: 12 }}>
-                          {ents.length === 0
-                            ? <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No proporcionado</span>
-                            : <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', fontFamily: 'Gabarito, sans-serif' }}>
-                                <thead>
-                                  <tr style={{ backgroundColor: '#fde8e2' }}>
-                                    <th style={{ border: '1px solid #e5e7eb', padding: '6px 8px', fontWeight: 700, color: '#374151', textAlign: 'center', width: 32 }}>#</th>
-                                    <th style={{ border: '1px solid #e5e7eb', padding: '6px 10px', fontWeight: 700, color: '#374151', textAlign: 'left' }}>Descripción del entregable</th>
-                                    {hayPct && <th style={{ border: '1px solid #e5e7eb', padding: '6px 10px', fontWeight: 700, color: '#374151', textAlign: 'center', width: 100 }}>% Pago</th>}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {ents.map((e, i) => (
-                                    <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fdf9f8' }}>
-                                      <td style={{ border: '1px solid #e5e7eb', padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
-                                      <td style={{ border: '1px solid #e5e7eb', padding: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{e.descripcion}</td>
-                                      {hayPct && (
-                                        <td style={{ border: '1px solid #e5e7eb', padding: '8px', textAlign: 'center', fontWeight: 700, color: e.sinPorcentaje ? '#9CA3AF' : '#065F46' }}>
-                                          {e.sinPorcentaje ? <span style={{ fontStyle: 'italic', fontWeight: 400 }}>Sin %</span> : `${e.porcentaje}%`}
-                                        </td>
-                                      )}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                                {hayPct && (
-                                  <tfoot>
-                                    <tr style={{ backgroundColor: '#f0fdf4' }}>
-                                      <td colSpan={2} style={{ border: '1px solid #e5e7eb', padding: '6px 10px', textAlign: 'right', fontWeight: 700, fontSize: '0.78rem', color: '#15803d' }}>Total:</td>
-                                      <td style={{ border: '1px solid #e5e7eb', padding: '6px 10px', textAlign: 'center', fontWeight: 700, color: '#15803d' }}>
-                                        {ents.reduce((s, e) => s + (!e.sinPorcentaje && e.porcentaje ? parseFloat(e.porcentaje) || 0 : 0), 0)}%
-                                      </td>
-                                    </tr>
-                                  </tfoot>
-                                )}
-                              </table>}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* ── SECCIÓN VII/VI — Anexos y Documentos Soporte ── */}
-                <div className="rounded-xl overflow-hidden shadow-md" style={{ border: '1px solid #e5e7eb' }}>
-                  <SectionHeader title={`${esDirecta ? 'VII' : 'VI'}. ANEXOS.`} />
-                  {Array.isArray(solicitud.anexosDocs) && solicitud.anexosDocs.length > 0 && (
-                    <div style={{ padding: '12px 20px', borderBottom: '1px solid #e5e7eb' }}>
-                      <p style={{ fontSize: '0.72rem', color: '#6B7280', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                        Documentos relacionados
-                      </p>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', fontFamily: 'Gabarito, sans-serif' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#E84922' }}>
-                            <th style={{ border: '1px solid #d97458', padding: '8px', color: '#fff', width: 38, textAlign: 'center' }}>#</th>
-                            <th style={{ border: '1px solid #d97458', padding: '8px', color: '#fff', textAlign: 'left' }}>Nombre del documento</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {solicitud.anexosDocs.map((a: any, i: number) => (
-                            <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fdf9f8' }}>
-                              <td style={{ border: '1px solid #e5e7eb', padding: 6, textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
-                              <td style={{ border: '1px solid #e5e7eb', padding: 8 }}>{a.nombre_documento || a.nombre || '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <div style={{ padding: 24 }}>
-                    <p style={{ fontSize: '0.72rem', color: '#6B7280', fontWeight: 700, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Archivos cargados por el solicitante
-                    </p>
-                    {anexosSolicitante.length > 0 ? (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-                        {anexosSolicitante.map((file: any, idx: number) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => abrirDocumento(file)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              padding: 12, background: '#fafafa', borderRadius: 10,
-                              border: '1px solid #e5e7eb', cursor: 'pointer',
-                              textAlign: 'left', fontFamily: 'Gabarito, sans-serif',
-                              transition: 'all 0.15s',
-                            }}
-                            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#E84922'; }}
-                            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb'; }}
-                          >
-                            <div style={{
-                              width: 34, height: 34, borderRadius: 8,
-                              background: '#fff', border: '1px solid #e5e7eb',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                            }}>
-                              <FileText size={15} color="#E84922" />
-                            </div>
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#1F2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {file.nombre || `Documento ${idx + 1}`}
-                              </p>
-                              <p style={{ margin: '2px 0 0', fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>
-                                {file.tamanio || 'Adjunto'} · Soporte
-                              </p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{
-                        textAlign: 'center', padding: '20px 12px',
-                        borderRadius: 10, background: '#fafafa',
-                        border: '1.5px dashed #e5e7eb',
-                      }}>
-                        <FolderOpen size={20} color="#cbd5e1" style={{ margin: '0 auto 6px' }} />
-                        <p style={{ margin: 0, fontSize: 12, color: '#9CA3AF', fontStyle: 'italic' }}>
-                          El solicitante no adjuntó soportes
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ── SECCIÓN VIII/VII — Riesgos y SST ── */}
-                <div className="rounded-xl overflow-hidden shadow-md" style={{ border: '1px solid #e5e7eb' }}>
-                  <SectionHeader title={`${esDirecta ? 'VIII' : 'VII'}. RIESGOS Y CRITERIOS AMBIENTALES O DE SST.`} />
-                  <DataRow label={`${esDirecta ? '8.1' : '7.1'} Riesgos`} value={solicitud.riesgos} />
-                  <DataRow
-                    label={`${esDirecta ? '8.2' : '7.2'} Criterios ambientales o de SST`}
-                    value={solicitud.criterios_ambientales_sst}
-                    last
-                  />
-                </div>
+                <DetallePlaneacionContractualParte2 solicitud={solicitud} />
 
                 {/* ── SECCIÓN VIII — Conclusiones del Comité (solo no directa) ── */}
                 {!esDirecta && solicitud.conclusiones_comite && (
@@ -1193,7 +674,7 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
                   />
                 )}
 
-                <TrazabilidadFlujo solicitud={solicitud} />
+                <InstanciasAprobacion solicitud={solicitud} />
 
               </div>
             );

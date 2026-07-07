@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Save, Send, FileText, FolderOpen, User, Building2, Shield, ChevronDown, ChevronUp, Lock, Plus, Trash2, Calendar, Download } from 'lucide-react';
+import { ArrowLeft, Save, Send, FileText, User, Building2, Shield, ChevronDown, ChevronUp, Lock, Plus, Trash2, Calendar, Download } from 'lucide-react';
 import { datosExistentes } from './datosSolicitudes';
-import { TrazabilidadFlujo } from '../shared/TrazabilidadFlujo';
+import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
 import { FormatoPlaneacionImprimible } from '../secretaria/FormatoPlaneacionImprimible';
 import { useMsal } from "@azure/msal-react";
 import { getCompanyUsers, getCompanyUsersFromGroup } from "../../lib/graphService";
@@ -199,7 +199,7 @@ interface FormularioSolicitudProps {
   rol?: 'Solicitante' | 'Financiera' | 'Administrador' | 'Gerente' | 'Juridica';
 }
 
-type Tab = 'planeacion' | 'documentos' | 'avanzado';
+type Tab = 'planeacion' | 'avanzado';
 
 interface Proponente {
   nombreProveedor: string;
@@ -486,13 +486,11 @@ export function FormularioSolicitud({
 
   const irASiguiente = () => {
     if (tabActual === 'planeacion') setTabActual('avanzado');
-    else if (tabActual === 'avanzado') setTabActual('documentos');
     scrollAlInicio();
   };
 
   const irAAnterior = () => {
-    if (tabActual === 'documentos') setTabActual('avanzado');
-    else if (tabActual === 'avanzado') setTabActual('planeacion');
+    if (tabActual === 'avanzado') setTabActual('planeacion');
     scrollAlInicio();
   };
 
@@ -521,6 +519,9 @@ export function FormularioSolicitud({
     plazoEjecucionMeses: datosIniciales.plazoEjecucionMeses || '',
     plazoEjecucionDias: datosIniciales.plazoEjecucionDias || '',
   });
+
+  // Filtra cualquier campo de valor/dinero: solo dígitos, puntos y comas (separadores de miles/decimales).
+  const soloNumeros = (v: string): string => v.replace(/[^0-9.,]/g, '');
 
   // Convierte texto monetario a número para validaciones sin imponer formato en UI.
   const parseValorMoneda = (raw: string | number | null | undefined): number => {
@@ -667,93 +668,15 @@ export function FormularioSolicitud({
 
   const [anexosTexto, setAnexosTexto] = useState(datosIniciales.anexos_texto || '');
 
-  // Anexos cargados por el solicitante
+  // Anexos cargados por el solicitante (mostrados en otras vistas del flujo)
   const [archivosSolicitante, setArchivosSolicitante] = useState<any[]>(datosIniciales.anexos_solicitante || []);
-  const [subiendoArchivosSolicitante, setSubiendoArchivosSolicitante] = useState(false);
-
-  const abrirDocumentoSolicitante = (file: any) => {
-    const rawCandidates = [
-      file?.url,
-      file?.path,
-      file?.ruta,
-      file?.nombre_almacenado ? `/api/uploads/solicitudes/${file.nombre_almacenado}` : null,
-      file?.nombre_almacenado ? `/api/uploads/convocatorias/${file.nombre_almacenado}` : null,
-      file?.nombre ? `/api/uploads/solicitudes/${encodeURIComponent(file.nombre)}` : null,
-      file?.nombre ? `/api/uploads/convocatorias/${encodeURIComponent(file.nombre)}` : null,
-    ].filter(Boolean) as string[];
-
-    const candidates = Array.from(new Set(rawCandidates)).map((u) =>
-      u.startsWith('http') ? u : `${API_URL}${u}`
-    );
-
-    if (candidates.length > 0) {
-      window.open(candidates[0], '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    alert('No se encontró el archivo en el servidor para abrirlo. Este adjunto parece haber sido registrado sin carga física. Debes volver a cargar ese documento para habilitar "Ver".');
-  };
-
-  const subirArchivosSolicitante = async (files: File[], replaceIndex?: number) => {
-    if (!files.length) return;
-
-    try {
-      setSubiendoArchivosSolicitante(true);
-      const formData = new FormData();
-      files.forEach((f) => formData.append('archivos', f));
-
-      const res = await fetch(`${API_URL}/api/solicitudes/upload`, {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || `HTTP ${res.status}`);
-      }
-
-      const uploaded = Array.isArray(data?.archivos) ? data.archivos : [];
-      if (uploaded.length === 0) {
-        throw new Error('La subida no devolvió archivos.');
-      }
-
-      const siguientesArchivos = typeof replaceIndex === 'number'
-        ? (() => {
-          const base = [...archivosSolicitante];
-          base.splice(replaceIndex, 1, ...uploaded);
-          return base;
-        })()
-        : [...archivosSolicitante, ...uploaded];
-
-      setArchivosSolicitante(siguientesArchivos);
-
-      // En solicitudes existentes (vista detalle), persistir inmediatamente el nuevo adjunto.
-      if (currentSolicitudId) {
-        const payloadActualizado = getPayload({ anexos_solicitante: siguientesArchivos });
-        const guardado = await guardarBorrador(false, payloadActualizado);
-        if (!guardado) {
-          throw new Error('Se subió el archivo pero no se pudo guardar en la solicitud.');
-        }
-      }
-
-      if (typeof replaceIndex === 'number') {
-        alert('Documento reemplazado y guardado correctamente.');
-      }
-    } catch (err) {
-      console.error('Error subiendo archivos del solicitante:', err);
-      alert(`No fue posible subir los archivos: ${err instanceof Error ? err.message : 'Error desconocido'}`);
-    } finally {
-      setSubiendoArchivosSolicitante(false);
-    }
-  };
-
 
   // Sección IX — Conclusiones
   const [conclusiones, setConclusions] = useState(datosIniciales.conclusiones || 'Aprobada por unanimidad de los miembros del comité.');
 
   const tabs = [
-    { id: 'planeacion' as Tab, label: 'I-IV. Planeación', icon: FileText },
-    { id: 'avanzado' as Tab, label: 'V-VIII. Avanzado', icon: Shield },
-    { id: 'documentos' as Tab, label: 'Documentos', icon: FolderOpen },
+    { id: 'planeacion' as Tab, label: 'Parte I', icon: FileText },
+    { id: 'avanzado' as Tab, label: 'Parte II', icon: Shield },
   ];
 
   const handleProponenteChange = (index: number, field: keyof Proponente, value: string) => {
@@ -818,7 +741,7 @@ export function FormularioSolicitud({
     entregable1: supervisionEntregables.entregable1,
     entregable2: supervisionEntregables.entregable2,
     entregable3: supervisionEntregables.entregable3,
-    obligaciones_especificas: esDirecta ? [] : obligaciones.filter(o => o.descripcion.trim()),
+    obligaciones_especificas: obligaciones.filter(o => o.descripcion.trim()),
     entregables_detalle: entregablesDetalle.filter(e => e.descripcion.trim()),
     analisis_servicios_ofertados:  analisisMercado.serviciosOfertados,
     analisis_valor_promedio:       analisisMercado.valorPromedio,
@@ -1066,384 +989,201 @@ export function FormularioSolicitud({
         </div>
 
         <form ref={formRef} onSubmit={handleSubmit}>
-          <div style={{ pointerEvents: (modoSoloLectura && tabActual !== 'documentos') ? 'none' : 'auto', opacity: modoSoloLectura ? 0.85 : 1 }}>
+          <div style={{ pointerEvents: modoSoloLectura ? 'none' : 'auto', opacity: modoSoloLectura ? 0.85 : 1 }}>
 
             {/* ══════════════ TAB: PLANEACIÓN ══════════════ */}
             {tabActual === 'planeacion' && (
               <div className="space-y-6" style={{ fontFamily: 'Gabarito, sans-serif' }}>
 
-                {/* ── CABECERA + SECCIÓN I — condicional por modalidad ── */}
-                {esInvitacionOTdr ? (
-                  <>
-                    {/* ═══════════════════════════════════════════════════════
-                        ENCABEZADO + SECCIÓN I — fiel al PDF F30-MA-GAF-02
-                        Una sola tarjeta: label-cell | content-cell por fila
-                    ════════════════════════════════════════════════════════ */}
-                    {(() => {
-                      const pdfLabel: React.CSSProperties = {
-                        width: 170, minWidth: 170, padding: '12px 14px',
-                        fontWeight: 700, fontSize: '0.8rem', color: '#1F2937',
-                        borderRight: '1px solid #d1d5db', display: 'flex',
-                        alignItems: 'center', lineHeight: 1.4, flexShrink: 0,
-                        fontFamily: 'Gabarito, sans-serif',
-                      };
-                      const pdfHint: React.CSSProperties = {
-                        fontSize: '0.72rem', color: 'var(--brand-primary)', fontStyle: 'italic',
-                        marginBottom: 8, lineHeight: 1.5, fontFamily: 'Gabarito, sans-serif',
-                      };
-                      const pdfCell: React.CSSProperties = { flex: 1, padding: '10px 14px' };
-                      const autoVal: React.CSSProperties = {
-                        ...inputStyle, backgroundColor: '#f9fafb', color: '#374151',
-                        cursor: 'default', borderColor: '#e5e7eb',
-                      };
-                      return (
-                        <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={{ fontFamily: 'Gabarito, sans-serif' }}>
+                {/* ═══════════════════════════════════════════════════════
+                    ENCABEZADO + SECCIÓN I — idéntico para las 3 modalidades
+                    Una sola tarjeta: label-cell | content-cell por fila
+                ════════════════════════════════════════════════════════ */}
+                {(() => {
+                  const pdfLabel: React.CSSProperties = {
+                    width: 170, minWidth: 170, padding: '12px 14px',
+                    fontWeight: 700, fontSize: '0.8rem', color: '#1F2937',
+                    borderRight: '1px solid #d1d5db', display: 'flex',
+                    alignItems: 'center', lineHeight: 1.4, flexShrink: 0,
+                    fontFamily: 'Gabarito, sans-serif',
+                  };
+                  const pdfHint: React.CSSProperties = {
+                    fontSize: '0.72rem', color: 'var(--brand-primary)', fontStyle: 'italic',
+                    marginBottom: 8, lineHeight: 1.5, fontFamily: 'Gabarito, sans-serif',
+                  };
+                  const pdfCell: React.CSSProperties = { flex: 1, padding: '10px 14px' };
+                  const autoVal: React.CSSProperties = {
+                    ...inputStyle, backgroundColor: '#f9fafb', color: '#374151',
+                    cursor: 'default', borderColor: '#e5e7eb',
+                  };
+                  const modalidadCompleta = esDirecta
+                    ? 'Contratación Directa'
+                    : esTDR
+                      ? 'Términos de Referencia'
+                      : 'Invitación a Ofertar';
+                  return (
+                    <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={{ fontFamily: 'Gabarito, sans-serif' }}>
 
-                          {/* ── Barra título ── */}
-                          <div style={{ padding: '11px 20px', backgroundColor: 'var(--brand-primary)', textAlign: 'center' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                              FORMATO PLANEACIÓN CONTRACTUAL
-                            </span>
-                          </div>
+                      {/* ── Barra título ── */}
+                      <div style={{ padding: '11px 20px', backgroundColor: 'var(--brand-primary)', textAlign: 'center' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                          FORMATO PLANEACIÓN CONTRACTUAL
+                        </span>
+                      </div>
 
-                          {/* ── Nombre del proceso ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={pdfLabel}>Nombre del proceso:</div>
-                            <div style={pdfCell}>
-                              <input
-                                type="text"
-                                value={datosPlaneacion.tituloContrato}
-                                onChange={e => setDatosPlaneacion({ ...datosPlaneacion, tituloContrato: e.target.value })}
-                                required placeholder="Nombre del proceso de contratación..."
-                                style={inputStyle}
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                              />
-                            </div>
-                          </div>
-
-                          {/* ── Fecha de solicitud | Modalidad ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                              <div style={pdfLabel}>Fecha de solicitud:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Indicar fecha de solicitud al Gerente del Área Solicitante.</p>
-                                <div style={autoVal}>{datosEncabezado.fechaSolicitud}</div>
-                              </div>
-                            </div>
-                            <div style={{ flex: 1, display: 'flex' }}>
-                              <div style={pdfLabel}>Modalidad de contratación:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Seleccione en la lista desplegable la modalidad de contratación para el bien o servicio.</p>
-                                <div style={autoVal}>{esInvitacion ? 'Invitación' : 'TDR'}</div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* ── Gerencia solicitante | Supervisor del contrato ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                              <div style={pdfLabel}>Gerencia solicitante:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Seleccione en la lista desplegable la Gerencia Solicitante.</p>
-                                <div style={autoVal}>{datosEncabezado.gerencia}</div>
-                              </div>
-                            </div>
-                            <div style={{ flex: 1, display: 'flex' }}>
-                              <div style={pdfLabel}>Supervisor del contrato:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Indicar nombre del empleado que ejercerá la supervisión y seguimiento del contrato descrito en este documento.</p>
-                                <input
-                                  list="empleados-list-header"
-                                  value={supervisionEntregables.supervision}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    const emp = listaEmpleados.find(em => {
-                                      const cs = em.cargo ? ` - ${em.cargo}` : '';
-                                      return `${em.nombre}${cs} (${em.email})` === val || em.nombre === val || em.email === val;
-                                    });
-                                    setSupervisionEntregables({ ...supervisionEntregables, supervision: val, supervisionId: emp ? emp.id : '' });
-                                  }}
-                                  style={inputStyle} placeholder="Escriba para buscar..."
-                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                                />
-                                <datalist id="empleados-list-header">
-                                  {listaEmpleados.map((emp, i) => {
-                                    const cs = emp.cargo ? ` - ${emp.cargo}` : '';
-                                    return <option key={i} value={`${emp.nombre}${cs} (${emp.email})`} />;
-                                  })}
-                                </datalist>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* ── Fecha estimada (izquierda) | vacío (derecha) ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                              <div style={{ ...pdfLabel, lineHeight: 1.35 }}>Fecha estimada en la que se requiere el contrato</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Incluya la fecha en la que se requiere iniciar el contrato</p>
-                                <input
-                                  type="date"
-                                  value={datosPlaneacion.fechaEstimadaSolicitud}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, fechaEstimadaSolicitud: e.target.value })}
-                                  style={inputStyle}
-                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                                />
-                              </div>
-                            </div>
-                            <div style={{ flex: 1 }} />
-                          </div>
-
-                          {/* ── Objeto (ancho completo) ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>Objeto:</div>
-                            <div style={pdfCell}>
-                              <p style={pdfHint}>Indicar el objeto de la contratación requerida.</p>
-                              <textarea
-                                value={datosPlaneacion.objeto}
-                                onChange={e => setDatosPlaneacion({ ...datosPlaneacion, objeto: e.target.value })}
-                                rows={4} style={textareaStyle} required
-                                placeholder="Objeto del contrato..."
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                              />
-                            </div>
-                          </div>
-
-                          {/* ── Sección I — barra roja ── */}
-                          <div style={{ padding: '10px 20px', backgroundColor: 'var(--brand-primary)', textAlign: 'center' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                              I. Justificación y Descripción de la Necesidad
-                            </span>
-                          </div>
-
-                          {/* ── Descripción de la necesidad ── */}
-                          <div style={{ display: 'flex' }}>
-                            <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>Descripción de la necesidad:</div>
-                            <div style={pdfCell}>
-                              <p style={pdfHint}>Responde estas preguntas ¿qué necesitan?, ¿por qué lo necesitan?, y ¿cómo se relaciona con las actividades de Invest y del área?</p>
-                              <textarea
-                                value={datosPlaneacion.descripcionNecesidad}
-                                onChange={e => setDatosPlaneacion({ ...datosPlaneacion, descripcionNecesidad: e.target.value })}
-                                rows={5} style={textareaStyle} required
-                                placeholder="Describa la necesidad..."
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                              />
-                            </div>
-                          </div>
-
+                      {/* ── Nombre del proceso ── */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
+                        <div style={pdfLabel}>Nombre del proceso:</div>
+                        <div style={pdfCell}>
+                          <p style={pdfHint}>Escriba el nombre o título con el que se identificará este contrato.</p>
+                          <input
+                            type="text"
+                            value={datosPlaneacion.tituloContrato}
+                            onChange={e => setDatosPlaneacion({ ...datosPlaneacion, tituloContrato: e.target.value })}
+                            required placeholder="Nombre del proceso de contratación..."
+                            style={inputStyle}
+                            onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                            onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                          />
                         </div>
-                      );
-                    })()}
-                  </>
-                ) : (
-                  /* SECCIÓN I — Directa: PDF-style (igual al PDF F30-MA-GAF-02) */
-                  <>
-                    {(() => {
-                      const pdfLabel: React.CSSProperties = {
-                        width: 170, minWidth: 170, padding: '12px 14px',
-                        fontWeight: 700, fontSize: '0.8rem', color: '#1F2937',
-                        borderRight: '1px solid #d1d5db', display: 'flex',
-                        alignItems: 'center', lineHeight: 1.4, flexShrink: 0,
-                        fontFamily: 'Gabarito, sans-serif',
-                      };
-                      const pdfHint: React.CSSProperties = {
-                        fontSize: '0.72rem', color: 'var(--brand-primary)', fontStyle: 'italic',
-                        marginBottom: 8, lineHeight: 1.5, fontFamily: 'Gabarito, sans-serif',
-                      };
-                      const pdfCell: React.CSSProperties = { flex: 1, padding: '10px 14px' };
-                      const autoVal: React.CSSProperties = {
-                        ...inputStyle, backgroundColor: '#f9fafb', color: '#374151',
-                        cursor: 'default', borderColor: '#e5e7eb',
-                      };
-                      return (
-                        <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={{ fontFamily: 'Gabarito, sans-serif' }}>
+                      </div>
 
-                          {/* ── Barra título ── */}
-                          <div style={{ padding: '11px 20px', backgroundColor: 'var(--brand-primary)', textAlign: 'center' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                              FORMATO PLANEACIÓN CONTRACTUAL
-                            </span>
+                      {/* ── Fecha de solicitud | Modalidad de contratación ── */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
+                        <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
+                          <div style={pdfLabel}>Fecha de solicitud:</div>
+                          <div style={pdfCell}>
+                            <p style={pdfHint}>Indicar fecha de solicitud al Gerente del Área Solicitante.</p>
+                            <div style={autoVal}>{datosEncabezado.fechaSolicitud}</div>
                           </div>
-
-                          {/* ── Nombre del proceso ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={pdfLabel}>Nombre del proceso:</div>
-                            <div style={pdfCell}>
-                              <p style={pdfHint}>Escriba el nombre o título con el que se identificará este contrato.</p>
-                              <input
-                                type="text"
-                                value={datosPlaneacion.tituloContrato}
-                                onChange={e => setDatosPlaneacion({ ...datosPlaneacion, tituloContrato: e.target.value })}
-                                required placeholder="Nombre del proceso de contratación..."
-                                style={inputStyle}
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                              />
-                            </div>
-                          </div>
-
-                          {/* ── Fecha de solicitud | Fecha del Comité ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                              <div style={pdfLabel}>Fecha de solicitud:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Indicar fecha de solicitud al Gerente del Área Solicitante.</p>
-                                <div style={autoVal}>{datosEncabezado.fechaSolicitud}</div>
-                              </div>
-                            </div>
-                            <div style={{ flex: 1, display: 'flex' }}>
-                              <div style={pdfLabel}>Fecha del Comité de contrataciones:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Indicar fecha de aprobación del documento por parte del Comité de contrataciones.</p>
-                                {esFinanciera ? (
-                                  <input type="date" value={datosPlaneacion.fechaComite}
-                                    onChange={e => setDatosPlaneacion({ ...datosPlaneacion, fechaComite: e.target.value })}
-                                    style={inputStyle}
-                                    onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                    onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                                  />
-                                ) : datosPlaneacion.fechaComite ? (
-                                  <div style={autoVal}>{new Date(`${datosPlaneacion.fechaComite}T00:00:00`).toLocaleDateString('es-CO')}</div>
-                                ) : (
-                                  <div style={{ ...autoVal, color: '#9CA3AF', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <Lock size={13} /> Asignado por el Comité
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* ── Gerencia solicitante | Supervisor del contrato ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                              <div style={pdfLabel}>Gerencia solicitante:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Seleccione en la lista desplegable la Gerencia Solicitante.</p>
-                                <div style={autoVal}>{datosEncabezado.gerencia}</div>
-                              </div>
-                            </div>
-                            <div style={{ flex: 1, display: 'flex' }}>
-                              <div style={pdfLabel}>Supervisor del contrato:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Indicar nombre del empleado que ejercerá la supervisión y seguimiento del contrato descrito en este documento.</p>
-                                <input
-                                  list="empleados-list-header-directa"
-                                  value={supervisionEntregables.supervision}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    const emp = listaEmpleados.find(em => {
-                                      const cs = em.cargo ? ` - ${em.cargo}` : '';
-                                      return `${em.nombre}${cs} (${em.email})` === val || em.nombre === val || em.email === val;
-                                    });
-                                    setSupervisionEntregables({ ...supervisionEntregables, supervision: val, supervisionId: emp ? emp.id : '' });
-                                  }}
-                                  style={inputStyle} placeholder="Escriba para buscar..."
-                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                                />
-                                <datalist id="empleados-list-header-directa">
-                                  {listaEmpleados.map((emp, i) => {
-                                    const cs = emp.cargo ? ` - ${emp.cargo}` : '';
-                                    return <option key={i} value={`${emp.nombre}${cs} (${emp.email})`} />;
-                                  })}
-                                </datalist>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* ── Fecha estimada solicitud | Fecha estimada recepción ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                              <div style={pdfLabel}>Fecha estimada solicitud de propuestas:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>Enviar la información a GAF mínimo con dos (2) días de anticipación.</p>
-                                <input type="date" value={datosPlaneacion.fechaEstimadaSolicitud}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, fechaEstimadaSolicitud: e.target.value })}
-                                  style={inputStyle}
-                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                                />
-                              </div>
-                            </div>
-                            <div style={{ flex: 1, display: 'flex' }}>
-                              <div style={pdfLabel}>Fecha estimada recepción de propuestas:</div>
-                              <div style={pdfCell}>
-                                <p style={pdfHint}>A los proponentes se le otorgará mínimo dos (2) días para el envío de sus propuestas.</p>
-                                <input type="date" value={datosPlaneacion.fechaEstimadaRecepcion}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, fechaEstimadaRecepcion: e.target.value })}
-                                  style={inputStyle}
-                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* ── Objeto ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>Objeto:</div>
-                            <div style={pdfCell}>
-                              <p style={pdfHint}>Indicar el objeto de la contratación requerida.</p>
-                              <textarea
-                                value={datosPlaneacion.objeto}
-                                onChange={e => setDatosPlaneacion({ ...datosPlaneacion, objeto: e.target.value })}
-                                rows={3} style={textareaStyle} required
-                                placeholder="Objeto del contrato..."
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                              />
-                            </div>
-                          </div>
-
-                          {/* ── Sección I — barra roja ── */}
-                          <div style={{ padding: '10px 20px', backgroundColor: 'var(--brand-primary)', textAlign: 'center' }}>
-                            <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                              I. Justificación y Descripción de la Necesidad
-                            </span>
-                          </div>
-
-                          {/* ── 1.1 Justificación ── */}
-                          <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                            <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.1 Justificación:</div>
-                            <div style={pdfCell}>
-                              <p style={pdfHint}>En este apartado se redactará la justificación por la cual se requiere el objeto a contratar, indicando la necesidad a satisfacer de conformidad con el propósito superior de La Corporación, objetivos y metas de los cual se deriva la contratación, así como las funciones del área solicitante.</p>
-                              <textarea
-                                value={datosPlaneacion.descripcionNecesidad}
-                                onChange={e => setDatosPlaneacion({ ...datosPlaneacion, descripcionNecesidad: e.target.value })}
-                                rows={5} style={textareaStyle} required
-                                placeholder="Redacte aquí la justificación..."
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                              />
-                            </div>
-                          </div>
-
-                          {/* ── 1.2 Descripción de la necesidad ── */}
-                          <div style={{ display: 'flex' }}>
-                            <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.2 Descripción de la necesidad:</div>
-                            <div style={pdfCell}>
-                              <p style={pdfHint}>Describa de forma clara y concisa la necesidad específica que da origen a esta contratación.</p>
-                              <textarea
-                                value={datosPlaneacion.descripcionNecesidadDetalle}
-                                onChange={e => setDatosPlaneacion({ ...datosPlaneacion, descripcionNecesidadDetalle: e.target.value })}
-                                rows={4} style={textareaStyle} required
-                                placeholder="Describa la necesidad específica que origina esta contratación..."
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                              />
-                            </div>
-                          </div>
-
                         </div>
-                      );
-                    })()}
-                  </>
-                )}
+                        <div style={{ flex: 1, display: 'flex' }}>
+                          <div style={pdfLabel}>Modalidad de contratación:</div>
+                          <div style={pdfCell}>
+                            <p style={pdfHint}>Seleccione en la lista desplegable la modalidad de contratación para el bien o servicio.</p>
+                            <div style={autoVal}>{modalidadCompleta}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── Gerencia solicitante | Supervisor del contrato ── */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
+                        <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
+                          <div style={pdfLabel}>Gerencia solicitante:</div>
+                          <div style={pdfCell}>
+                            <p style={pdfHint}>Seleccione en la lista desplegable la Gerencia Solicitante.</p>
+                            <div style={autoVal}>{datosEncabezado.gerencia}</div>
+                          </div>
+                        </div>
+                        <div style={{ flex: 1, display: 'flex' }}>
+                          <div style={pdfLabel}>Supervisor del contrato:</div>
+                          <div style={pdfCell}>
+                            <p style={pdfHint}>Indicar nombre del empleado que ejercerá la supervisión y seguimiento del contrato descrito en este documento.</p>
+                            <input
+                              list="empleados-list-header"
+                              value={supervisionEntregables.supervision}
+                              onChange={e => {
+                                const val = e.target.value;
+                                const emp = listaEmpleados.find(em => {
+                                  const cs = em.cargo ? ` - ${em.cargo}` : '';
+                                  return `${em.nombre}${cs} (${em.email})` === val || em.nombre === val || em.email === val;
+                                });
+                                setSupervisionEntregables({ ...supervisionEntregables, supervision: val, supervisionId: emp ? emp.id : '' });
+                              }}
+                              style={inputStyle} placeholder="Escriba para buscar..."
+                              onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                              onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                            />
+                            <datalist id="empleados-list-header">
+                              {listaEmpleados.map((emp, i) => {
+                                const cs = emp.cargo ? ` - ${emp.cargo}` : '';
+                                return <option key={i} value={`${emp.nombre}${cs} (${emp.email})`} />;
+                              })}
+                            </datalist>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Fecha del Comité de contrataciones: se conserva en datosPlaneacion.fechaComite
+                          pero no se muestra aquí — se diligencia en otro paso del flujo. */}
+
+                      {/* ── Fecha estimada en la que se requiere el contrato ── */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
+                        <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
+                          <div style={{ ...pdfLabel, lineHeight: 1.35 }}>Fecha estimada en la que se requiere el contrato</div>
+                          <div style={pdfCell}>
+                            <p style={pdfHint}>Incluya la fecha en la que se requiere iniciar el contrato</p>
+                            <input
+                              type="date"
+                              value={datosPlaneacion.fechaEstimadaSolicitud}
+                              onChange={e => setDatosPlaneacion({ ...datosPlaneacion, fechaEstimadaSolicitud: e.target.value })}
+                              style={inputStyle}
+                              onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                              onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                            />
+                          </div>
+                        </div>
+                        <div style={{ flex: 1 }} />
+                      </div>
+
+                      {/* ── Objeto (ancho completo) ── */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
+                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>Objeto:</div>
+                        <div style={pdfCell}>
+                          <p style={pdfHint}>Indicar el objeto de la contratación requerida.</p>
+                          <textarea
+                            value={datosPlaneacion.objeto}
+                            onChange={e => setDatosPlaneacion({ ...datosPlaneacion, objeto: e.target.value })}
+                            rows={4} style={textareaStyle} required
+                            placeholder="Objeto del contrato..."
+                            onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                            onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                          />
+                        </div>
+                      </div>
+
+                      {/* ── Sección I — barra roja ── */}
+                      <div style={{ padding: '10px 20px', backgroundColor: 'var(--brand-primary)', textAlign: 'center' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          I. Justificación y Descripción de la Necesidad
+                        </span>
+                      </div>
+
+                      {/* ── 1.1 Justificación ── */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
+                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.1 Justificación:</div>
+                        <div style={pdfCell}>
+                          <p style={pdfHint}>En este apartado se redactará la justificación por la cual se requiere el objeto a contratar, indicando la necesidad a satisfacer de conformidad con el propósito superior de La Corporación, objetivos y metas de los cual se deriva la contratación, así como las funciones del área solicitante.</p>
+                          <textarea
+                            value={datosPlaneacion.descripcionNecesidad}
+                            onChange={e => setDatosPlaneacion({ ...datosPlaneacion, descripcionNecesidad: e.target.value })}
+                            rows={5} style={textareaStyle} required
+                            placeholder="Redacte aquí la justificación..."
+                            onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                            onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                          />
+                        </div>
+                      </div>
+
+                      {/* ── 1.2 Descripción de la necesidad ── */}
+                      <div style={{ display: 'flex' }}>
+                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.2 Descripción de la necesidad:</div>
+                        <div style={pdfCell}>
+                          <p style={pdfHint}>Describa de forma clara y concisa la necesidad específica que da origen a esta contratación.</p>
+                          <textarea
+                            value={datosPlaneacion.descripcionNecesidadDetalle}
+                            onChange={e => setDatosPlaneacion({ ...datosPlaneacion, descripcionNecesidadDetalle: e.target.value })}
+                            rows={4} style={textareaStyle} required
+                            placeholder="Describa la necesidad específica que origina esta contratación..."
+                            onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                            onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                          />
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })()}
 
                 {/* ── SECCIÓN II ── */}
                 <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
@@ -1508,14 +1248,8 @@ export function FormularioSolicitud({
                 {/* ── SECCIÓN III ── Investigación de Mercado / Datos del Contacto */}
                 <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
 
-                  {/* Header — naranja para Inv/TDR como el PDF, azul (SectionHeader) para Directa */}
-                  {esInvitacionOTdr ? (
-                    <div style={{ backgroundColor: 'var(--brand-primary)', color: '#fff', fontWeight: 700, fontSize: '0.82rem', textAlign: 'center', padding: '10px 24px', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'Gabarito, sans-serif' }}>
-                      DATOS DEL CONTACTO / ESTUDIO DE MERCADO
-                    </div>
-                  ) : (
-                    <SectionHeader title="III. INVESTIGACIÓN DE MERCADO." />
-                  )}
+                  {/* Header — idéntico para las 3 modalidades */}
+                  <SectionHeader title="III. ESTUDIO DE MERCADO" />
 
                   <div style={{ padding: '8px 20px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
                     <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
@@ -1553,11 +1287,11 @@ export function FormularioSolicitud({
                                 </th>
                               </tr>
                               <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                                <th style={{ border: '1px solid #d97458', padding: '6px 4px', color: '#fff', textAlign: 'center', fontWeight: 700 }}>No.</th>
-                                <th style={{ border: '1px solid #d97458', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Nombre del proveedor</th>
-                                <th style={{ border: '1px solid #d97458', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Datos de contacto</th>
-                                <th style={{ border: '1px solid #d97458', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Valor de cotización</th>
-                                <th style={{ border: '1px solid #d97458', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Plazo</th>
+                                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 4px', color: '#fff', textAlign: 'center', fontWeight: 700 }}>No.</th>
+                                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Nombre del proveedor</th>
+                                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Datos de contacto</th>
+                                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Valor de cotización</th>
+                                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Plazo</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1575,8 +1309,8 @@ export function FormularioSolicitud({
                                   <td style={{ border: '1px solid #e5e7eb', padding: '2px 4px', verticalAlign: 'top' }}>
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
                                       <span style={{ padding: '5px 4px 5px 7px', fontSize: '0.78rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', flexShrink: 0 }}>$</span>
-                                      <input type="text" value={p.valorCotizacion}
-                                        onChange={e => handleProponenteChange(i, 'valorCotizacion', e.target.value)}
+                                      <input type="text" inputMode="decimal" value={p.valorCotizacion}
+                                        onChange={e => handleProponenteChange(i, 'valorCotizacion', soloNumeros(e.target.value))}
                                         placeholder="0"
                                         style={{ flex: 1, padding: '5px 7px 5px 2px', border: '1px solid transparent', borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.78rem', outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box' as const, minWidth: 0 }}
                                         onFocus={e => { (e.target.parentElement as HTMLElement).style.border = '1px solid var(--brand-primary)'; (e.target.parentElement as HTMLElement).style.borderRadius = '4px'; e.target.style.backgroundColor = '#fff'; (e.target.parentElement as HTMLElement).style.backgroundColor = '#fff'; }}
@@ -1654,8 +1388,8 @@ export function FormularioSolicitud({
                               <div style={{ padding: '10px 14px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 6, overflow: 'hidden' }}>
                                   <span style={{ padding: '8px 10px', backgroundColor: '#f9fafb', borderRight: '1px solid #D1D5DB', fontSize: '0.875rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', fontWeight: 600 }}>$</span>
-                                  <input type="text" value={analisisMercado.valorPromedio}
-                                    onChange={e => setAnalisisMercado({ ...analisisMercado, valorPromedio: e.target.value })}
+                                  <input type="text" inputMode="decimal" value={analisisMercado.valorPromedio}
+                                    onChange={e => setAnalisisMercado({ ...analisisMercado, valorPromedio: soloNumeros(e.target.value) })}
                                     placeholder="0"
                                     style={{ flex: 1, padding: '8px 12px', border: 'none', outline: 'none', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', backgroundColor: '#fff' }}
                                   />
@@ -1700,8 +1434,8 @@ export function FormularioSolicitud({
                             <div style={{ padding: '10px 14px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 6, overflow: 'hidden' }}>
                                 <span style={{ padding: '8px 10px', backgroundColor: '#f9fafb', borderRight: '1px solid #D1D5DB', fontSize: '0.875rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', fontWeight: 600 }}>$</span>
-                                <input type="text" value={analisisMercado.presupuestoOficial}
-                                  onChange={e => setAnalisisMercado({ ...analisisMercado, presupuestoOficial: e.target.value })}
+                                <input type="text" inputMode="decimal" value={analisisMercado.presupuestoOficial}
+                                  onChange={e => setAnalisisMercado({ ...analisisMercado, presupuestoOficial: soloNumeros(e.target.value) })}
                                   placeholder="0"
                                   style={{ flex: 1, padding: '8px 12px', border: 'none', outline: 'none', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', backgroundColor: '#fff' }}
                                 />
@@ -1715,13 +1449,13 @@ export function FormularioSolicitud({
                     /* ── Tabla detallada original (Directa) ── */
                     <div style={{ overflow: 'hidden' }}>
                       {(() => {
-                        const columnasProponente: { field: keyof Proponente; label: string; width: string; multilinea: boolean }[] = [
+                        const columnasProponente: { field: keyof Proponente; label: string; width: string; multilinea: boolean; numerico?: boolean }[] = [
                           { field: 'nombreProveedor',       label: 'Nombre del proveedor',                    width: '18%', multilinea: false },
                           { field: 'datosContacto',         label: 'Datos de contacto',                       width: '18%', multilinea: true  },
                           { field: 'requisitosTecnicos',    label: 'Requisitos técnicos',                     width: '14%', multilinea: true  },
                           { field: 'experiencia',           label: 'Experiencia',                             width: '14%', multilinea: true  },
                           { field: 'criteriosHabilitantes', label: 'Criterios habilitantes',                  width: '14%', multilinea: true  },
-                          { field: 'valorImpuestos',        label: 'Valor + Impuestos',                       width: '12%', multilinea: false },
+                          { field: 'valorImpuestos',        label: 'Valor + Impuestos',                       width: '12%', multilinea: false, numerico: true },
                           { field: 'observaciones',         label: 'Anexo / Observaciones (Valor agregado)',  width: '14%', multilinea: true  },
                         ];
                         return (
@@ -1731,16 +1465,21 @@ export function FormularioSolicitud({
                               {columnasProponente.map(c => <col key={c.field} style={{ width: c.width }} />)}
                             </colgroup>
                             <thead>
+                              <tr>
+                                <th colSpan={1 + columnasProponente.length} style={{ border: '1px solid #d1d5db', padding: '7px 10px', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#374151', backgroundColor: '#fff' }}>
+                                  ÚNICO PROPONENTE
+                                </th>
+                              </tr>
                               <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                                <th style={{ border: '1px solid #d97458', padding: '8px 6px', color: '#fff', textAlign: 'center', fontWeight: 700 }}>No.</th>
+                                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px 6px', color: '#fff', textAlign: 'center', fontWeight: 700 }}>No.</th>
                                 {columnasProponente.map(c => (
-                                  <th key={c.field} style={{ border: '1px solid #d97458', padding: '8px 8px', color: '#fff', textAlign: 'center', whiteSpace: 'normal', lineHeight: 1.3, fontWeight: 700 }}>{c.label}</th>
+                                  <th key={c.field} style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px 8px', color: '#fff', textAlign: 'center', whiteSpace: 'normal', lineHeight: 1.3, fontWeight: 700 }}>{c.label}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
                               {proponentes.map((p, i) => (
-                                <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fdf9f8' }}>
+                                <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa' }}>
                                   <td style={{ border: '1px solid #e5e7eb', padding: '6px', textAlign: 'center', fontWeight: 700, color: '#374151', verticalAlign: 'top' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                                       <span>{i + 1}</span>
@@ -1751,7 +1490,7 @@ export function FormularioSolicitud({
                                       )}
                                     </div>
                                   </td>
-                                  {columnasProponente.map(({ field, multilinea }) => (
+                                  {columnasProponente.map(({ field, multilinea, numerico }) => (
                                     <td key={field} style={{ border: '1px solid #e5e7eb', padding: '2px 4px', verticalAlign: 'top' }}>
                                       {multilinea ? (
                                         <textarea
@@ -1769,8 +1508,8 @@ export function FormularioSolicitud({
                                         />
                                       ) : (
                                         <input
-                                          type="text" value={p[field] as string}
-                                          onChange={e => handleProponenteChange(i, field, e.target.value)}
+                                          type="text" inputMode={numerico ? 'decimal' : undefined} value={p[field] as string}
+                                          onChange={e => handleProponenteChange(i, field, numerico ? soloNumeros(e.target.value) : e.target.value)}
                                           style={{
                                             width: '100%', padding: '6px 8px', border: '1px solid transparent',
                                             borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.78rem',
@@ -1951,7 +1690,7 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Dólares (USD)" />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaUSD}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: e.target.value })}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0.00"
                                 />
                               </div>
@@ -1962,7 +1701,7 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Pesos (COP)" />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaCOP}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: e.target.value })}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0.00"
                                 />
                               </div>
@@ -1973,7 +1712,7 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Euros (EUR)" />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaEUR}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: e.target.value })}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0.00"
                                 />
                               </div>
@@ -1985,7 +1724,7 @@ export function FormularioSolicitud({
                   </div>
                 </div>
 
-                {/* ── SECCIÓN V/VI — Supervisión y Entregables ── */}
+                {/* ── SECCIÓN V/VI — Supervisión y Entregables — mismo contenido en las 3 modalidades, numeración según el consecutivo de cada una ── */}
                 <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
                   <SectionHeader title={`${esDirecta ? 'VI' : 'V'}. SUPERVISIÓN Y ENTREGABLES DEL CONTRATO.`} />
 
@@ -2032,10 +1771,9 @@ export function FormularioSolicitud({
                     </div>
                   </div>
 
-                  {/* Obligaciones Específicas — solo Invitación / TDR */}
-                  {!esDirecta && (
+                  {/* Obligaciones Específicas */}
                   <div style={rowStyle}>
-                    <div style={labelCellStyle}>5.2 Obligaciones Específicas:</div>
+                    <div style={labelCellStyle}>{esDirecta ? '6.2' : '5.2'} Obligaciones Específicas:</div>
                     <div style={{ flex: 1, padding: 16 }}>
                       <FieldLabel label="" hint="Liste las obligaciones específicas que debe cumplir el contratista durante la ejecución del contrato." />
                       {obligaciones.map((ob, i) => (
@@ -2068,11 +1806,10 @@ export function FormularioSolicitud({
                       >+ Agregar obligación</button>
                     </div>
                   </div>
-                  )}
 
                   {/* Entregables dinámicos con porcentaje */}
                   <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                    <div style={labelCellStyle}>{esDirecta ? '6.2' : '5.3'} Entregables:</div>
+                    <div style={labelCellStyle}>{esDirecta ? '6.3' : '5.3'} Entregables:</div>
                     <div style={{ flex: 1, padding: 16 }}>
                       <FieldLabel label="" hint="Describa cada entregable. Si el pago está ligado al entregable, indique el porcentaje. La suma de los porcentajes con valor debe ser 100%." />
                       {(() => {
@@ -2115,11 +1852,13 @@ export function FormularioSolicitud({
                                       ) : (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
                                           <input
-                                            type="number" min="0" max="100" step="1"
+                                            type="text" inputMode="numeric"
                                             value={ent.porcentaje}
                                             onChange={e => {
+                                              let v = e.target.value.replace(/[^0-9]/g, '');
+                                              if (v && Number(v) > 100) v = '100';
                                               const next = [...entregablesDetalle];
-                                              next[i] = { ...next[i], porcentaje: e.target.value };
+                                              next[i] = { ...next[i], porcentaje: v };
                                               setEntregablesDetalle(next);
                                             }}
                                             placeholder="0"
@@ -2181,78 +1920,58 @@ export function FormularioSolicitud({
                   </div>
                 </div>
 
-                {/* ── SECCIÓN VI/VII — Anexos ── */}
+                {/* ── SECCIÓN VI/VII — Anexos — mismo contenido en las 3 modalidades ── */}
                 <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
                   <SectionHeader title={`${esDirecta ? 'VII' : 'VI'}. ANEXOS.`} />
 
-                  {esInvitacionOTdr ? (
-                    /* Inv/TDR — campo de texto libre */
-                    <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                      <div style={labelCellStyle}>6.1 Anexos:</div>
-                      <div style={{ flex: 1, padding: 16 }}>
-                        <textarea
-                          value={anexosTexto}
-                          onChange={e => setAnexosTexto(e.target.value)}
-                          rows={5} style={textareaStyle}
-                          placeholder="Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo..."
-                          onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                          onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    /* Directa — tabla dinámica original */
-                    <>
-                      <div style={{ padding: '10px 20px', backgroundColor: '#fff8f7', borderBottom: '1px solid #fdd5c9' }}>
-                        <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
-                          Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo.
-                        </p>
-                      </div>
-                      <div style={{ overflowX: 'auto', padding: '12px 16px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', fontFamily: 'Gabarito, sans-serif' }}>
-                          <thead>
-                            <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                              <th style={{ border: '1px solid #d97458', padding: '8px', color: '#fff', width: 38, textAlign: 'center' }}>#</th>
-                              <th style={{ border: '1px solid #d97458', padding: '8px', color: '#fff', textAlign: 'left' }}>Nombre del documento</th>
-                              <th style={{ border: '1px solid #d97458', padding: '8px', color: '#fff', width: 40 }}></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {anexosDocs.map((a, i) => (
-                              <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fdf9f8' }}>
-                                <td style={{ border: '1px solid #e5e7eb', padding: 6, textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
-                                <td style={{ border: '1px solid #e5e7eb', padding: 4 }}>
-                                  <input type="text" value={a.nombre} onChange={e => handleAnexoChange(i, 'nombre', e.target.value)}
-                                    style={{ ...inputStyle, border: '1px solid transparent' }}
-                                    placeholder="Nombre del documento"
-                                    onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                    onBlur={e => e.target.style.borderColor = 'transparent'}
-                                  />
-                                </td>
-                                <td style={{ border: '1px solid #e5e7eb', padding: 4, textAlign: 'center' }}>
-                                  <button type="button" onClick={() => eliminarAnexo(i)}
-                                    style={{ color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer' }}
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <button type="button" onClick={agregarAnexo}
-                          style={{
-                            marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
-                            padding: '6px 14px', border: '1px solid var(--brand-primary)', borderRadius: 6,
-                            color: 'var(--brand-primary)', backgroundColor: '#fff', cursor: 'pointer',
-                            fontSize: '0.8rem', fontFamily: 'Gabarito, sans-serif', fontWeight: 600
-                          }}
-                        >
-                          <Plus size={14} /> Agregar documento
-                        </button>
-                      </div>
-                    </>
-                  )}
+                  <div style={{ padding: '10px 20px', backgroundColor: '#fff8f7', borderBottom: '1px solid #fdd5c9' }}>
+                    <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
+                      Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo.
+                    </p>
+                  </div>
+                  <div style={{ overflowX: 'auto', padding: '12px 16px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', fontFamily: 'Gabarito, sans-serif' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
+                          <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 38, textAlign: 'center' }}>#</th>
+                          <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', textAlign: 'left' }}>Nombre del documento</th>
+                          <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 40 }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {anexosDocs.map((a, i) => (
+                          <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                            <td style={{ border: '1px solid #e5e7eb', padding: 6, textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
+                            <td style={{ border: '1px solid #e5e7eb', padding: 4 }}>
+                              <input type="text" value={a.nombre} onChange={e => handleAnexoChange(i, 'nombre', e.target.value)}
+                                style={{ ...inputStyle, border: '1px solid transparent' }}
+                                placeholder="Nombre del documento"
+                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                                onBlur={e => e.target.style.borderColor = 'transparent'}
+                              />
+                            </td>
+                            <td style={{ border: '1px solid #e5e7eb', padding: 4, textAlign: 'center' }}>
+                              <button type="button" onClick={() => eliminarAnexo(i)}
+                                style={{ color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer' }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <button type="button" onClick={agregarAnexo}
+                      style={{
+                        marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '6px 14px', border: '1px solid var(--brand-primary)', borderRadius: 6,
+                        color: 'var(--brand-primary)', backgroundColor: '#fff', cursor: 'pointer',
+                        fontSize: '0.8rem', fontFamily: 'Gabarito, sans-serif', fontWeight: 600
+                      }}
+                    >
+                      <Plus size={14} /> Agregar documento
+                    </button>
+                  </div>
                 </div>
 
                 {/* ── SECCIÓN VII/VIII — Riesgos y SST ── */}
@@ -2274,7 +1993,7 @@ export function FormularioSolicitud({
                   </div>
 
                   <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                    <div style={labelCellStyle}>{esDirecta ? '8.2/8.3' : '7.2'} Criterios ambientales o de SST:</div>
+                    <div style={labelCellStyle}>{esDirecta ? '8.2' : '7.2'} Criterios ambientales o de SST:</div>
                     <div style={{ flex: 1, padding: 16 }}>
                       <FieldLabel label="" hint="Teniendo en cuenta las características de la contratación a solicitar, describa los requerimientos ambientales o de seguridad y salud en el trabajo que se deban exigir al contratista o proveedor (si aplica)." />
                       <textarea value={riesgosCriterios.criteriosSST}
@@ -2288,166 +2007,12 @@ export function FormularioSolicitud({
                   </div>
                 </div>
 
-                {/* Conclusiones — solo Directa (no existe en PDF Inv/TDR) */}
-                {esDirecta && (
-                  <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
-                    <SectionHeader title="CONCLUSIONES POR PARTE DEL COMITÉ DE CONTRATACIONES." />
-
-                    <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                      <div style={labelCellStyle}>Conclusiones del Comité:</div>
-                      <div style={{ flex: 1, padding: 16 }}>
-                        <FieldLabel label="" hint="Indicar las conclusiones y si la contratación fue aprobada por el Comité de contrataciones." />
-                        <textarea
-                          value={conclusiones}
-                          onChange={e => { if (rol === 'Administrador') setConclusions(e.target.value); }}
-                          rows={5}
-                          readOnly={rol !== 'Administrador'}
-                          style={{
-                            ...textareaStyle,
-                            ...(rol !== 'Administrador' ? { backgroundColor: '#F9FAFB', color: '#6B7280', cursor: 'not-allowed', borderColor: '#E5E7EB' } : {})
-                          }}
-                          placeholder="Indicar las conclusiones y la viabilidad del presente documento..."
-                          onFocus={e => { if (rol === 'Administrador') e.target.style.borderColor = 'var(--brand-primary)'; }}
-                          onBlur={e => { if (rol === 'Administrador') e.target.style.borderColor = '#D1D5DB'; }}
-                        />
-                        {rol !== 'Administrador' && (
-                          <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: 4, fontStyle: 'italic' }}>
-                            Este campo es diligenciado por el Comité de Contrataciones.
-                          </p>
-                        )}
-                        {rol === 'Administrador' && (
-                          <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: 4, fontStyle: 'italic' }}>
-                            Sugerencia: "Aprobada por unanimidad de los miembros del comité."
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
+                <InstanciasAprobacion solicitud={{ ...solicitudDetalle, modalidad: datosPlaneacion.modalidad }} />
 
               </div>
             )}
 
-            {/* ══════════════ TAB: DOCUMENTOS ══════════════ */}
-            {tabActual === 'documentos' && (
-              <div className="space-y-6">
-                {!modoSoloLectura ? (
-                  <div className="bg-white rounded-xl shadow-lg border-2 border-dashed border-gray-300 p-8">
-                    <div className="text-center mb-6">
-                      <div className="bg-indigo-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <FolderOpen style={{ color: '#3D2B86' }} size={32} />
-                      </div>
-                      <h3 className="text-lg font-bold text-gray-900" style={{ fontFamily: 'Gabarito, sans-serif' }}>Cargar Documentos de Soporte</h3>
-                      <p className="text-sm text-gray-500 max-w-md mx-auto" style={{ fontFamily: 'Gabarito, sans-serif' }}>
-                        Cargue archivos que sirvan de sustento para su solicitud (PDF, Excel, Word). Este campo es opcional.
-                      </p>
-                    </div>
-
-                    <div className="flex justify-center mb-8">
-                      <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-bold transition-all flex items-center gap-2 shadow-md">
-                        <Plus size={20} />
-                        Seleccionar Archivos
-                        <input
-                          type="file"
-                          multiple
-                          className="hidden"
-                          onChange={async (e) => {
-                            if (e.target.files) {
-                              await subirArchivosSolicitante(Array.from(e.target.files));
-                              e.target.value = '';
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-
-                    {archivosSolicitante.length > 0 && (
-                      <div className="space-y-3">
-                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest px-2">Archivos seleccionados ({archivosSolicitante.length})</p>
-                        {archivosSolicitante.map((file, idx) => (
-                          <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 group hover:border-indigo-200 transition-all">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-white rounded-lg border border-gray-200 text-indigo-600">
-                                <FileText size={20} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-bold text-gray-900 leading-none mb-1">{file.nombre}</p>
-                                <p className="text-[10px] text-gray-500 font-medium">{file.tamanio} • {new Date(file.fecha).toLocaleDateString()}</p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setArchivosSolicitante(prev => prev.filter((_, i) => i !== idx))}
-                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 mb-6">
-                      <p className="text-sm text-blue-900 font-medium" style={{ fontFamily: 'Gabarito, sans-serif' }}>Documentos de la Solicitud</p>
-                      <p className="text-xs text-blue-700 mt-1" style={{ fontFamily: 'Gabarito, sans-serif' }}>
-                        Estos documentos fueron cargados por el solicitante como soporte inicial.
-                      </p>
-                    </div>
-                    {archivosSolicitante.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {archivosSolicitante.map((file, idx) => (
-                          <div key={idx} className="flex items-center gap-4 p-4 bg-white rounded-xl shadow-sm border border-gray-200">
-                            <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
-                              <FileText size={24} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-gray-900 truncate">{file.nombre}</p>
-                              <p className="text-[10px] text-gray-500">{file.tamanio} • Soporte Solicitante</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => abrirDocumentoSolicitante(file)}
-                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg font-bold text-xs"
-                            >
-                              Ver
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="bg-white rounded-lg shadow-md border border-gray-200 p-12 text-center">
-                        <FolderOpen className="mx-auto text-gray-300 mb-3" size={48} />
-                        <p className="text-gray-500" style={{ fontFamily: 'Gabarito, sans-serif' }}>No se cargaron soportes iniciales</p>
-                        <div className="mt-4">
-                          <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs border ${subiendoArchivosSolicitante ? 'text-gray-400 border-gray-200 cursor-not-allowed' : 'text-orange-600 border-orange-200 hover:bg-orange-50 cursor-pointer'}`}>
-                            <Plus size={14} /> Cargar soporte
-                            <input
-                              type="file"
-                              className="hidden"
-                              disabled={subiendoArchivosSolicitante}
-                              onChange={async (e) => {
-                                if (e.target.files?.length) {
-                                  await subirArchivosSolicitante(Array.from(e.target.files));
-                                  e.target.value = '';
-                                }
-                              }}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
           </div>
-
-          {esVistaExistente && solicitudDetalle && (
-            <TrazabilidadFlujo solicitud={solicitudDetalle} />
-          )}
 
           {/* Botones */}
           <div
@@ -2503,33 +2068,13 @@ export function FormularioSolicitud({
                   >
                     Siguiente <ChevronDown className="-rotate-90" size={18} />
                   </button>
-                ) : tabActual === 'avanzado' ? (
-                  <div className="flex gap-3">
-                    <button
-                      type="submit"
-                      className="px-8 py-3 text-white rounded-lg hover:shadow-lg transition-all font-bold flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(232,73,34,0.39)]"
-                      style={{ backgroundColor: '#10B981', fontFamily: 'Gabarito, sans-serif' }}
-                    >
-                      <Send size={20} /> Enviar a Gerente
-                    </button>
-                    <button
-                      type="button"
-                      onClick={irASiguiente}
-                      className="px-6 py-3 border-2 text-gray-700 rounded-lg hover:shadow-md transition-all font-medium flex items-center justify-center gap-2"
-                      style={{ borderColor: 'var(--brand-primary)', fontFamily: 'Gabarito, sans-serif', color: 'var(--brand-primary)' }}
-                    >
-                      Ver Documentos <ChevronDown className="-rotate-90" size={18} />
-                    </button>
-                  </div>
                 ) : (
                   <button
                     type="submit"
                     className="px-8 py-3 text-white rounded-lg hover:shadow-lg transition-all font-bold flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(232,73,34,0.39)]"
-                    style={{ backgroundColor: 'var(--brand-primary)', fontFamily: 'Gabarito, sans-serif' }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#C73D1C'}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--brand-primary)'}
+                    style={{ backgroundColor: '#10B981', fontFamily: 'Gabarito, sans-serif' }}
                   >
-                    <Send size={20} /> Enviar Solicitud
+                    <Send size={20} /> Enviar a Gerente
                   </button>
                 )}
               </div>

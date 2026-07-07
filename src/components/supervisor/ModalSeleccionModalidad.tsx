@@ -19,7 +19,7 @@ const modalidades = [
     },
     {
         id: 'Invitación' as const,
-        titulo: 'Invitación',
+        titulo: 'Invitación a Ofertar',
         descripcion: 'Proceso de invitación a mínimo 3 proponentes. Aplica para contrataciones menores a 50 SMLV con cronograma definido.',
         icon: Users,
         color: 'var(--brand-secondary)',
@@ -29,7 +29,7 @@ const modalidades = [
     },
     {
         id: 'TDR' as const,
-        titulo: 'TDR',
+        titulo: 'Términos de Referencia',
         descripcion: 'Proceso con Términos de Referencia completos. Para contrataciones superiores a 50 SMLV que requieren ficha técnica detallada.',
         icon: BookOpen,
         color: 'var(--brand-accent)',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Book, Video, MessageCircle, Mail, Phone } from 'lucide-react';
+import { Book, Video, MessageCircle, Mail, Phone, Headset, ShoppingCart } from 'lucide-react';
 
 export function Ayuda() {
   const recursosAyuda = [
@@ -103,25 +103,29 @@ export function Ayuda() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex items-start gap-4">
               <div className="p-3 bg-blue-100 rounded-lg">
-                <Mail className="text-blue-700" size={24} />
+                <Headset className="text-blue-700" size={24} />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Correo Electrónico</h3>
-                <p className="text-sm text-gray-600 mb-2">Envíanos un email con tu consulta</p>
-                <a href="mailto:soporte@investinbogota.org" className="text-sm font-semibold hover:underline" style={{ color: 'var(--brand-primary)' }}>
-                  soporte@investinbogota.org
+                <h3 className="font-semibold text-gray-900 mb-1">ServiceDesk</h3>
+                <p className="text-sm text-gray-600 mb-2">Para soporte técnico</p>
+                <a href="mailto:ServiceDesk@investinbogota.org" className="text-sm font-semibold hover:underline block" style={{ color: 'var(--brand-primary)' }}>
+                  ServiceDesk@investinbogota.org
+                </a>
+                <a href="tel:+573183414014" className="text-sm font-semibold hover:underline flex items-center gap-1 mt-2" style={{ color: 'var(--brand-primary)' }}>
+                  <Phone size={14} />
+                  (318) 341 4014
                 </a>
               </div>
             </div>
             <div className="flex items-start gap-4">
               <div className="p-3 bg-red-50 rounded-lg">
-                <Phone className="text-red-700" size={24} />
+                <ShoppingCart className="text-red-700" size={24} />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Teléfono</h3>
-                <p className="text-sm text-gray-600 mb-2">Llámanos de lunes a viernes 8am-5pm</p>
-                <a href="tel:+576013813000" className="text-sm font-semibold hover:underline" style={{ color: 'var(--brand-primary)' }}>
-                  +57 (601) 381 3000
+                <h3 className="font-semibold text-gray-900 mb-1">Compras y Contratación</h3>
+                <p className="text-sm text-gray-600 mb-2">Para entender el proceso</p>
+                <a href="mailto:compras@investinbogota.org" className="text-sm font-semibold hover:underline block" style={{ color: 'var(--brand-primary)' }}>
+                  compras@investinbogota.org
                 </a>
               </div>
             </div>

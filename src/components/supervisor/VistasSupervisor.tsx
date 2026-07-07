@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
 import { getUserProfile } from '../../lib/graphService';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 import { useAuthSync } from '../../lib/useAuthSync';
 import { SidebarSupervisor } from './SidebarSupervisor';
 import { DashboardSupervisor } from './DashboardSupervisor';
@@ -14,10 +15,11 @@ import { DetalleContratoSupervisor } from './DetalleContratoSupervisor';
 import { AceptarSupervision } from './AceptarSupervision';
 import { ModalSeleccionModalidad } from './ModalSeleccionModalidad';
 import { CalificacionProponentesSupervisor } from './CalificacionProponentesSupervisor';
+import { HistorialFacturasSupervisor } from './HistorialFacturasSupervisor';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-export type ViewSupervisor = 'dashboard' | 'solicitudes' | 'formulario' | 'evaluacion' | 'contratos' | 'detalleContrato' | 'aceptarSupervision' | 'ayuda' | 'calificacionProponentes';
+export type ViewSupervisor = 'dashboard' | 'solicitudes' | 'formulario' | 'evaluacion' | 'contratos' | 'detalleContrato' | 'aceptarSupervision' | 'ayuda' | 'calificacionProponentes' | 'historialFacturas';
 
 export function VistasSupervisor() {
   const { instance, accounts } = useMsal();
@@ -106,7 +108,7 @@ export function VistasSupervisor() {
           onBack={() => setCurrentView('solicitudes')}
           solicitudId={solicitudSeleccionada}
           supervisorNombre={userName}
-          gerencia={userProfile?.department}
+          gerencia={nombreGerenciaCompleto(userProfile?.department)}
           userEmail={userEmail}
           modalidadInicial={solicitudSeleccionada ? undefined : modalidadSeleccionada}
         />;
@@ -140,6 +142,8 @@ export function VistasSupervisor() {
         );
       case 'evaluacion':
         return <EvaluacionProveedor />;
+      case 'historialFacturas':
+        return <HistorialFacturasSupervisor userEmail={userEmail} />;
       case 'ayuda':
         return <Ayuda />;
       default:
