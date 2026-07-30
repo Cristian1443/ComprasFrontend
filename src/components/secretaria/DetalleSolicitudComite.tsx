@@ -8,6 +8,7 @@ import {
 import { SeccionPresupuestoLectura } from '../shared/SeccionPresupuestoLectura';
 import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
 import { BloqueFirma } from '../shared/BloqueFirma';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 import { DetallePlaneacionContractualParte1, DetallePlaneacionContractualParte2 } from '../shared/DetallePlaneacionContractual';
 import { FormatoPlaneacionImprimible } from './FormatoPlaneacionImprimible';
 import {
@@ -138,7 +139,7 @@ export const getCausalComiteDisplay = (solicitud: SolicitudDetalle): string => {
 const FORMAS_PAGO: Record<string, string> = {
   anticipo: 'Anticipo',
   pago_unico: 'Pago único',
-  mensual: 'Mensual',
+  mensual: 'Mensual vencida',
 };
 
 const getFormaPagoTexto = (codigo: any): string => {
@@ -167,7 +168,7 @@ export function FichaComite({
     ? `${plazoMeses ? `${plazoMeses} mes${plazoMeses === 1 ? '' : 'es'}` : ''}${plazoMeses && plazoDias ? ' · ' : ''}${plazoDias ? `${plazoDias} día${plazoDias === 1 ? '' : 's'}` : ''}`.trim()
     : 'No especificado';
 
-  const origenPpto = solicitud.gerencia_nombre || 'No especificado';
+  const origenPpto = nombreGerenciaCompleto(solicitud.gerencia_nombre) || 'No especificado';
   const rubroPresupuestal = solicitud.rubro || solicitud.rubro_presupuestal || 'No especificado';
   const supervisorNombre = solicitud.supervision_nombre || solicitud.solicitante_nombre || '';
   const supervisorCargo = solicitud.supervision_cargo || solicitud.solicitante_cargo || '';
@@ -183,6 +184,8 @@ export function FichaComite({
   const formaPago = getFormaPagoTexto(solicitud.forma_pago) || 'No especificado';
   const riesgos: string = solicitud.riesgos || '';
   const conceptoJuridico: string = solicitud.concepto_juridico || '';
+  const garantias: string = solicitud.garantias || '';
+  const riesgosJuridicos: string = solicitud.tiene_riesgos_juridicos === true ? (solicitud.riesgos_juridicos || '') : '';
 
   const proponentes: any[] = Array.isArray(solicitud.proponentes) ? solicitud.proponentes : [];
   const proveedorPropuesto = esDirecta
@@ -228,7 +231,7 @@ export function FichaComite({
         <div style={fc.headerRow}>
           <h1 style={fc.ocTitle}>
             {solicitud.titulo_contrato || solicitud.objeto || 'Sin especificar'}
-            {solicitud.gerencia_nombre ? ` — ${solicitud.gerencia_nombre}` : ''}
+            {solicitud.gerencia_nombre ? ` — ${nombreGerenciaCompleto(solicitud.gerencia_nombre)}` : ''}
           </h1>
           <div style={fc.logoIB} aria-hidden>
             <img src="/logo-iib.png" alt="Invest in Bogotá" style={{ height: 56, width: 'auto', objectFit: 'contain' }} />
@@ -261,6 +264,19 @@ export function FichaComite({
                     <span style={fc.cLabel}>Proveedor propuesto:</span>{' '}
                     {proveedorPropuesto ? <span style={fc.panelText}>{proveedorPropuesto}</span> : ph('[Razón social, NIT, representante legal]')}
                   </div>
+                  <div style={fc.panelRow}>
+                    <span style={fc.cLabel}>Concepto jurídico:</span>{' '}
+                    {conceptoJuridico ? <span>{conceptoJuridico}</span> : ph('Viabilidad jurídica de la modalidad / observaciones')}
+                  </div>
+                  <div style={fc.panelRow}>
+                    <span style={fc.cLabel}>Garantías:</span>{' '}
+                    {garantias ? <span>{garantias}</span> : ph('Garantías exigidas al contratista')}
+                  </div>
+                  {riesgosJuridicos && (
+                    <div style={fc.panelRow}>
+                      <span style={fc.cLabel}>Riesgos jurídicos:</span> <span>{riesgosJuridicos}</span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -306,6 +322,15 @@ export function FichaComite({
                     <span style={fc.cLabel}>Concepto jurídico:</span>{' '}
                     {conceptoJuridico ? <span>{conceptoJuridico}</span> : ph('Viabilidad jurídica de la modalidad / observaciones')}
                   </div>
+                  <div style={fc.mercadoInfoRow}>
+                    <span style={fc.cLabel}>Garantías:</span>{' '}
+                    {garantias ? <span>{garantias}</span> : ph('Garantías exigidas al contratista')}
+                  </div>
+                  {riesgosJuridicos && (
+                    <div style={fc.mercadoInfoRow}>
+                      <span style={fc.cLabel}>Riesgos jurídicos:</span> <span>{riesgosJuridicos}</span>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -479,7 +504,6 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
     { label: 'Plazo y lugar definidos', ok: !!(solicitud.lugar_ejecucion && (solicitud.plazo_ejecucion_meses || solicitud.plazo_ejecucion_dias)) },
     { label: 'Presupuesto y modalidad definidos', ok: !!(solicitud.valor_estimado && solicitud.modalidad) },
     { label: 'Supervisión y entregables diligenciados', ok: !!(solicitud.supervision_nombre && solicitud.entregables) },
-    { label: 'Riesgos / SST diligenciados', ok: !!(solicitud.riesgos && solicitud.criterios_ambientales_sst) },
   ];
   const completitud = Math.round((checklist.filter(i => i.ok).length / checklist.length) * 100);
   const completitudColor = completitud >= 80 ? '#10B981' : completitud >= 50 ? '#F59E0B' : '#EF4444';
@@ -674,7 +698,7 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
                   />
                 )}
 
-                <InstanciasAprobacion solicitud={solicitud} />
+                <InstanciasAprobacion solicitud={solicitud} precedidoPorConclusiones={!esDirecta && !!solicitud.conclusiones_comite} />
 
               </div>
             );
@@ -712,7 +736,7 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[10px] text-indigo-200/70 font-bold uppercase tracking-wider">Gerencia</span>
-                    <span className="text-[11px] text-white font-bold text-right truncate">{solicitud.gerencia_nombre}</span>
+                    <span className="text-[11px] text-white font-bold text-right truncate">{nombreGerenciaCompleto(solicitud.gerencia_nombre)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[10px] text-indigo-200/70 font-bold uppercase tracking-wider">

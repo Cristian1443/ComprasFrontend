@@ -27,6 +27,8 @@ interface Contrato {
   total_facturado: number | null;
   facturas_aprobadas: number | null;
   total_facturas: number | null;
+  factura_pendiente_desde: string | null;
+  dias_accion_pendiente: number | null;
 }
 
 interface ContratosSupervisorProps {
@@ -71,7 +73,20 @@ function getDiasRestantes(c: Contrato): number | null {
   return Math.round((fin.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function esFinalizado(contrato: Contrato): boolean {
+  return contrato.estado === 'finalizado' || contrato.estado === 'cerrado';
+}
+
 function EstadoContrato({ contrato }: { contrato: Contrato }) {
+  // El estado de finalización (evaluación de proveedor firmada) manda sobre
+  // el cálculo por plazo: un contrato finalizado ya no debe verse "Vencido".
+  if (esFinalizado(contrato)) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-slate-600 bg-slate-100 border border-slate-300 px-2 py-0.5 rounded">
+        <CheckCircle2 size={10} /> Finalizado
+      </span>
+    );
+  }
   const dias = getDiasRestantes(contrato);
   if (dias === null) {
     return <span className="text-[10px] font-bold uppercase text-gray-400 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded">Sin plazo</span>;
@@ -120,7 +135,18 @@ function AlertaDesfase({ contrato }: { contrato: Contrato }) {
   );
 }
 
-type Filtro = 'todos' | 'activos' | 'por_vencer' | 'vencidos';
+function AlertaFacturaPendiente({ contrato }: { contrato: Contrato }) {
+  const dias = contrato.dias_accion_pendiente;
+  if (dias === null || dias === undefined) return null;
+  const urgente = dias >= 5;
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 ${urgente ? 'text-red-600 bg-red-50 border border-red-200' : 'text-amber-600 bg-amber-50 border border-amber-200'}`}>
+      <Clock size={9} /> Factura esperando {dias}d
+    </span>
+  );
+}
+
+type Filtro = 'todos' | 'activos' | 'por_vencer' | 'vencidos' | 'con_facturas' | 'finalizados';
 
 export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSupervisorProps) {
   const [contratos, setContratos] = useState<Contrato[]>([]);
@@ -140,24 +166,32 @@ export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSuperv
   const filtered = contratos.filter(c => {
     const dias = getDiasRestantes(c);
     const matchFiltro =
-      filtro === 'activos'    ? (dias !== null && dias > 30) :
-      filtro === 'por_vencer' ? (dias !== null && dias >= 0 && dias <= 30) :
-      filtro === 'vencidos'   ? (dias !== null && dias < 0) :
+      filtro === 'activos'      ? (!esFinalizado(c) && dias !== null && dias > 30) :
+      filtro === 'por_vencer'   ? (!esFinalizado(c) && dias !== null && dias >= 0 && dias <= 30) :
+      filtro === 'vencidos'     ? (!esFinalizado(c) && dias !== null && dias < 0) :
+      filtro === 'finalizados'  ? esFinalizado(c) :
+      filtro === 'con_facturas' ? (c.dias_accion_pendiente !== null && c.dias_accion_pendiente !== undefined) :
       true;
     const q = search.toLowerCase();
     return matchFiltro && (!q || (c.codigo||'').toLowerCase().includes(q) || (c.titulo_contrato||'').toLowerCase().includes(q) || (c.objeto||'').toLowerCase().includes(q) || (c.proveedor_nombre||'').toLowerCase().includes(q));
   });
 
-  const porVencer = contratos.filter(c => { const d = getDiasRestantes(c); return d !== null && d >= 0 && d <= 30; }).length;
-  const vencidos  = contratos.filter(c => { const d = getDiasRestantes(c); return d !== null && d < 0; }).length;
+  // Los contratos finalizados ya no cuentan como "vencidos" o "por vencer":
+  // el cálculo por plazo deja de aplicar una vez cerrado el contrato.
+  const porVencer    = contratos.filter(c => { const d = getDiasRestantes(c); return !esFinalizado(c) && d !== null && d >= 0 && d <= 30; }).length;
+  const vencidos     = contratos.filter(c => { const d = getDiasRestantes(c); return !esFinalizado(c) && d !== null && d < 0; }).length;
+  const finalizados  = contratos.filter(esFinalizado).length;
+  const conFacturas  = contratos.filter(c => c.dias_accion_pendiente !== null && c.dias_accion_pendiente !== undefined).length;
 
   const valorTotal = contratos.reduce((acc, c) => acc + (c.valor_en_cop ?? c.valor_estimado ?? 0), 0);
 
   const TABS: { id: Filtro; label: string; count: number }[] = [
-    { id: 'todos',      label: 'Todos',      count: contratos.length },
-    { id: 'activos',    label: 'Activos',    count: contratos.length - porVencer - vencidos },
-    { id: 'por_vencer', label: 'Por vencer', count: porVencer },
-    { id: 'vencidos',   label: 'Vencidos',   count: vencidos },
+    { id: 'todos',        label: 'Todos',        count: contratos.length },
+    { id: 'activos',      label: 'Activos',      count: contratos.length - porVencer - vencidos - finalizados },
+    { id: 'por_vencer',   label: 'Por vencer',   count: porVencer },
+    { id: 'vencidos',     label: 'Vencidos',     count: vencidos },
+    { id: 'finalizados',  label: 'Finalizados',  count: finalizados },
+    { id: 'con_facturas', label: 'Facturas por aprobar', count: conFacturas },
   ];
 
   return (
@@ -280,7 +314,7 @@ export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSuperv
             {filtered.map((c, idx) => {
               const dias  = getDiasRestantes(c);
               const valor = getValor(c);
-              const accentColor = dias === null ? '#e5e7eb' : dias < 0 ? CTA : dias <= 30 ? ACCENT : BRAND;
+              const accentColor = esFinalizado(c) ? '#64748b' : dias === null ? '#e5e7eb' : dias < 0 ? CTA : dias <= 30 ? ACCENT : BRAND;
 
               return (
                 <div key={c.id} className={idx !== 0 ? 'border-t border-gray-100' : ''}>
@@ -328,6 +362,7 @@ export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSuperv
                       ) : (
                         <span className="text-gray-300 text-xs">-</span>
                       )}
+                      <AlertaFacturaPendiente contrato={c} />
                       <AlertaDesfase contrato={c} />
                     </div>
 
@@ -361,6 +396,7 @@ export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSuperv
                         {valor && <span className="font-semibold text-gray-700">{valor.moneda} {valor.valor}</span>}
                         <span>{formatPlazo(c)}</span>
                       </div>
+                      <AlertaFacturaPendiente contrato={c} />
                       <AlertaDesfase contrato={c} />
                     </div>
                     <button

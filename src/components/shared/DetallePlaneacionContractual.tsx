@@ -1,5 +1,27 @@
 import React from 'react';
+import { Download } from 'lucide-react';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
+
+const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
+
+/** Nombre del anexo + enlace de descarga si tiene archivo cargado. */
+function AnexoItem({ a }: { a: any }) {
+  const nombre = a.nombre_documento || a.nombre || 'Documento sin nombre';
+  const url = a.archivo_url || a.archivoUrl;
+  return (
+    <span>
+      {nombre}
+      {url && (
+        <a href={`${API_URL}${url}`} target="_blank" rel="noopener noreferrer"
+          title={a.archivo_nombre_original || a.archivoNombre || 'Ver archivo'}
+          style={{ marginLeft: 8, color: 'var(--brand-primary)', display: 'inline-flex', verticalAlign: 'middle' }}
+        >
+          <Download size={13} />
+        </a>
+      )}
+    </span>
+  );
+}
 
 /**
  * Documento de planeación contractual — versión de solo lectura.
@@ -10,6 +32,13 @@ import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 interface Props {
   solicitud: Record<string, any>;
+}
+
+interface Props2 extends Props {
+  /** Reemplaza el bloque de solo-lectura de "Concepto Jurídico y Garantías" por otro
+   *  contenido (p. ej. la versión editable que usa Jurídica). Si se omite, se usa
+   *  el bloque de solo-lectura por defecto en la posición correcta según modalidad. */
+  conceptoJuridicoSlot?: React.ReactNode;
 }
 
 const CARD: React.CSSProperties = {
@@ -96,6 +125,7 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
   const fechaEstimada = fmtFecha(s?.fecha_estimada_solicitud);
 
   const proponentes: any[] = Array.isArray(s?.proponentes) ? s.proponentes : [];
+  const anexosDocsIV: any[] = Array.isArray(s?.anexosDocs) ? s.anexosDocs : (Array.isArray(s?.anexos) ? s.anexos : []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -152,13 +182,13 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
 
         <SectionHeader title="I. Justificación y Descripción de la Necesidad" />
         <DataRow
-          label="1.1 Justificación:"
+          label="1.1 Justificación y Descripción:"
           hint="En este apartado se redactará la justificación por la cual se requiere el objeto a contratar, indicando la necesidad a satisfacer de conformidad con el propósito superior de La Corporación, objetivos y metas de los cual se deriva la contratación, así como las funciones del área solicitante."
           value={s?.justificacion}
         />
         <DataRow
-          label="1.2 Descripción de la necesidad:"
-          hint="Describa de forma clara y concisa la necesidad específica que da origen a esta contratación."
+          label="1.2 Especificaciones técnicas:"
+          hint="Describa de forma clara y concisa las especificaciones técnicas del bien o servicio a contratar."
           value={s?.descripcion_necesidad_detalle}
           last
         />
@@ -316,11 +346,26 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
         <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={CARD}>
           <SectionHeader title="IV. Identificación del Contrato a Celebrar y Modalidad de Selección." />
           <DataRow
-            label="4.1 Modalidad de selección:"
+            label="4.1 Causal de contratación:"
             hint="Conforme con los resultados del apartado anterior 'III. Investigación de mercado', la contratación se debe realizar de manera directa, seleccione la causal que justifica la modalidad de contratación, de acuerdo con lo indicado en el ítem a) del numeral 5.2.1 del MA-GAF-01 Manual de Procedimientos de Compras y Contratación."
-            value={s?.modalidad_seleccion || s?.justificacion_cd}
-            last
+            value={s?.modalidad_seleccion}
           />
+          <DataRow
+            label="4.2 Justificación de la causal:"
+            hint="Sustente por qué la causal seleccionada aplica a esta contratación."
+            value={s?.justificacion_cd}
+          />
+          <div style={{ display: 'flex' }}>
+            <div style={{ ...PDF_LABEL, alignItems: 'flex-start', paddingTop: 14 }}>4.3 Anexos y cargue de documentos:</div>
+            <div style={PDF_CELL}>
+              <p style={PDF_HINT}>Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo.</p>
+              {anexosDocsIV.length > 0 ? (
+                <ol style={{ ...VALUE_TEXT, margin: 0, paddingLeft: 18 }}>
+                  {anexosDocsIV.map((a: any, i: number) => <li key={i}><AnexoItem a={a} /></li>)}
+                </ol>
+              ) : EMPTY_DASH}
+            </div>
+          </div>
         </div>
       )}
 
@@ -332,7 +377,7 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
  * Parte 2: Secciones V/VI (Supervisión y Entregables), VI/VII (Anexos) y VII/VIII (Riesgos y SST).
  * Va después de la sección de Presupuesto/Forma de Pago propia de cada vista.
  */
-export function DetallePlaneacionContractualParte2({ solicitud: s }: Props) {
+export function DetallePlaneacionContractualParte2({ solicitud: s, conceptoJuridicoSlot }: Props2) {
   const modalidad = String(s?.modalidad || '').toLowerCase();
   const esDirecta = modalidad.includes('directa');
 
@@ -342,19 +387,18 @@ export function DetallePlaneacionContractualParte2({ solicitud: s }: Props) {
 
   const numeroSeccion = (noDir: string, dir: string) => (esDirecta ? dir : noDir);
 
+  const conceptoJuridicoBloque = conceptoJuridicoSlot !== undefined
+    ? conceptoJuridicoSlot
+    : <SeccionConceptoJuridicoLectura solicitud={s} />;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
       {/* ── SECCIÓN V/VI — Supervisión y Entregables ── */}
       <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={CARD}>
         <SectionHeader title={`${numeroSeccion('V', 'VI')}. Supervisión y Entregables del Contrato.`} />
-        <DataRow
-          label={`${numeroSeccion('5.1', '6.1')} Posibilidad de Supervisión:`}
-          hint="La supervisión del contrato estará a cargo del [cargo], según lo indicado por el Gerente de Área Solicitante o su delegado, y de conformidad con el Manual de Supervisión e Interventoría de la entidad."
-          value={s?.supervision_nombre}
-        />
         <div style={ROW_B}>
-          <div style={{ ...PDF_LABEL, alignItems: 'flex-start', paddingTop: 14 }}>{numeroSeccion('5.2', '6.2')} Obligaciones Específicas:</div>
+          <div style={{ ...PDF_LABEL, alignItems: 'flex-start', paddingTop: 14 }}>{numeroSeccion('5.1', '6.1')} Obligaciones Específicas:</div>
           <div style={PDF_CELL}>
             <p style={PDF_HINT}>Liste las obligaciones específicas que debe cumplir el contratista durante la ejecución del contrato.</p>
             {obligaciones.length > 0 ? (
@@ -365,7 +409,7 @@ export function DetallePlaneacionContractualParte2({ solicitud: s }: Props) {
           </div>
         </div>
         <div style={{ display: 'flex' }}>
-          <div style={{ ...PDF_LABEL, alignItems: 'flex-start', paddingTop: 14 }}>{numeroSeccion('5.3', '6.3')} Entregables:</div>
+          <div style={{ ...PDF_LABEL, alignItems: 'flex-start', paddingTop: 14 }}>{numeroSeccion('5.2', '6.2')} Entregables:</div>
           <div style={PDF_CELL}>
             <p style={PDF_HINT}>Describa cada entregable. Si el pago está ligado al entregable, indique el porcentaje. La suma de los porcentajes con valor debe ser 100%.</p>
             {entregablesDetalle.length > 0 ? (
@@ -394,53 +438,68 @@ export function DetallePlaneacionContractualParte2({ solicitud: s }: Props) {
         </div>
       </div>
 
-      {/* ── SECCIÓN VI/VII — Anexos ── */}
-      <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={CARD}>
-        <SectionHeader title={`${numeroSeccion('VI', 'VII')}. Anexos.`} />
-        <div style={{ padding: '10px 20px', backgroundColor: '#fff8f7', borderBottom: '1px solid #fdd5c9' }}>
-          <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic', fontFamily: 'Gabarito, sans-serif' }}>
-            Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo.
-          </p>
-        </div>
-        <div style={{ overflowX: 'auto', padding: '12px 16px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', fontFamily: 'Gabarito, sans-serif' }}>
-            <thead>
-              <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 38, textAlign: 'center' }}>#</th>
-                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', textAlign: 'left' }}>Nombre del documento</th>
-              </tr>
-            </thead>
-            <tbody>
-              {anexosDocs.length > 0 ? anexosDocs.map((a: any, i: number) => (
-                <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                  <td style={{ border: '1px solid #e5e7eb', padding: 6, textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
-                  <td style={{ border: '1px solid #e5e7eb', padding: 6 }}>{a.nombre_documento || a.nombre || EMPTY_DASH}</td>
+      {/* ── SECCIÓN VI — Anexos — solo Invitación/TDR (en Directa vive en el punto 4.3) ── */}
+      {!esDirecta && (
+        <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={CARD}>
+          <SectionHeader title="VI. Anexos." />
+          <div style={{ padding: '10px 20px', backgroundColor: '#fff8f7', borderBottom: '1px solid #fdd5c9' }}>
+            <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic', fontFamily: 'Gabarito, sans-serif' }}>
+              Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo.
+            </p>
+          </div>
+          <div style={{ overflowX: 'auto', padding: '12px 16px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', fontFamily: 'Gabarito, sans-serif' }}>
+              <thead>
+                <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
+                  <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 38, textAlign: 'center' }}>#</th>
+                  <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', textAlign: 'left' }}>Nombre del documento</th>
                 </tr>
-              )) : (
-                <tr><td colSpan={2} style={{ border: '1px solid #e5e7eb', padding: 10, textAlign: 'center' }}>{EMPTY_DASH}</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {anexosDocs.length > 0 ? anexosDocs.map((a: any, i: number) => (
+                  <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                    <td style={{ border: '1px solid #e5e7eb', padding: 6, textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
+                    <td style={{ border: '1px solid #e5e7eb', padding: 6 }}><AnexoItem a={a} /></td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={2} style={{ border: '1px solid #e5e7eb', padding: 10, textAlign: 'center' }}>{EMPTY_DASH}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ── SECCIÓN VII/VIII — Riesgos y Criterios Ambientales o de SST ── */}
+      {/* ── SECCIÓN VII — Concepto Jurídico y Garantías ── */}
       <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={CARD}>
-        <SectionHeader title={`${numeroSeccion('VII', 'VIII')}. Riesgos y Criterios Ambientales o de SST.`} />
-        <DataRow
-          label={`${numeroSeccion('7.1', '8.1')} Riesgos:`}
-          hint="El riesgo es un evento que puede generar efectos adversos y de distinta magnitud en el logro de los objetivos del Proceso de Contratación o en la ejecución de un Contrato. Por lo anterior, describa los posibles riesgos que se podrían presentar en la etapa precontractual, contractual y de ejecución del proceso de contratación descrito en el presente documento."
-          value={s?.riesgos}
-        />
-        <DataRow
-          label={`${numeroSeccion('7.2', '8.2')} Criterios ambientales o de SST:`}
-          hint="Teniendo en cuenta las características de la contratación a solicitar, describa los requerimientos ambientales o de seguridad y salud en el trabajo que se deban exigir al contratista o proveedor (si aplica)."
-          value={s?.criterios_ambientales_sst}
-          last
-        />
+        <SectionHeader title="VII. Concepto Jurídico y Garantías." />
+        {conceptoJuridicoBloque}
       </div>
 
     </div>
+  );
+}
+
+/** Sección de solo lectura "Concepto Jurídico y Garantías" (la diligencia Jurídica). */
+function SeccionConceptoJuridicoLectura({ solicitud: s }: { solicitud: any }) {
+  const n1 = '7.1';
+  const n2 = '7.2';
+  const n3 = '7.3';
+  const n31 = '7.3.1';
+  const tieneRiesgos = s?.tiene_riesgos_juridicos === true;
+  return (
+    <>
+      <DataRow label={`${n1} Concepto jurídico:`} value={s?.concepto_juridico} />
+      <DataRow label={`${n2} Garantías:`} value={s?.garantias} />
+      <DataRow
+        label={`${n3} ¿Tiene riesgos jurídicos?:`}
+        value={s?.tiene_riesgos_juridicos === true ? 'Sí' : s?.tiene_riesgos_juridicos === false ? 'No' : undefined}
+        last={!tieneRiesgos}
+      />
+      {tieneRiesgos && (
+        <DataRow label={`${n31} Riesgos:`} value={s?.riesgos_juridicos} last />
+      )}
+    </>
   );
 }
 

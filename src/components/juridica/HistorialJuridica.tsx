@@ -4,6 +4,7 @@ import {
     CheckCircle2, XCircle, Clock, FileText, Shield,
     AlertCircle, Trash2, Send, UserCheck, Lock
 } from 'lucide-react';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -107,25 +108,24 @@ function getStatusDisplay(estado: string) {
 export function HistorialJuridica({ onSelect }: { onSelect?: (id: string) => void }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [historial, setHistorial] = useState<SolicitudHistorial[]>([]);
     const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-    useEffect(() => {
-        const fetchHistorial = async () => {
-            try {
-                const res = await fetch(`${API_URL}/api/juridica/historial`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setHistorial(Array.isArray(data) ? data : []);
-                }
-            } catch (err) {
+    const fetchHistorial = () => {
+        setLoading(true);
+        setError(null);
+        fetch(`${API_URL}/api/juridica/historial`)
+            .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+            .then(data => setHistorial(Array.isArray(data) ? data : []))
+            .catch(err => {
                 console.error('Error fetching juridica history:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchHistorial();
-    }, []);
+                setError('No se pudo cargar el historial. Intenta de nuevo.');
+            })
+            .finally(() => setLoading(false));
+    };
+
+    useEffect(() => { fetchHistorial(); }, []);
 
     const filteredHistory = historial.filter(h =>
         h.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -157,6 +157,16 @@ export function HistorialJuridica({ onSelect }: { onSelect?: (id: string) => voi
                     Registro de acciones realizadas por el Área Jurídica sobre cada solicitud.
                 </p>
             </div>
+
+            {error && (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold">
+                    <AlertCircle size={16} />
+                    <span className="flex-1">{error}</span>
+                    <button onClick={fetchHistorial} className="text-xs font-black uppercase underline underline-offset-2 hover:opacity-70">
+                        Reintentar
+                    </button>
+                </div>
+            )}
 
             {/* Search */}
             <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -210,7 +220,7 @@ export function HistorialJuridica({ onSelect }: { onSelect?: (id: string) => voi
                                     </div>
                                     <p className="text-sm font-bold text-slate-800 leading-snug line-clamp-1 mt-1">{sol.titulo_contrato || sol.objeto}</p>
                                     <p className="text-xs text-slate-400 mt-1">
-                                        {sol.solicitante_nombre} · {sol.gerencia_nombre} · Actualizado {new Date(sol.actualizado_en).toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        {sol.solicitante_nombre} · {nombreGerenciaCompleto(sol.gerencia_nombre)} · Actualizado {new Date(sol.actualizado_en).toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">

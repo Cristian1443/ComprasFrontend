@@ -7,6 +7,7 @@ import {
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
 import { getGraphClient } from '../../lib/graphService';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -240,7 +241,7 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
           <Row label="Código de solicitud" value={sol.codigo} />
           <Row label="Modalidad" value={sol.modalidad?.toUpperCase()} />
           <Row label="Estado" value={<BadgeEstado estado={sol.estado} />} />
-          <Row label="Gerencia solicitante" value={sol.gerencia_nombre} />
+          <Row label="Gerencia solicitante" value={nombreGerenciaCompleto(sol.gerencia_nombre)} />
           <Row label="Solicitante" value={sol.solicitante_nombre} />
           <Row label="Fecha aprobación jurídica" value={formatDate(sol.fecha_respuesta_juridica)} last />
         </div>

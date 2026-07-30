@@ -75,14 +75,19 @@ export function ContratosJuridica({ onSelect }: ContratosJuridicaProps = {}) {
   const [search, setSearch] = useState('');
   const [openingSharePoint, setOpeningSharePoint] = useState<string | null>(null);
   const [spError, setSpError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const cargarContratos = () => {
+    setLoading(true);
+    setError(null);
     fetch(`${API_BASE}/api/juridica/contratos`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(data => setContratos(Array.isArray(data) ? data : []))
-      .catch(() => setContratos([]))
+      .catch(() => setError('No se pudieron cargar los contratos. Intenta de nuevo.'))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { cargarContratos(); }, []);
 
   const filtered = contratos.filter(c =>
     !search ||
@@ -165,6 +170,15 @@ export function ContratosJuridica({ onSelect }: ContratosJuridicaProps = {}) {
       {spError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700" style={{ fontFamily: 'Gabarito, sans-serif' }}>
           {spError}
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700" style={{ fontFamily: 'Gabarito, sans-serif' }}>
+          <span className="flex-1">{error}</span>
+          <button onClick={cargarContratos} className="text-xs font-black uppercase underline underline-offset-2 hover:opacity-70">
+            Reintentar
+          </button>
         </div>
       )}
 

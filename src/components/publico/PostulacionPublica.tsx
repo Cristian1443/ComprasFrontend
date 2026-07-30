@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   Clock, CheckCircle2, XCircle, Send, Loader2, AlertTriangle,
-  Lock, FileText, Building2, Mail, Phone, User, Info, ShieldCheck, ChevronDown, ChevronUp
+  Lock, FileText, Building2, User, ShieldCheck, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { COLORES } from '../../styles/colores-corporativos';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
 const FONT = "'Gabarito', sans-serif";
@@ -21,6 +22,9 @@ interface ConvocatoriaPublica {
   razon_cierre?: string | null;
   tipo_proponente?: 'empresa' | 'persona';
 }
+
+const REGIMENES_EMPRESA = ['Régimen Ordinario', 'Régimen Simple de Tributación (RST)', 'Régimen Tributario Especial (RTE)'];
+const REGIMENES_PERSONA = ['Régimen Ordinario', 'Régimen Simple de Tributación (RST)'];
 
 function fmtFecha(iso: string) {
   if (!iso) return '-';
@@ -41,20 +45,70 @@ function tiempoRestante(fechaLimite: string): string {
   return `${mins} minuto${mins > 1 ? 's' : ''} restantes`;
 }
 
+/* ── Bloques reutilizables de la tabla RA1-4 (definidos fuera del componente
+     para no perder el foco de los inputs en cada render) ── */
+function SeccionRoja({ children }: { children: React.ReactNode }) {
+  return <div style={p.seccionRoja}>{children}</div>;
+}
+function EncabezadoTabla({ children }: { children: React.ReactNode }) {
+  return <div style={p.encabezadoTabla}>{children}</div>;
+}
+function Fila({ children, ultima }: { children: React.ReactNode; ultima?: boolean }) {
+  return <div style={{ ...p.fila, ...(ultima ? { borderBottom: 'none' } : {}) }}>{children}</div>;
+}
+function Campo({ label, children, minWidth = 220 }: { label: string; children: React.ReactNode; minWidth?: number }) {
+  return (
+    <div style={{ ...p.campo, minWidth }}>
+      <div style={p.celdaLabel}>{label}</div>
+      <div style={p.celdaValor}>{children}</div>
+    </div>
+  );
+}
+
 export function PostulacionPublica() {
   const [convId, setConvId] = useState('');
   const [data, setData] = useState<ConvocatoriaPublica | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
+  /* ── Identificación ── */
   const [nombreEmpresa, setNombreEmpresa] = useState('');
-  const [nombreContacto, setNombreContacto] = useState('');
   const [nit, setNit] = useState('');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [cedula, setCedula] = useState('');
   const [tipoProponente, setTipoProponente] = useState<'empresa' | 'persona'>('empresa');
+  const [tipoDocumento, setTipoDocumento] = useState('NIT');
+  const [domicilio, setDomicilio] = useState('');
+  const [paginaWeb, setPaginaWeb] = useState('');
+
+  /* ── Representación legal (solo empresa) ── */
+  const [representanteLegalNombre, setRepresentanteLegalNombre] = useState('');
+  const [representanteLegalTipoId, setRepresentanteLegalTipoId] = useState('Cédula de ciudadanía');
+  const [representanteLegalIdentificacion, setRepresentanteLegalIdentificacion] = useState('');
+  const [representanteLegalDireccion, setRepresentanteLegalDireccion] = useState('');
+  const [representanteLegalAutorizado, setRepresentanteLegalAutorizado] = useState('');
+
+  /* ── Datos tributarios ── */
+  const [ciiu, setCiiu] = useState('');
+  const [tarifa, setTarifa] = useState('');
+  const [regimen, setRegimen] = useState('');
+  const [actividadEconomica, setActividadEconomica] = useState('');
+  const [municipioInscripcion, setMunicipioInscripcion] = useState('');
+  const [esGranContribuyente, setEsGranContribuyente] = useState('');
+  const [granContribuyenteResolucion, setGranContribuyenteResolucion] = useState('');
+  const [granContribuyenteFecha, setGranContribuyenteFecha] = useState('');
+  const [esAutoRetenedor, setEsAutoRetenedor] = useState('');
+  const [autoRetenedorResolucion, setAutoRetenedorResolucion] = useState('');
+  const [autoRetenedorFecha, setAutoRetenedorFecha] = useState('');
+  const [esEntidadEstado, setEsEntidadEstado] = useState('');
+  const [exentoImpuestoRenta, setExentoImpuestoRenta] = useState('');
+
+  /* ── Reconocimiento de proveedor ya registrado antes (por documento) ── */
+  const [buscandoProveedor, setBuscandoProveedor] = useState(false);
+  const [proveedorReconocido, setProveedorReconocido] = useState(false);
+
   const [aceptaTratamientoDatos, setAceptaTratamientoDatos] = useState(false);
   const [mostrarPolitica, setMostrarPolitica] = useState(false);
 
@@ -95,24 +149,152 @@ export function PostulacionPublica() {
     return () => clearInterval(intervalo);
   }, [convId, enviado]);
 
+  const seleccionarTipoProponente = (tipo: 'empresa' | 'persona') => {
+    setTipoProponente(tipo);
+    setTipoDocumento(tipo === 'empresa' ? 'NIT' : 'Cédula de ciudadanía');
+    const regimenesValidos = tipo === 'empresa' ? REGIMENES_EMPRESA : REGIMENES_PERSONA;
+    setRegimen(prev => regimenesValidos.includes(prev) ? prev : '');
+    setProveedorReconocido(false);
+  };
+
+  /* ── Al salir del campo "Número de documento": buscar si ya se registró antes
+       en otra convocatoria y, de encontrarlo, completar los campos vacíos. ── */
+  const buscarProveedorPorDocumento = async () => {
+    const documento = (tipoProponente === 'empresa' ? nit : cedula).trim();
+    if (!documento) return;
+    setBuscandoProveedor(true);
+    try {
+      const resp = await fetch(`${API_URL}/api/proveedores/buscar-por-documento?documento=${encodeURIComponent(documento)}&tipo_persona=${tipoProponente}`);
+      if (!resp.ok) return;
+      const r = await resp.json();
+      if (!r.encontrado) return;
+
+      if (tipoProponente === 'empresa') { if (!nombreEmpresa.trim() && r.nombre) setNombreEmpresa(r.nombre); }
+      else { if (!nombreCompleto.trim() && r.nombre) setNombreCompleto(r.nombre); }
+      if (!email.trim() && r.email) setEmail(r.email);
+      if (!telefono.trim() && r.telefono) setTelefono(r.telefono);
+      if (r.tipo_documento) setTipoDocumento(r.tipo_documento);
+      if (!domicilio.trim() && r.domicilio) setDomicilio(r.domicilio);
+      if (!paginaWeb.trim() && r.pagina_web) setPaginaWeb(r.pagina_web);
+
+      if (tipoProponente === 'empresa') {
+        if (!representanteLegalNombre.trim() && r.representante_legal_nombre) setRepresentanteLegalNombre(r.representante_legal_nombre);
+        if (r.representante_legal_tipo_id) setRepresentanteLegalTipoId(r.representante_legal_tipo_id);
+        if (!representanteLegalIdentificacion.trim() && r.representante_legal_identificacion) setRepresentanteLegalIdentificacion(r.representante_legal_identificacion);
+        if (!representanteLegalDireccion.trim() && r.representante_legal_direccion) setRepresentanteLegalDireccion(r.representante_legal_direccion);
+        if (!representanteLegalAutorizado.trim() && r.representante_legal_autorizado) setRepresentanteLegalAutorizado(r.representante_legal_autorizado);
+      }
+
+      if (!ciiu.trim() && r.ciiu) setCiiu(r.ciiu);
+      if (!tarifa.trim() && r.tarifa) setTarifa(r.tarifa);
+      if (!regimen.trim() && r.regimen) setRegimen(r.regimen);
+      if (!actividadEconomica.trim() && r.actividad_economica) setActividadEconomica(r.actividad_economica);
+      if (!municipioInscripcion.trim() && r.municipio_inscripcion) setMunicipioInscripcion(r.municipio_inscripcion);
+
+      if (esGranContribuyente === '' && typeof r.es_gran_contribuyente === 'boolean') {
+        setEsGranContribuyente(r.es_gran_contribuyente ? 'true' : 'false');
+        if (r.es_gran_contribuyente) {
+          if (r.gran_contribuyente_resolucion) setGranContribuyenteResolucion(r.gran_contribuyente_resolucion);
+          if (r.gran_contribuyente_fecha) setGranContribuyenteFecha(String(r.gran_contribuyente_fecha).slice(0, 10));
+        }
+      }
+      if (esAutoRetenedor === '' && typeof r.es_auto_retenedor === 'boolean') {
+        setEsAutoRetenedor(r.es_auto_retenedor ? 'true' : 'false');
+        if (r.es_auto_retenedor) {
+          if (r.auto_retenedor_resolucion) setAutoRetenedorResolucion(r.auto_retenedor_resolucion);
+          if (r.auto_retenedor_fecha) setAutoRetenedorFecha(String(r.auto_retenedor_fecha).slice(0, 10));
+        }
+      }
+      if (esEntidadEstado === '' && typeof r.es_entidad_estado === 'boolean') setEsEntidadEstado(r.es_entidad_estado ? 'true' : 'false');
+      if (exentoImpuestoRenta === '' && typeof r.exento_impuesto_renta === 'boolean') setExentoImpuestoRenta(r.exento_impuesto_renta ? 'true' : 'false');
+
+      setProveedorReconocido(true);
+    } catch {
+      // silencioso — si falla la búsqueda, el usuario simplemente diligencia el formulario a mano
+    } finally {
+      setBuscandoProveedor(false);
+    }
+  };
+
   const handlePostular = async () => {
     setErrorEnvio('');
     const esPersona = tipoProponente === 'persona';
+
     if (esPersona) {
       if (!nombreCompleto.trim()) { setErrorEnvio('El nombre completo es obligatorio.'); return; }
       if (!cedula.trim()) { setErrorEnvio('La cédula es obligatoria.'); return; }
     } else {
       if (!nombreEmpresa.trim()) { setErrorEnvio('El nombre de la empresa es obligatorio.'); return; }
+      if (!nit.trim()) { setErrorEnvio('El NIT es obligatorio.'); return; }
     }
     if (!email.trim()) { setErrorEnvio('El correo electrónico es obligatorio.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setErrorEnvio('El correo electrónico no es válido.'); return; }
+    if (!telefono.trim()) { setErrorEnvio('El teléfono es obligatorio.'); return; }
+    if (!tipoDocumento.trim()) { setErrorEnvio('El tipo de documento es obligatorio.'); return; }
+    if (!domicilio.trim()) { setErrorEnvio('El domicilio es obligatorio.'); return; }
+    if (!paginaWeb.trim()) { setErrorEnvio('La página web es obligatoria.'); return; }
+
+    if (!esPersona) {
+      if (!representanteLegalNombre.trim() || !representanteLegalTipoId.trim() || !representanteLegalIdentificacion.trim() || !representanteLegalDireccion.trim()) {
+        setErrorEnvio('Los datos del representante legal son obligatorios.'); return;
+      }
+    }
+
+    if (!ciiu.trim() || !tarifa.trim() || !regimen.trim() || !actividadEconomica.trim() || !municipioInscripcion.trim()) {
+      setErrorEnvio('Completa todos los datos tributarios (CIIU, tarifa, régimen, actividad económica y municipio).'); return;
+    }
+    if (esGranContribuyente === '') { setErrorEnvio('Indica si es Gran Contribuyente.'); return; }
+    if (esGranContribuyente === 'true' && (!granContribuyenteResolucion.trim() || !granContribuyenteFecha)) {
+      setErrorEnvio('Indica la Resolución y Fecha de Gran Contribuyente.'); return;
+    }
+    if (esAutoRetenedor === '') { setErrorEnvio('Indica si es Auto Retenedor.'); return; }
+    if (esAutoRetenedor === 'true' && (!autoRetenedorResolucion.trim() || !autoRetenedorFecha)) {
+      setErrorEnvio('Indica la Resolución y Fecha de Auto Retenedor.'); return;
+    }
+    if (esEntidadEstado === '') { setErrorEnvio('Indica si es entidad del estado.'); return; }
+    if (exentoImpuestoRenta === '') { setErrorEnvio('Indica si está exento de impuesto a la renta.'); return; }
     if (!aceptaTratamientoDatos) { setErrorEnvio('Debes aceptar la Política de Tratamiento de Datos Personales para continuar.'); return; }
 
     setEnviando(true);
     try {
-      const cuerpo = esPersona
-        ? { nombre_completo: nombreCompleto.trim(), cedula: cedula.trim(), email: email.trim(), telefono: telefono.trim() || undefined, acepta_tratamiento_datos: true }
-        : { nombre_empresa: nombreEmpresa.trim(), nombre_contacto: nombreContacto.trim() || undefined, nit: nit.trim() || undefined, email: email.trim(), telefono: telefono.trim() || undefined, acepta_tratamiento_datos: true };
+      const cuerpo: Record<string, any> = {
+        email: email.trim(),
+        telefono: telefono.trim(),
+        acepta_tratamiento_datos: true,
+        tipo_documento: tipoDocumento.trim(),
+        domicilio: domicilio.trim(),
+        pagina_web: paginaWeb.trim(),
+        ciiu: ciiu.trim(),
+        tarifa: tarifa.trim(),
+        regimen: regimen.trim(),
+        actividad_economica: actividadEconomica.trim(),
+        municipio_inscripcion: municipioInscripcion.trim(),
+        es_gran_contribuyente: esGranContribuyente,
+        es_auto_retenedor: esAutoRetenedor,
+        es_entidad_estado: esEntidadEstado,
+        exento_impuesto_renta: exentoImpuestoRenta,
+      };
+      if (esPersona) {
+        cuerpo.nombre_completo = nombreCompleto.trim();
+        cuerpo.cedula = cedula.trim();
+      } else {
+        cuerpo.nombre_empresa = nombreEmpresa.trim();
+        cuerpo.nit = nit.trim();
+        cuerpo.representante_legal_nombre = representanteLegalNombre.trim();
+        cuerpo.representante_legal_tipo_id = representanteLegalTipoId.trim();
+        cuerpo.representante_legal_identificacion = representanteLegalIdentificacion.trim();
+        cuerpo.representante_legal_direccion = representanteLegalDireccion.trim();
+        if (representanteLegalAutorizado.trim()) cuerpo.representante_legal_autorizado = representanteLegalAutorizado.trim();
+      }
+      if (esGranContribuyente === 'true') {
+        cuerpo.gran_contribuyente_resolucion = granContribuyenteResolucion.trim();
+        cuerpo.gran_contribuyente_fecha = granContribuyenteFecha;
+      }
+      if (esAutoRetenedor === 'true') {
+        cuerpo.auto_retenedor_resolucion = autoRetenedorResolucion.trim();
+        cuerpo.auto_retenedor_fecha = autoRetenedorFecha;
+      }
+
       const resp = await fetch(`${API_URL}/api/convocatoria-publica/${convId}/postular`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -140,7 +322,7 @@ export function PostulacionPublica() {
     return (
       <div style={p.pageBg}>
         <div style={p.centrado}>
-          <Loader2 size={40} style={{ animation: 'spin 1s linear infinite' }} color="#3384D6" />
+          <Loader2 size={40} style={{ animation: 'spin 1s linear infinite' }} color={COLORES.sidebar} />
           <p style={p.loadText}>Cargando convocatoria...</p>
         </div>
       </div>
@@ -219,8 +401,8 @@ export function PostulacionPublica() {
               <strong>{tipoProponente === 'persona' ? nombreCompleto : nombreEmpresa}</strong> quedó registrado(a) en la convocatoria:<br />
               <em>{data.asunto}</em>
             </p>
-            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '16px 20px', textAlign: 'left', marginBottom: 16 }}>
-              <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 800, color: '#1D4ED8', margin: '0 0 6px' }}>
+            <div style={{ background: COLORES.infoClaro, border: `1px solid ${COLORES.sidebarBorder}`, borderRadius: 10, padding: '16px 20px', textAlign: 'left', marginBottom: 16 }}>
+              <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 800, color: COLORES.sidebarHover, margin: '0 0 6px' }}>
                 ¿Qué sigue?
               </p>
               <p style={{ fontFamily: FONT, fontSize: 13, color: '#1e293b', margin: 0, lineHeight: 1.6 }}>
@@ -266,7 +448,7 @@ export function PostulacionPublica() {
           return (
             <div style={{ ...p.requisitosSection, paddingTop: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <FileText size={18} color="#3384D6" />
+                <FileText size={18} color={COLORES.sidebar} />
                 <h3 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: '#1e293b', margin: 0 }}>
                   Descripción de la oportunidad
                 </h3>
@@ -327,149 +509,208 @@ export function PostulacionPublica() {
                 <button
                   key={tipo}
                   type="button"
-                  onClick={() => setTipoProponente(tipo)}
+                  onClick={() => seleccionarTipoProponente(tipo)}
                   style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
                     padding: '10px 20px', borderRadius: 10,
-                    border: `2px solid ${tipoProponente === tipo ? '#3384D6' : '#e2e8f0'}`,
-                    background: tipoProponente === tipo ? '#EFF6FF' : '#fff',
-                    color: tipoProponente === tipo ? '#1D4ED8' : '#64748b',
+                    border: `2px solid ${tipoProponente === tipo ? COLORES.sidebar : '#e2e8f0'}`,
+                    background: tipoProponente === tipo ? COLORES.infoClaro : '#fff',
+                    color: tipoProponente === tipo ? COLORES.sidebarHover : '#64748b',
                     fontFamily: FONT, fontSize: 14,
                     fontWeight: tipoProponente === tipo ? 800 : 600,
                     cursor: 'pointer',
                   }}
                 >
-                  {tipo === 'empresa' ? '🏢 Empresa' : '👤 Persona natural'}
+                  {tipo === 'empresa' ? <Building2 size={15} /> : <User size={15} />}
+                  {tipo === 'empresa' ? 'Empresa' : 'Persona natural'}
                 </button>
               ))}
             </div>
           </div>
 
-          <h3 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: '#1e293b', margin: '0 0 16px' }}>
-            {tipoProponente === 'persona' ? '👤 Tus datos personales' : '🏢 Datos de tu empresa'}
-          </h3>
+          {/* ══════════════════ RA1-4 — Creación o actualización de proveedores ══════════════════ */}
+          <SeccionRoja>RA1-4 Creación o actualización de proveedores</SeccionRoja>
+          <div style={p.tablaBox}>
 
-          {tipoProponente === 'persona' ? (
-            /* ── Persona natural ── */
-            <>
-              <div style={p.fieldGroup}>
-                <label style={p.label}>
-                  <User size={13} style={{ display: 'inline', marginRight: 5 }} />
-                  Nombre completo *
-                </label>
-                <input
-                  style={p.input}
-                  value={nombreCompleto}
-                  onChange={e => setNombreCompleto(e.target.value)}
-                  placeholder="Ej: Juan Pérez López"
-                />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <label style={p.label}>
-                    <Info size={13} style={{ display: 'inline', marginRight: 5 }} />
-                    Cédula de ciudadanía *
-                  </label>
+            <EncabezadoTabla>Identificación</EncabezadoTabla>
+            <Fila>
+              <Campo label={tipoProponente === 'empresa' ? 'Nombre o Razón social' : 'Nombre completo'} minWidth={520}>
+                {tipoProponente === 'empresa' ? (
+                  <input style={p.inputTabla} value={nombreEmpresa} onChange={e => setNombreEmpresa(e.target.value)} placeholder="Ej: Mi Empresa S.A.S." />
+                ) : (
+                  <input style={p.inputTabla} value={nombreCompleto} onChange={e => setNombreCompleto(e.target.value)} placeholder="Ej: Juan Pérez López" />
+                )}
+              </Campo>
+            </Fila>
+            <Fila>
+              <Campo label="Correo electrónico" minWidth={260}>
+                <input style={p.inputTabla} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="correo@empresa.com" />
+              </Campo>
+            </Fila>
+            <Fila>
+              <Campo label="Tipo de documento" minWidth={260}>
+                {tipoProponente === 'empresa' ? (
+                  <input style={p.inputTabla} value="NIT" disabled />
+                ) : (
+                  <select style={p.inputTabla} value={tipoDocumento} onChange={e => setTipoDocumento(e.target.value)}>
+                    <option value="Cédula de ciudadanía">Cédula de ciudadanía</option>
+                    <option value="Cédula de extranjería">Cédula de extranjería</option>
+                    <option value="Pasaporte">Pasaporte</option>
+                  </select>
+                )}
+              </Campo>
+              <Campo label="Número de documento" minWidth={260}>
+                <div style={{ position: 'relative', width: '100%' }}>
                   <input
-                    style={p.input}
-                    value={cedula}
-                    onChange={e => setCedula(e.target.value)}
-                    placeholder="Ej: 1234567890"
-                  />
-                </div>
-                <div>
-                  <label style={p.label}>
-                    <Phone size={13} style={{ display: 'inline', marginRight: 5 }} />
-                    Teléfono
-                  </label>
-                  <input
-                    style={p.input}
-                    value={telefono}
-                    onChange={e => setTelefono(e.target.value)}
-                    placeholder="Ej: 310 000 0000"
-                    type="tel"
-                  />
-                </div>
-              </div>
-            </>
-          ) : (
-            /* ── Empresa ── */
-            <>
-              <div style={p.fieldGroup}>
-                <label style={p.label}>
-                  <Building2 size={13} style={{ display: 'inline', marginRight: 5 }} />
-                  Nombre de la empresa / Razón social *
-                </label>
-                <input
-                  style={p.input}
-                  value={nombreEmpresa}
-                  onChange={e => setNombreEmpresa(e.target.value)}
-                  placeholder="Ej: Mi Empresa S.A.S."
-                />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <label style={p.label}>
-                    <Info size={13} style={{ display: 'inline', marginRight: 5 }} />
-                    NIT
-                  </label>
-                  <input
-                    style={p.input}
-                    value={nit}
-                    onChange={e => setNit(e.target.value)}
+                    style={{ ...p.inputTabla, paddingRight: 30 }}
+                    value={tipoProponente === 'empresa' ? nit : cedula}
+                    onChange={e => { tipoProponente === 'empresa' ? setNit(e.target.value) : setCedula(e.target.value); setProveedorReconocido(false); }}
+                    onBlur={buscarProveedorPorDocumento}
                     placeholder="Ej: 900123456-7"
                   />
+                  {buscandoProveedor && (
+                    <Loader2 size={14} color={COLORES.sidebar} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', animation: 'spin 1s linear infinite' }} />
+                  )}
+                  {!buscandoProveedor && proveedorReconocido && (
+                    <CheckCircle2 size={14} color="#10B981" style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }} />
+                  )}
                 </div>
-                <div>
-                  <label style={p.label}>
-                    <User size={13} style={{ display: 'inline', marginRight: 5 }} />
-                    Nombre del contacto
-                  </label>
-                  <input
-                    style={p.input}
-                    value={nombreContacto}
-                    onChange={e => setNombreContacto(e.target.value)}
-                    placeholder="Nombre completo"
-                  />
+              </Campo>
+            </Fila>
+            {proveedorReconocido && (
+              <Fila>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#F0FDF4', width: '100%' }}>
+                  <CheckCircle2 size={15} color="#10B981" />
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: '#065F46', fontWeight: 600 }}>
+                    ¡Te reconocimos! Completamos tus datos con tu registro anterior — revísalos y ajusta lo que necesites.
+                  </span>
                 </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <label style={p.label}>
-                    <Phone size={13} style={{ display: 'inline', marginRight: 5 }} />
-                    Teléfono
-                  </label>
-                  <input
-                    style={p.input}
-                    value={telefono}
-                    onChange={e => setTelefono(e.target.value)}
-                    placeholder="Ej: 310 000 0000"
-                    type="tel"
-                  />
-                </div>
-              </div>
-            </>
-          )}
+              </Fila>
+            )}
+            <Fila>
+              <Campo label="Domicilio" minWidth={260}>
+                <input style={p.inputTabla} value={domicilio} onChange={e => setDomicilio(e.target.value)} placeholder="Dirección completa" />
+              </Campo>
+              <Campo label="Teléfono" minWidth={260}>
+                <input style={p.inputTabla} value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="Ej: 310 000 0000" />
+              </Campo>
+            </Fila>
+            <Fila>
+              <Campo label="Página web" minWidth={260}>
+                <input style={p.inputTabla} value={paginaWeb} onChange={e => setPaginaWeb(e.target.value)} placeholder="www.miempresa.com" />
+              </Campo>
+            </Fila>
 
-          <div style={p.fieldGroup}>
-            <label style={p.label}>
-              <Mail size={13} style={{ display: 'inline', marginRight: 5 }} />
-              Correo electrónico *
-            </label>
-            <input
-              style={p.input}
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="correo@empresa.com"
-              type="email"
-            />
-          </div>
+            {tipoProponente === 'empresa' && (
+              <>
+                <EncabezadoTabla>Representación legal</EncabezadoTabla>
+                <Fila>
+                  <Campo label="Representante legal" minWidth={220}>
+                    <input style={p.inputTabla} value={representanteLegalNombre} onChange={e => setRepresentanteLegalNombre(e.target.value)} placeholder="Nombre completo" />
+                  </Campo>
+                  <Campo label="Tipo de identificación" minWidth={220}>
+                    <select style={p.inputTabla} value={representanteLegalTipoId} onChange={e => setRepresentanteLegalTipoId(e.target.value)}>
+                      <option value="Cédula de ciudadanía">Cédula de ciudadanía</option>
+                      <option value="Cédula de extranjería">Cédula de extranjería</option>
+                      <option value="Pasaporte">Pasaporte</option>
+                    </select>
+                  </Campo>
+                </Fila>
+                <Fila>
+                  <Campo label="Identificación" minWidth={220}>
+                    <input style={p.inputTabla} value={representanteLegalIdentificacion} onChange={e => setRepresentanteLegalIdentificacion(e.target.value)} placeholder="Número de identificación" />
+                  </Campo>
+                  <Campo label="Dirección" minWidth={220}>
+                    <input style={p.inputTabla} value={representanteLegalDireccion} onChange={e => setRepresentanteLegalDireccion(e.target.value)} placeholder="Dirección de contacto" />
+                  </Campo>
+                </Fila>
+                <Fila ultima>
+                  <Campo label="Representante legal autorizado" minWidth={260}>
+                    <input style={p.inputTabla} value={representanteLegalAutorizado} onChange={e => setRepresentanteLegalAutorizado(e.target.value)} placeholder="Opcional" />
+                  </Campo>
+                </Fila>
+              </>
+            )}
 
-          {/* Aviso: la propuesta se entrega después por el link individual */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 16px', borderRadius: 10, background: '#FFFBEB', border: '1px solid #FDE68A', marginTop: 8, marginBottom: 16 }}>
-            <Info size={16} color="#92400E" style={{ flexShrink: 0, marginTop: 1 }} />
-            <p style={{ fontFamily: FONT, fontSize: 12, color: '#92400E', margin: 0, lineHeight: 1.5 }}>
-              <strong>Solo necesitas registrarte aquí.</strong> Tu propuesta y documentos los entregarás después a través del enlace personal que recibirás en tu correo.
-            </p>
+            <EncabezadoTabla>Datos tributarios</EncabezadoTabla>
+            <Fila>
+              <Campo label="CIIU" minWidth={180}>
+                <input style={p.inputTabla} value={ciiu} onChange={e => setCiiu(e.target.value)} placeholder="Ej: 7490" />
+              </Campo>
+              <Campo label="Tarifa" minWidth={140}>
+                <input style={p.inputTabla} value={tarifa} onChange={e => setTarifa(e.target.value)} placeholder="Ej: 7,66" />
+              </Campo>
+              <Campo label="Régimen" minWidth={260}>
+                <select style={p.inputTabla} value={regimen} onChange={e => setRegimen(e.target.value)}>
+                  <option value="">Selecciona...</option>
+                  {(tipoProponente === 'empresa' ? REGIMENES_EMPRESA : REGIMENES_PERSONA).map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </Campo>
+            </Fila>
+            <Fila>
+              <Campo label="Actividad económica" minWidth={260}>
+                <input style={p.inputTabla} value={actividadEconomica} onChange={e => setActividadEconomica(e.target.value)} placeholder="Ej: Servicios" />
+              </Campo>
+              <Campo label="Municipio donde está inscrito" minWidth={260}>
+                <input style={p.inputTabla} value={municipioInscripcion} onChange={e => setMunicipioInscripcion(e.target.value)} placeholder="Ej: Bogotá D.C." />
+              </Campo>
+            </Fila>
+            <Fila>
+              <Campo label="¿Es gran contribuyente?" minWidth={260}>
+                <select style={p.inputTabla} value={esGranContribuyente} onChange={e => setEsGranContribuyente(e.target.value)}>
+                  <option value="">Selecciona...</option>
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </select>
+              </Campo>
+              {esGranContribuyente === 'true' && (
+                <>
+                  <Campo label="Resolución" minWidth={200}>
+                    <input style={p.inputTabla} value={granContribuyenteResolucion} onChange={e => setGranContribuyenteResolucion(e.target.value)} />
+                  </Campo>
+                  <Campo label="Fecha" minWidth={180}>
+                    <input style={p.inputTabla} type="date" value={granContribuyenteFecha} onChange={e => setGranContribuyenteFecha(e.target.value)} />
+                  </Campo>
+                </>
+              )}
+            </Fila>
+            <Fila>
+              <Campo label="¿Es Auto retenedor?" minWidth={260}>
+                <select style={p.inputTabla} value={esAutoRetenedor} onChange={e => setEsAutoRetenedor(e.target.value)}>
+                  <option value="">Selecciona...</option>
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </select>
+              </Campo>
+              {esAutoRetenedor === 'true' && (
+                <>
+                  <Campo label="Resolución" minWidth={200}>
+                    <input style={p.inputTabla} value={autoRetenedorResolucion} onChange={e => setAutoRetenedorResolucion(e.target.value)} />
+                  </Campo>
+                  <Campo label="Fecha" minWidth={180}>
+                    <input style={p.inputTabla} type="date" value={autoRetenedorFecha} onChange={e => setAutoRetenedorFecha(e.target.value)} />
+                  </Campo>
+                </>
+              )}
+            </Fila>
+            <Fila ultima>
+              <Campo label="¿Es entidad del estado?" minWidth={260}>
+                <select style={p.inputTabla} value={esEntidadEstado} onChange={e => setEsEntidadEstado(e.target.value)}>
+                  <option value="">Selecciona...</option>
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </select>
+              </Campo>
+              <Campo label="¿Exento de impuesto a la renta?" minWidth={260}>
+                <select style={p.inputTabla} value={exentoImpuestoRenta} onChange={e => setExentoImpuestoRenta(e.target.value)}>
+                  <option value="">Selecciona...</option>
+                  <option value="true">Sí</option>
+                  <option value="false">No</option>
+                </select>
+              </Campo>
+            </Fila>
           </div>
 
           {/* Tratamiento de datos personales — Habeas Data (Ley 1581 de 2012) */}
@@ -484,7 +725,7 @@ export function PostulacionPublica() {
               <span style={{ fontFamily: FONT, fontSize: 13, color: '#1e293b', lineHeight: 1.5 }}>
                 <strong>Autorizo el tratamiento de mis datos personales</strong> por parte de Invest in Bogotá, de acuerdo con la Ley 1581 de 2012, su Decreto reglamentario 1377 de 2013 y la <span
                   onClick={ev => { ev.preventDefault(); setMostrarPolitica(v => !v); }}
-                  style={{ color: '#1D4ED8', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+                  style={{ color: COLORES.sidebarHover, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
                 >
                   Política de Tratamiento de Datos Personales
                 </span>. *
@@ -507,7 +748,7 @@ export function PostulacionPublica() {
                   <strong>Responsable del tratamiento:</strong> Invest in Bogotá (Agencia de Cooperación e Inversión de Bogotá), a través del portal de Compras y Contratación.
                 </p>
                 <p style={p.politicaParrafo}>
-                  <strong>Finalidad:</strong> los datos personales suministrados en este formulario (nombre, identificación, correo electrónico, teléfono y demás información de contacto) serán utilizados exclusivamente para: (i) gestionar tu registro como proponente en la presente convocatoria, (ii) enviarte el enlace personal para la presentación de tu propuesta, (iii) verificar tu identidad y la de tu empresa, y (iv) comunicarte novedades relacionadas con el proceso de contratación.
+                  <strong>Finalidad:</strong> los datos personales suministrados en este formulario (nombre, identificación, correo electrónico, teléfono, información de contacto y datos tributarios) serán utilizados exclusivamente para: (i) gestionar tu registro como proponente en la presente convocatoria, (ii) crear o actualizar tu ficha de proveedor, (iii) enviarte el enlace personal para la presentación de tu propuesta —donde completarás tus datos de tesorería y documentos de soporte—, (iv) verificar tu identidad y la de tu empresa, y (v) comunicarte novedades relacionadas con el proceso de contratación.
                 </p>
                 <p style={p.politicaParrafo}>
                   <strong>Derechos del titular:</strong> conforme a la Ley 1581 de 2012, tienes derecho a conocer, actualizar, rectificar y suprimir tus datos personales, así como a revocar la autorización otorgada, mediante solicitud dirigida al correo de contacto del área jurídica de Invest in Bogotá.
@@ -548,22 +789,22 @@ export function PostulacionPublica() {
 
 /* ════════════════════ Estilos ════════════════════ */
 const p: Record<string, React.CSSProperties> = {
-  pageBg: { minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', display: 'flex', justifyContent: 'center', padding: '40px 16px', fontFamily: FONT },
+  pageBg: { minHeight: '100vh', background: COLORES.fondoApp, display: 'flex', justifyContent: 'center', padding: '40px 16px', fontFamily: FONT },
   centrado: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 400 },
   loadText: { fontFamily: FONT, fontSize: 15, color: '#64748b', fontWeight: 600 },
   errorTitle: { fontFamily: FONT, fontSize: 22, fontWeight: 900, color: '#991B1B', margin: '0 0 8px' },
   errorText: { fontFamily: FONT, fontSize: 14, color: '#64748b', textAlign: 'center', maxWidth: 400 },
-  mainCard: { background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 860, width: '100%', overflow: 'hidden' },
+  mainCard: { background: '#fff', borderRadius: 16, borderTop: `4px solid ${COLORES.primario}`, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 860, width: '100%', overflow: 'hidden' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 28px', borderBottom: '1px solid #f1f5f9' },
   logoBadge: { fontFamily: FONT, fontSize: 16, fontWeight: 600, color: '#1e293b' },
-  logoBold: { fontWeight: 900, color: '#E84922' },
-  timerBadge: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, background: '#FEF3C7', color: '#92400E', fontSize: 12, fontWeight: 700, fontFamily: FONT },
+  logoBold: { fontWeight: 900, color: COLORES.primario },
+  timerBadge: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, background: COLORES.advertenciaClaro, color: '#92400E', fontSize: 12, fontWeight: 700, fontFamily: FONT },
   infoSection: { padding: '24px 28px 16px', borderBottom: '1px solid #f1f5f9' },
-  codeBadge: { display: 'inline-block', padding: '3px 10px', background: '#3384D6', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 800, margin: '0 0 8px', fontFamily: FONT },
+  codeBadge: { display: 'inline-block', padding: '3px 10px', background: COLORES.sidebar, color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 800, margin: '0 0 8px', fontFamily: FONT },
   titulo: { fontFamily: FONT, fontSize: 20, fontWeight: 900, color: '#1e293b', margin: '0 0 4px' },
   subtitulo: { fontFamily: FONT, fontSize: 13, color: '#64748b', margin: 0 },
-  welcomeBox: { margin: '20px 28px 0', padding: '16px 20px', borderRadius: 10, background: '#EEF2FF', border: '1px solid #C7D2FE' },
-  plazoBox: { margin: '16px 28px', padding: '16px 20px', borderRadius: 10, background: '#FFF7ED', border: '1px solid #FED7AA' },
+  welcomeBox: { margin: '20px 28px 0', padding: '16px 20px', borderRadius: 10, background: COLORES.infoClaro, border: `1px solid ${COLORES.sidebarBorder}` },
+  plazoBox: { margin: '16px 28px', padding: '16px 20px', borderRadius: 10, background: COLORES.acentoClaro, border: '1px solid #FED7AA' },
   plazoLabel: { fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' as const, margin: '0 0 2px' },
   plazoValue: { fontFamily: FONT, fontSize: 14, fontWeight: 700, color: '#1e293b', margin: 0 },
   requisitosSection: { padding: '0 28px 20px' },
@@ -573,12 +814,22 @@ const p: Record<string, React.CSSProperties> = {
   label: { display: 'block', fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' as const, letterSpacing: '0.03em', marginBottom: 5 },
   input: { width: '100%', padding: '11px 14px', border: '2px solid #e2e8f0', borderRadius: 10, fontSize: 14, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' as const },
   textarea: { width: '100%', padding: '14px 16px', border: '2px solid #e2e8f0', borderRadius: 10, fontSize: 14, fontFamily: FONT, outline: 'none', resize: 'vertical' as const, boxSizing: 'border-box' as const },
-  errorEnvio: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#FEF2F2', color: '#991B1B', fontSize: 13, fontWeight: 600, border: '1px solid #FECACA', marginTop: 10, fontFamily: FONT },
-  btnEnviar: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 28px', borderRadius: 10, background: '#E84922', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer', fontSize: 14, fontFamily: FONT },
+  errorEnvio: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: COLORES.errorClaro, color: '#991B1B', fontSize: 13, fontWeight: 600, border: '1px solid #FECACA', marginTop: 10, fontFamily: FONT },
+  btnEnviar: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 28px', borderRadius: 10, background: COLORES.primario, color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer', fontSize: 14, fontFamily: FONT },
   footer: { textAlign: 'center' as const, padding: '16px 28px', borderTop: '1px solid #f1f5f9', color: '#94a3b8', fontSize: 11, fontFamily: FONT },
-  stepBadge: { minWidth: 22, height: 22, borderRadius: '50%', background: '#3384D6', color: '#fff', fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: FONT },
-  datosPersonalesBox: { padding: '14px 16px', borderRadius: 10, background: '#F8FAFC', border: '1px solid #E2E8F0', marginTop: 8, marginBottom: 16 },
-  togglePolitica: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 28, padding: '4px 0', background: 'none', border: 'none', color: '#3384D6', fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer' },
+  stepBadge: { minWidth: 22, height: 22, borderRadius: '50%', background: COLORES.sidebar, color: '#fff', fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: FONT },
+  datosPersonalesBox: { padding: '14px 16px', borderRadius: 10, background: '#F8FAFC', border: '1px solid #E2E8F0', marginTop: 20, marginBottom: 16 },
+  togglePolitica: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, marginLeft: 28, padding: '4px 0', background: 'none', border: 'none', color: COLORES.sidebarHover, fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer' },
   politicaBox: { marginTop: 10, marginLeft: 28, padding: '14px 16px', borderRadius: 8, background: '#fff', border: '1px solid #E2E8F0' },
   politicaParrafo: { fontFamily: FONT, fontSize: 12, color: '#475569', lineHeight: 1.6, margin: '0 0 10px' },
+
+  /* ── Tabla RA1-4 ── */
+  seccionRoja: { background: COLORES.primario, color: '#fff', padding: '10px 18px', fontFamily: FONT, fontWeight: 900, fontSize: 14, borderRadius: '10px 10px 0 0' },
+  tablaBox: { border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden', marginBottom: 4 },
+  encabezadoTabla: { background: '#eef2f7', padding: '8px 16px', fontFamily: FONT, fontWeight: 800, fontSize: 12, color: '#334155', textTransform: 'uppercase' as const, letterSpacing: '0.03em', borderBottom: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0' },
+  fila: { display: 'flex', flexWrap: 'wrap' as const, borderBottom: '1px solid #e2e8f0' },
+  campo: { flex: '1 1 240px', display: 'flex', borderRight: '1px solid #e2e8f0' },
+  celdaLabel: { background: '#f8fafc', padding: '10px 12px', fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', width: 150, flexShrink: 0 },
+  celdaValor: { padding: '6px 10px', display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 },
+  inputTabla: { width: '100%', padding: '7px 9px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' as const, background: '#fff' },
 };

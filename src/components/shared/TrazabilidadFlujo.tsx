@@ -9,6 +9,7 @@ import {
   FileDown,
   PenLine,
 } from 'lucide-react';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -82,12 +83,21 @@ function esInvitacion(solicitud: SolicitudFlujo): boolean {
 }
 
 function estadoComite(solicitud: SolicitudFlujo, estado: string): EstadoEtapa {
+  // Invitación no pasa por Comité: Riesgos (si aplica) devuelve directo a Jurídica.
   if (esInvitacion(solicitud)) return 'no_aplica';
   const r = String(solicitud?.resultado_comite || '').toLowerCase();
   if (r === 'aprobado') return 'aprobado';
   if (r === 'rechazado') return 'rechazado';
   if (r === 'en_revision') return 'en_proceso';
+  if (estado === 'en_comite') return 'en_proceso';
   if (llegoA(estado, 'aprobado_financiera') && !r) return 'en_proceso';
+  return 'pendiente';
+}
+
+function estadoRiesgos(solicitud: SolicitudFlujo, estado: string): EstadoEtapa {
+  if (estado === 'en_riesgos') return 'en_proceso';
+  if (estado === 'rechazado_riesgos') return 'rechazado';
+  if (solicitud?.fecha_respuesta_riesgos) return 'aprobado';
   return 'pendiente';
 }
 
@@ -95,8 +105,6 @@ function estadoJuridica(solicitud: SolicitudFlujo, estado: string): EstadoEtapa 
   if (estado === 'rechazado_juridica') return 'rechazado';
   if (solicitud?.fecha_respuesta_juridica || estado === 'aprobado_juridica') return 'aprobado';
   if (estado === 'en_juridica') return 'en_proceso';
-  // Para Invitación no hay comité; jurídica queda pendiente tras aprobación financiera.
-  if (esInvitacion(solicitud)) return 'pendiente';
   const comiteOk = String(solicitud?.resultado_comite || '').toLowerCase() === 'aprobado';
   if (comiteOk && !solicitud?.fecha_respuesta_juridica) return 'pendiente';
   if (llegoA(estado, 'aprobado_juridica')) return 'aprobado';
@@ -114,7 +122,7 @@ export function construirEtapasFlujo(solicitud: SolicitudFlujo): EtapaFlujo[] {
     persona: solicitud?.solicitante_nombre || null,
     fecha: solicitud?.creado_en || null,
     estado: 'aprobado',
-    comentario: solicitud?.gerencia_nombre ? `Gerencia: ${solicitud.gerencia_nombre}` : null,
+    comentario: solicitud?.gerencia_nombre ? `Gerencia: ${nombreGerenciaCompleto(solicitud.gerencia_nombre)}` : null,
   });
 
   etapas.push({
@@ -156,6 +164,18 @@ export function construirEtapasFlujo(solicitud: SolicitudFlujo): EtapaFlujo[] {
         : 'pendiente',
     comentario: estado === 'en_financiera' ? null : (solicitud?.comentario_financiera || null),
   });
+
+  if (solicitud?.tiene_riesgos_juridicos === true) {
+    etapas.push({
+      clave: 'riesgos',
+      titulo: 'Evaluación de Riesgos',
+      rol: 'Riesgos',
+      persona: solicitud?.riesgos_nombre || null,
+      fecha: solicitud?.fecha_respuesta_riesgos || null,
+      estado: estadoRiesgos(solicitud, estado),
+      comentario: solicitud?.comentario_riesgos || null,
+    });
+  }
 
   etapas.push({
     clave: 'comite',

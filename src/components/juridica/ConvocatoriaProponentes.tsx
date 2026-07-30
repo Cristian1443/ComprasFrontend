@@ -3,8 +3,10 @@ import {
   ArrowLeft, Send, Clock, Users, Mail, Copy, CheckCircle2,
   XCircle, Loader2, Plus, Trash2, Eye, Globe,
   File, Download, EyeOff, ShieldCheck, Lock, Unlock, AlertTriangle, Upload, Pencil,
-  Info, X, IdCard, Calendar, Building2, Phone, User
+  Info, X, IdCard, Calendar, Building2, Phone, User, Landmark, CreditCard, Percent, MapPin
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
 const FONT = "'Gabarito', sans-serif";
@@ -18,6 +20,16 @@ interface Proponente { email: string; nombre: string; fijo?: boolean; }
 interface ArchivoResp {
   id: string; nombre: string; tamano: number; url: string; subido_en: string;
 }
+interface DocumentoProveedor {
+  tipo: string; nombre: string; nombre_almacenado: string; tamano: number; mimetype: string; url: string; subido_en: string;
+}
+const DOCUMENTO_PROVEEDOR_LABELS: Record<string, string> = {
+  rut: 'RUT',
+  camara_comercio: 'Cámara de comercio',
+  cedula_rl: 'Fotocopia cédula de ciudadanía',
+  sarlaft: 'SARLAFT',
+  certificacion_bancaria: 'Certificación bancaria',
+};
 interface Invitacion {
   id?: string;
   proponente_email: string;
@@ -38,6 +50,34 @@ interface Invitacion {
   acepta_tratamiento_datos_en?: string;
   creado_en?: string;
   tipo_persona?: 'persona' | 'empresa';
+  // ── Formulario RA1-4 ──
+  tipo_documento?: string;
+  domicilio?: string;
+  pagina_web?: string;
+  representante_legal_nombre?: string;
+  representante_legal_tipo_id?: string;
+  representante_legal_identificacion?: string;
+  representante_legal_direccion?: string;
+  representante_legal_autorizado?: string;
+  ciiu?: string;
+  tarifa?: string;
+  regimen?: string;
+  actividad_economica?: string;
+  municipio_inscripcion?: string;
+  es_gran_contribuyente?: boolean;
+  gran_contribuyente_resolucion?: string;
+  gran_contribuyente_fecha?: string;
+  es_auto_retenedor?: boolean;
+  auto_retenedor_resolucion?: string;
+  auto_retenedor_fecha?: string;
+  es_entidad_estado?: boolean;
+  exento_impuesto_renta?: boolean;
+  banco?: string;
+  banco_sucursal?: string;
+  banco_email_contacto?: string;
+  tipo_cuenta?: string;
+  numero_cuenta?: string;
+  documentos_proveedor?: DocumentoProveedor[];
 }
 interface Convocatoria {
   id: string;
@@ -63,6 +103,8 @@ interface Props {
   solicitudId: string | null;
   onBack: () => void;
   userEmail?: string;
+  onSubvistaChange?: (label: string | null) => void;
+  resetSignal?: number;
 }
 
 function fmtFecha(iso: string | null | undefined) {
@@ -83,7 +125,7 @@ function enNDias(n: number) {
   return d.toISOString().slice(0, 16);
 }
 
-export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Props) {
+export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubvistaChange, resetSignal }: Props) {
   /* ─── Lista ─── */
   const [convocatorias, setConvocatorias] = useState<Convocatoria[]>([]);
   const [cargandoLista, setCargandoLista] = useState(true);
@@ -131,6 +173,8 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
   const [copiado, setCopiado] = useState<string | null>(null);
   const [eliminandoInv, setEliminandoInv] = useState<string | null>(null);
   const [eliminandoConv, setEliminandoConv] = useState<string | null>(null);
+  const [confirmEliminarInv, setConfirmEliminarInv] = useState<string | null>(null);
+  const [confirmEliminarConv, setConfirmEliminarConv] = useState<string | null>(null);
   const [reenviando, setReenviando] = useState<string | null>(null);
   const [reenviadoOk, setReenviadoOk] = useState<string | null>(null);
 
@@ -149,6 +193,22 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
   const [errorDoc, setErrorDoc] = useState('');
   // ID de convocatoria ya creada por "Enviar Fase 1" — evita crear duplicado al enviar Fase 2
   const [convIdCreado, setConvIdCreado] = useState<string | null>(null);
+
+  /* El breadcrumb del padre pide volver a la lista (clic en la miga "Convocatorias") */
+  useEffect(() => {
+    if (resetSignal === undefined) return;
+    setModo('lista');
+    setConvIdCreado(null);
+  }, [resetSignal]);
+
+  /* Informa a la vista padre el sub-paso actual, para el breadcrumb */
+  useEffect(() => {
+    if (!onSubvistaChange) return;
+    if (modo === 'crear') onSubvistaChange('Nueva convocatoria');
+    else if (modo === 'detalle') onSubvistaChange(detalleConv?.asunto || 'Detalle de convocatoria');
+    else onSubvistaChange(null);
+    return () => onSubvistaChange(null);
+  }, [modo, detalleConv?.asunto]);
 
   /* ════ Cargar lista de convocatorias ════ */
   useEffect(() => {
@@ -253,7 +313,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
       setTimeout(() => setReenviadoOk(null), 3000);
       await verDetalle(detalleConv.id);
     } catch (e: any) {
-      alert(e.message || 'Error al reenviar la invitación.');
+      toast.error(e.message || 'Error al reenviar la invitación.');
     } finally {
       setReenviando(null);
     }
@@ -261,7 +321,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
 
   const guardarFechaFase2 = async () => {
     if (!nuevaFechaFase2 || !detalleConv) return;
-    if (new Date(nuevaFechaFase2) <= new Date()) { alert('La nueva fecha debe ser en el futuro.'); return; }
+    if (new Date(nuevaFechaFase2) <= new Date()) { toast.error('La nueva fecha debe ser en el futuro.'); return; }
     setGuardandoFechaFase2(true);
     try {
       const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}`, {
@@ -272,8 +332,9 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
       if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Error al actualizar'); }
       setDetalleConv(prev => prev ? { ...prev, fecha_limite: new Date(nuevaFechaFase2).toISOString() } : null);
       setEditandoFechaFase2(false);
+      toast.success('Plazo de la Fase 2 actualizado.');
     } catch (e: any) {
-      alert(e.message || 'Error al ampliar el plazo.');
+      toast.error(e.message || 'Error al ampliar el plazo.');
     } finally {
       setGuardandoFechaFase2(false);
     }
@@ -405,10 +466,9 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
     setTimeout(() => setCopiado(null), 2000);
   };
 
-  /* ════ Eliminar invitación ════ */
+  /* ════ Eliminar invitación (confirmación vía ConfirmDialog, ver confirmEliminarInv) ════ */
   const eliminarInvitacion = async (invId: string) => {
     if (!detalleConv) return;
-    if (!window.confirm('¿Eliminar esta invitación? Esta acción no se puede deshacer.')) return;
     setEliminandoInv(invId);
     try {
       const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}/invitaciones/${invId}`, {
@@ -416,8 +476,12 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
       });
       if (!resp.ok) throw new Error('Error al eliminar');
       setDetalleInvitaciones(prev => prev.filter(i => i.id !== invId));
-    } catch { /* silent */ }
-    finally { setEliminandoInv(null); }
+      toast.success('Invitación eliminada.');
+    } catch {
+      toast.error('No se pudo eliminar la invitación.');
+    } finally {
+      setEliminandoInv(null);
+    }
   };
 
   /* Auto-guarda requisitos al perder el foco — sin botón explícito */
@@ -429,8 +493,12 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ descripcion_requisitos: editRequisitos }),
       });
-      if (resp.ok) setDetalleConv(prev => prev ? { ...prev, descripcion_requisitos: editRequisitos } : prev);
-    } catch { /* silent */ }
+      if (!resp.ok) throw new Error();
+      setDetalleConv(prev => prev ? { ...prev, descripcion_requisitos: editRequisitos } : prev);
+      toast.success('Requisitos técnicos guardados.');
+    } catch {
+      toast.error('No se pudieron guardar los requisitos técnicos.');
+    }
   };
 
   /* ════ Subir documento adjunto para Fase 2 ════ */
@@ -534,17 +602,17 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
     }
   };
 
-  /* ════ Eliminar convocatoria completa ════ */
-  const eliminarConvocatoria = async (convId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm('¿Eliminar esta convocatoria y todas sus invitaciones? Esta acción no se puede deshacer.')) return;
+  /* ════ Eliminar convocatoria completa (confirmación vía ConfirmDialog, ver confirmEliminarConv) ════ */
+  const eliminarConvocatoria = async (convId: string) => {
     setEliminandoConv(convId);
     try {
       const resp = await fetch(`${API_URL}/api/convocatorias/${convId}`, { method: 'DELETE' });
       if (!resp.ok) throw new Error('Error al eliminar');
       setConvocatorias(prev => prev.filter(c => c.id !== convId));
+      toast.success('Convocatoria eliminada.');
+      if (detalleConv?.id === convId) setModo('lista');
     } catch {
-      setError('No se pudo eliminar la convocatoria.');
+      toast.error('No se pudo eliminar la convocatoria.');
     } finally {
       setEliminandoConv(null);
     }
@@ -582,7 +650,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
             <ArrowLeft size={15} /> Volver a convocatorias
           </button>
           <button
-            onClick={async e => { await eliminarConvocatoria(detalleConv.id, e); setModo('lista'); }}
+            onClick={() => setConfirmEliminarConv(detalleConv.id)}
             disabled={eliminandoConv === detalleConv.id}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA', cursor: 'pointer', color: '#991B1B', fontSize: 12, fontWeight: 700, fontFamily: FONT }}
           >
@@ -596,6 +664,26 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
             <button onClick={() => setError('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#991B1B' }}>✕</button>
           </div>
         )}
+        <ConfirmDialog
+          open={confirmEliminarConv === detalleConv.id}
+          variant="danger"
+          title="Eliminar convocatoria"
+          message="Se eliminará esta convocatoria y todas sus invitaciones. Esta acción no se puede deshacer."
+          confirmLabel="Sí, eliminar"
+          processing={eliminandoConv === detalleConv.id}
+          onCancel={() => setConfirmEliminarConv(null)}
+          onConfirm={async () => { await eliminarConvocatoria(detalleConv.id); setConfirmEliminarConv(null); }}
+        />
+        <ConfirmDialog
+          open={!!confirmEliminarInv}
+          variant="danger"
+          title="Eliminar invitación"
+          message="Esta acción no se puede deshacer."
+          confirmLabel="Sí, eliminar"
+          processing={!!eliminandoInv}
+          onCancel={() => setConfirmEliminarInv(null)}
+          onConfirm={async () => { const id = confirmEliminarInv!; setConfirmEliminarInv(null); await eliminarInvitacion(id); }}
+        />
 
         {/* ══════════════════════════════════════
             FASE 1 — REGISTRO PÚBLICO
@@ -932,7 +1020,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
                   </button>
                   {inv.id && (
                     <button
-                      onClick={() => eliminarInvitacion(inv.id!)}
+                      onClick={() => setConfirmEliminarInv(inv.id!)}
                       disabled={eliminandoInv === inv.id}
                       title="Eliminar invitación"
                       style={{ position: 'absolute' as const, top: 8, right: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#cbd5e1', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center' }}
@@ -1141,6 +1229,44 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
                     value: `Autorizado${proponenteInfo.acepta_tratamiento_datos_en ? ` el ${fmtFecha(proponenteInfo.acepta_tratamiento_datos_en)}` : ''}`
                   },
                   proponenteInfo.respondida && { icon: <CheckCircle2 size={14} />, label: 'Respondió', value: fmtFecha(proponenteInfo.respondida_en || '') },
+                  proponenteInfo.tipo_documento && { icon: <IdCard size={14} />, label: 'Tipo de documento', value: proponenteInfo.tipo_documento },
+                  proponenteInfo.domicilio && { icon: <MapPin size={14} />, label: 'Domicilio', value: proponenteInfo.domicilio },
+                  proponenteInfo.pagina_web && { icon: <Globe size={14} />, label: 'Página web', value: proponenteInfo.pagina_web },
+                  proponenteInfo.representante_legal_nombre && {
+                    icon: <User size={14} />, label: 'Representante legal',
+                    value: `${proponenteInfo.representante_legal_nombre} — ${proponenteInfo.representante_legal_tipo_id || ''} ${proponenteInfo.representante_legal_identificacion || ''}`.trim()
+                  },
+                  proponenteInfo.representante_legal_direccion && { icon: <MapPin size={14} />, label: 'Dirección representante legal', value: proponenteInfo.representante_legal_direccion },
+                  proponenteInfo.representante_legal_autorizado && { icon: <User size={14} />, label: 'Representante legal autorizado', value: proponenteInfo.representante_legal_autorizado },
+                  (proponenteInfo.ciiu || proponenteInfo.regimen) && {
+                    icon: <Percent size={14} />, label: 'CIIU / Tarifa / Régimen',
+                    value: `${proponenteInfo.ciiu || '—'} / ${proponenteInfo.tarifa || '—'} / ${proponenteInfo.regimen || '—'}`
+                  },
+                  proponenteInfo.actividad_economica && { icon: <Building2 size={14} />, label: 'Actividad económica', value: proponenteInfo.actividad_economica },
+                  proponenteInfo.municipio_inscripcion && { icon: <MapPin size={14} />, label: 'Municipio donde está inscrito', value: proponenteInfo.municipio_inscripcion },
+                  proponenteInfo.es_gran_contribuyente !== undefined && {
+                    icon: <ShieldCheck size={14} />, label: 'Gran contribuyente',
+                    value: proponenteInfo.es_gran_contribuyente
+                      ? `Sí — Resolución ${proponenteInfo.gran_contribuyente_resolucion || '—'} (${fmtFecha(proponenteInfo.gran_contribuyente_fecha || '')})`
+                      : 'No'
+                  },
+                  proponenteInfo.es_auto_retenedor !== undefined && {
+                    icon: <ShieldCheck size={14} />, label: 'Auto retenedor',
+                    value: proponenteInfo.es_auto_retenedor
+                      ? `Sí — Resolución ${proponenteInfo.auto_retenedor_resolucion || '—'} (${fmtFecha(proponenteInfo.auto_retenedor_fecha || '')})`
+                      : 'No'
+                  },
+                  proponenteInfo.es_entidad_estado !== undefined && { icon: <Building2 size={14} />, label: '¿Entidad del estado?', value: proponenteInfo.es_entidad_estado ? 'Sí' : 'No' },
+                  proponenteInfo.exento_impuesto_renta !== undefined && { icon: <ShieldCheck size={14} />, label: '¿Exento de impuesto a la renta?', value: proponenteInfo.exento_impuesto_renta ? 'Sí' : 'No' },
+                  (proponenteInfo.banco || proponenteInfo.numero_cuenta) && {
+                    icon: <Landmark size={14} />, label: 'Banco / Sucursal',
+                    value: `${proponenteInfo.banco || '—'} — ${proponenteInfo.banco_sucursal || '—'}`
+                  },
+                  proponenteInfo.banco_email_contacto && { icon: <Mail size={14} />, label: 'Correo tesorería', value: proponenteInfo.banco_email_contacto },
+                  proponenteInfo.numero_cuenta && {
+                    icon: <CreditCard size={14} />, label: 'Cuenta bancaria',
+                    value: `${proponenteInfo.tipo_cuenta || ''} ${proponenteInfo.numero_cuenta}`.trim()
+                  },
                 ].filter(Boolean).map((row: any, ri) => (
                   <div key={ri} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                     <div style={{ color: '#94a3b8', marginTop: 2, flexShrink: 0 }}>{row.icon}</div>
@@ -1154,6 +1280,31 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
                     </div>
                   </div>
                 ))}
+
+                {Array.isArray(proponenteInfo.documentos_proveedor) && proponenteInfo.documentos_proveedor.length > 0 && (
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
+                    <p style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, margin: '0 0 8px' }}>
+                      Documentos del proveedor (RA1-4)
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {proponenteInfo.documentos_proveedor.map((doc, di) => (
+                        <a
+                          key={di}
+                          href={`${API_URL}${doc.url}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: '#F8FAFC', border: '1px solid #E2E8F0', textDecoration: 'none' }}
+                        >
+                          <File size={14} color="#3384D6" />
+                          <span style={{ fontFamily: FONT, fontSize: 12, color: '#1e293b', fontWeight: 600, flex: 1 }}>
+                            {DOCUMENTO_PROVEEDOR_LABELS[doc.tipo] || doc.tipo}
+                          </span>
+                          <Download size={13} color="#94a3b8" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1414,6 +1565,17 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
         )}
       </div>
 
+      <ConfirmDialog
+        open={!!confirmEliminarConv}
+        variant="danger"
+        title="Eliminar convocatoria"
+        message="Se eliminará esta convocatoria y todas sus invitaciones. Esta acción no se puede deshacer."
+        confirmLabel="Sí, eliminar"
+        processing={!!eliminandoConv}
+        onCancel={() => setConfirmEliminarConv(null)}
+        onConfirm={async () => { const id = confirmEliminarConv!; setConfirmEliminarConv(null); await eliminarConvocatoria(id); }}
+      />
+
       {cargandoLista ? (
         <div style={s.centrado}><Loader2 size={28} className="animate-spin" color="#3384D6" /></div>
       ) : convocatorias.length === 0 ? (
@@ -1445,7 +1607,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail }: Prop
               >
                 {/* Botón eliminar convocatoria */}
                 <button
-                  onClick={e => eliminarConvocatoria(conv.id, e)}
+                  onClick={e => { e.stopPropagation(); setConfirmEliminarConv(conv.id); }}
                   disabled={eliminandoConv === conv.id}
                   title="Eliminar convocatoria"
                   style={{ position: 'absolute' as const, top: 10, right: 10, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 6, cursor: 'pointer', color: '#991B1B', padding: '3px 7px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, fontFamily: FONT }}

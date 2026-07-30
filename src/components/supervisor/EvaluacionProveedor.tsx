@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
-import { ArrowLeft, FileDown, Lock } from 'lucide-react';
-import html2canvas from 'html2canvas-pro';
-import jsPDF from 'jspdf';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Lock, ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Send } from 'lucide-react';
+import { BloqueFirma } from '../shared/BloqueFirma';
+
+const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
 /* ──────────────────────────────────────────────────────────
    Colores que coinciden con el Excel
@@ -25,10 +26,13 @@ const CRITERIOS_INICIALES: Criterio[] = [
   { nombre: 'Confiabilidad', puntaje: '' },
 ];
 
+/* Umbral de bloqueo del proveedor: debe coincidir con el backend (POST /api/supervisor/evaluacion) */
+const UMBRAL_BLOQUEO = 70;
+
 /* Muestra el estado del proveedor igual que el Excel */
 function estadoProveedor(total: number): string {
   if (total >= 80) return 'Proveedor aprobado';
-  if (total >= 50) return 'Proveedor en observación';
+  if (total >= UMBRAL_BLOQUEO) return 'Proveedor en observación';
   return 'Proveedor rechazado';
 }
 
@@ -41,6 +45,7 @@ interface EvaluacionProveedorProps {
     correo?: string;
     tipoContratacion?: string;
     numeroContrato?: string;
+    tituloContratacion?: string;
     proponenteId?: string;
   };
   onVolver?: () => void;
@@ -59,6 +64,7 @@ export function EvaluacionProveedor({
 }: EvaluacionProveedorProps = {}) {
   // ── Datos del formulario (pre-rellenados si vienen del contrato) ──────────────────────────────
   const [tipoContratacion,  setTipoContratacion ] = useState(contratoData?.tipoContratacion || '');
+  const [tituloContratacion] = useState(contratoData?.tituloContratacion || '');
   const [proveedor,          setProveedor        ] = useState(contratoData?.proveedor || '');
   const [numeroContrato,     setNumeroContrato   ] = useState(contratoData?.numeroContrato || '');
   const [correoProveedor,    setCorreoProveedor  ] = useState(contratoData?.correo || '');
@@ -66,11 +72,35 @@ export function EvaluacionProveedor({
   const [criterios,          setCriterios        ] = useState<Criterio[]>(CRITERIOS_INICIALES);
   const [observaciones,      setObservaciones    ] = useState('');
 
-  // ── Estado de guardado ────────────────────────────────
-  const [guardado,   setGuardado  ] = useState(false);   // bloquea el form
-  const [generando,  setGenerando ] = useState(false);   // spinner del botón
+  // ── Estado de guardado / doble validación ──────────────
+  const [guardado,      setGuardado     ] = useState(false);   // bloquea el form (ya persistido + enviado a firma)
+  const [guardando,     setGuardando    ] = useState(false);   // spinner mientras se guarda y se envía a firma
+  const [confirmoDatos, setConfirmoDatos] = useState(false);   // validación 1: checkbox
+  const [mostrarModal,  setMostrarModal ] = useState(false);   // validación 2: modal de confirmación
+  const [error,         setError        ] = useState<string | null>(null);
+  const [bloqueado,     setBloqueado    ] = useState(false);   // el proveedor quedó bloqueado (total < 70)
+  const [cargandoExistente, setCargandoExistente] = useState(true); // evita mostrar el form editable antes de saber si ya hay evaluación
 
-  const formRef = useRef<HTMLDivElement>(null);
+  // ── Si ya existe una evaluación guardada para este contrato, cargarla
+  //    bloqueada (no se puede volver a editar/re-guardar) ──────────────
+  useEffect(() => {
+    if (!solicitudId || !userEmail) { setCargandoExistente(false); return; }
+    let cancelado = false;
+    fetch(`${API_URL}/api/supervisor/contratos/${solicitudId}?email=${encodeURIComponent(userEmail)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelado || !data?.evaluacion) return;
+        const ev = data.evaluacion;
+        if (Array.isArray(ev.criterios) && ev.criterios.length > 0) setCriterios(ev.criterios);
+        if (ev.observaciones) setObservaciones(ev.observaciones);
+        if (ev.fecha_evaluacion) setFechaEvaluacion(String(ev.fecha_evaluacion).slice(0, 10));
+        setGuardado(true);
+      })
+      .catch(() => { /* si falla, se deja el formulario editable */ })
+      .finally(() => { if (!cancelado) setCargandoExistente(false); });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solicitudId, userEmail]);
 
   // ── Calcular puntajes ─────────────────────────────────
   const puntajeNumerico = (p: string) => {
@@ -90,56 +120,59 @@ export function EvaluacionProveedor({
     setCriterios(nuevos);
   };
 
-  // ── Guardar → PDF ─────────────────────────────────────
-  const handleGuardar = async () => {
-    if (!formRef.current) return;
-    setGenerando(true);
-    
-    // Bloquear el formulario ANTES de la foto para que se vuelvan textos planos
-    setGuardado(true);
+  const total = totalPonderado();
+  const disabled = guardado || guardando;
+  const todosLosCriteriosCalificados = criterios.every(c => c.puntaje !== '' && !isNaN(parseFloat(c.puntaje)));
+
+  // ── Confirmación final (2da validación) → guarda + envía a firma ──
+  const confirmarGuardado = async () => {
+    if (!solicitudId || !userEmail) {
+      setError('Falta información de la sesión o del contrato.');
+      return;
+    }
+    setMostrarModal(false);
+    setGuardando(true);
+    setError(null);
 
     try {
-      // Espera para que React re-renderice sin inputs, luego toma la foto
-      await new Promise(r => setTimeout(r, 200));
-
-      const canvas = await html2canvas(formRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
+      // 1) Persistir la calificación (dispara el bloqueo automático si total < 70)
+      const respEval = await fetch(`${API_URL}/api/supervisor/evaluacion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: userEmail,
+          solicitud_id: solicitudId,
+          nombre_proveedor: proveedor,
+          correo_proveedor: correoProveedor,
+          criterios,
+          total,
+          observaciones,
+          fecha_evaluacion: fechaEvaluacion,
+          proponente_id: contratoData?.proponenteId || null,
+        }),
       });
+      const dataEval = await respEval.json();
+      if (!respEval.ok) throw new Error(dataEval?.error || 'No se pudo guardar la evaluación.');
+      setBloqueado(!!dataEval.bloqueado);
 
-      const imgData  = canvas.toDataURL('image/png');
-      const pdf      = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageW    = pdf.internal.pageSize.getWidth();
-      const pageH    = pdf.internal.pageSize.getHeight();
-      const imgW     = pageW;
-      const imgH     = (canvas.height * pageW) / canvas.width;
+      // 2) Enviar el PDF a firma electrónica del supervisor del contrato
+      const respFirma = await fetch(`${API_URL}/api/solicitudes/${solicitudId}/firmas/proveedor/iniciar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const dataFirma = await respFirma.json();
+      if (!respFirma.ok) throw new Error(dataFirma?.error || 'La evaluación se guardó, pero no se pudo enviar a firma electrónica.');
 
-      let posY = 0;
-      let remaining = imgH;
-
-      while (remaining > 0) {
-        pdf.addImage(imgData, 'PNG', 0, posY, imgW, imgH);
-        remaining -= pageH;
-        posY -= pageH;
-        if (remaining > 0) pdf.addPage();
-      }
-
-      pdf.save(`EvaluacionProveedor_${proveedor || 'sin-nombre'}_${fechaEvaluacion || 'sin-fecha'}.pdf`);
-
+      setGuardado(true);
       if (onGuardado) onGuardado();
-    } catch (err) {
-      console.error('Error generando PDF:', err);
-      alert('Ocurrió un error al generar el PDF. Intente nuevamente.');
-      setGuardado(false); // restaurar si falló
+    } catch (err: any) {
+      console.error('Error guardando evaluación:', err);
+      setError(err.message || 'Ocurrió un error al guardar la evaluación. Intente nuevamente.');
     } finally {
-      setGenerando(false);
+      setGuardando(false);
     }
   };
-
-  const total    = totalPonderado();
-  const disabled = guardado;
 
   /* ── Estilos inline reutilizables ── */
   const theadCell: React.CSSProperties = {
@@ -187,6 +220,16 @@ export function EvaluacionProveedor({
     width: '70px',
   };
 
+  if (cargandoExistente) {
+    return (
+      <div style={{ padding: '24px', background: 'var(--ui-bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#6b7280', fontFamily: 'Gabarito, sans-serif' }}>
+          <Loader2 size={20} className="animate-spin" /> Cargando evaluación...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: '24px', background: 'var(--ui-bg)', minHeight: '100vh' }}>
       {/* ── Botón volver ── */}
@@ -202,10 +245,9 @@ export function EvaluacionProveedor({
       </button>
 
       {/* ══════════════════════════════════════════════════
-          CONTENIDO QUE SE CONVIERTE A PDF
+          FORMULARIO
       ══════════════════════════════════════════════════ */}
       <div
-        ref={formRef}
         style={{
           background: '#fff',
           maxWidth: 750,
@@ -273,6 +315,13 @@ export function EvaluacionProveedor({
         {/* ── 2. DATOS DEL CONTRATO ── */}
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
           <tbody>
+            {/* Título de la contratación */}
+            <tr>
+              <td style={labelCell}>Título De La Contratación:</td>
+              <td style={{ ...cellBorder, color: '#333' }}>
+                {tituloContratacion || '-'}
+              </td>
+            </tr>
             {/* Tipo */}
             <tr>
               <td style={labelCell}>Tipo De Contratación:</td>
@@ -402,7 +451,7 @@ export function EvaluacionProveedor({
           </tbody>
         </table>
 
-        {/* ── 5. ESTADO + PRÓXIMA FECHA ── */}
+        {/* ── 5. ESTADO ── */}
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
           <tbody>
             <tr>
@@ -418,12 +467,12 @@ export function EvaluacionProveedor({
                   fontFamily: 'Gabarito, sans-serif',
                 }}
               >
-                Proveedor aprobado Estado:
+                Estado:
               </td>
               <td
                 style={{
                   ...cellBorder,
-                  color: total >= 80 ? '#15803d' : total >= 50 ? '#b45309' : '#b91c1c',
+                  color: total >= 80 ? '#15803d' : total >= UMBRAL_BLOQUEO ? '#b45309' : '#b91c1c',
                   fontWeight: 600,
                   textAlign: 'center',
                 }}
@@ -497,12 +546,66 @@ export function EvaluacionProveedor({
           </div>
         </div>
       </div>
-      {/* FIN del área que se convierte a PDF */}
 
-      {/* ── BOTÓN GUARDAR / ESTADO BLOQUEADO ── */}
+      {/* ── Aviso de bloqueo del proveedor ── */}
+      {bloqueado && (
+        <div style={{
+          maxWidth: 750, margin: '16px auto 0', display: 'flex', alignItems: 'center', gap: 10,
+          padding: '12px 16px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA',
+          color: '#991B1B', fontFamily: 'Gabarito, sans-serif', fontSize: 13, fontWeight: 700,
+        }}>
+          <ShieldAlert size={18} />
+          Este proveedor quedó bloqueado para futuros contratos (calificación inferior a {UMBRAL_BLOQUEO} puntos).
+        </div>
+      )}
+
+      {/* ── Error ── */}
+      {error && (
+        <div style={{
+          maxWidth: 750, margin: '16px auto 0', display: 'flex', alignItems: 'center', gap: 10,
+          padding: '12px 16px', borderRadius: 8, background: '#FEF2F2', border: '1px solid #FECACA',
+          color: '#991B1B', fontFamily: 'Gabarito, sans-serif', fontSize: 13, fontWeight: 600,
+        }}>
+          <AlertTriangle size={16} /> {error}
+        </div>
+      )}
+
+      {/* ── Bloque de firma electrónica (una vez guardado) ── */}
+      {guardado && solicitudId && (
+        <div style={{ maxWidth: 750, margin: '16px auto 0' }}>
+          <BloqueFirma
+            solicitudId={solicitudId}
+            etapa="proveedor"
+            descripcion="El supervisor del contrato debe firmar electrónicamente esta evaluación. Al completarse la firma, el PDF se guarda automáticamente en SharePoint (03.Postcontractual) y el contrato queda finalizado."
+          />
+        </div>
+      )}
+
+      {/* ── Validación 1: checkbox de confirmación ── */}
+      {!guardado && (
+        <div style={{ maxWidth: 750, margin: '16px auto 0' }}>
+          <label style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            padding: '12px 16px', borderRadius: 8, background: '#FFFBF7', border: '1px solid #FED7AA',
+            fontFamily: 'Gabarito, sans-serif', fontSize: 13, color: '#333', cursor: disabled ? 'default' : 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={confirmoDatos}
+              disabled={disabled}
+              onChange={e => setConfirmoDatos(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            Confirmo que la calificación y las observaciones registradas son correctas. Entiendo que, al guardar,
+            el formulario quedará bloqueado y se enviará a firma electrónica del supervisor designado.
+          </label>
+        </div>
+      )}
+
+      {/* ── BOTONES ── */}
       <div style={{ maxWidth: 750, margin: '20px auto 0', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
         <button
-          onClick={() => window.history.back()}
+          onClick={() => onVolver ? onVolver() : window.history.back()}
           style={{
             padding: '10px 24px',
             border: '2px solid #ccc',
@@ -515,7 +618,7 @@ export function EvaluacionProveedor({
             fontSize: 14,
           }}
         >
-          Cancelar
+          {guardado ? 'Volver' : 'Cancelar'}
         </button>
 
         {guardado ? (
@@ -533,31 +636,93 @@ export function EvaluacionProveedor({
             }}
           >
             <Lock size={16} />
-            Evaluación guardada — PDF descargado
+            Evaluación guardada — enviada a firma
           </div>
         ) : (
           <button
-            onClick={handleGuardar}
-            disabled={generando}
+            onClick={() => setMostrarModal(true)}
+            disabled={guardando || !confirmoDatos || !todosLosCriteriosCalificados || !proveedor}
+            title={!todosLosCriteriosCalificados ? 'Califique los 5 criterios antes de guardar' : undefined}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '10px 24px',
               borderRadius: 8,
-              background: generando ? '#f87171' : RED,
+              background: guardando ? '#f87171' : (!confirmoDatos || !todosLosCriteriosCalificados || !proveedor) ? '#e5989b' : RED,
               color: '#fff',
               fontFamily: 'Gabarito, sans-serif',
               fontWeight: 700,
               fontSize: 14,
               border: 'none',
-              cursor: generando ? 'not-allowed' : 'pointer',
+              cursor: (guardando || !confirmoDatos || !todosLosCriteriosCalificados || !proveedor) ? 'not-allowed' : 'pointer',
               transition: 'background .2s',
             }}
           >
-            <FileDown size={18} />
-            {generando ? 'Generando PDF…' : 'Guardar y Descargar PDF'}
+            {guardando ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+            {guardando ? 'Guardando y enviando a firma…' : 'Guardar evaluación'}
           </button>
         )}
       </div>
+
+      {/* ══════════════════════════════════════════════════
+          MODAL DE CONFIRMACIÓN (2da validación)
+      ══════════════════════════════════════════════════ */}
+      {mostrarModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16,
+          }}
+          onClick={() => setMostrarModal(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 12, padding: 28, maxWidth: 460, width: '100%',
+              fontFamily: 'Gabarito, sans-serif', boxShadow: '0 10px 40px rgba(0,0,0,.2)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <AlertTriangle size={22} color={RED} />
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#111827' }}>
+                Confirmar evaluación
+              </h3>
+            </div>
+            <p style={{ fontSize: 13.5, color: '#4b5563', lineHeight: 1.6, marginBottom: 16 }}>
+              Está a punto de guardar la evaluación del proveedor <strong>{proveedor || '—'}</strong> con un
+              puntaje de <strong>{total.toFixed(2)} / 100</strong> ({estadoProveedor(total)}).
+              {total < UMBRAL_BLOQUEO && (
+                <>
+                  {' '}Al ser inferior a {UMBRAL_BLOQUEO} puntos, <strong>el proveedor quedará bloqueado</strong> para
+                  futuros contratos.
+                </>
+              )}
+              {' '}Esta acción bloqueará el formulario, lo enviará a firma electrónica del supervisor y{' '}
+              <strong>no se puede deshacer</strong>.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                onClick={() => setMostrarModal(false)}
+                style={{
+                  padding: '9px 18px', borderRadius: 8, border: '2px solid #e5e7eb', background: '#fff',
+                  color: '#555', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarGuardado}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '9px 18px', borderRadius: 8, border: 'none', background: RED,
+                  color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                <CheckCircle2 size={15} /> Sí, confirmar y guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

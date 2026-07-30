@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   Inbox, Loader2, Search, ArrowRight,
-  FileText, CheckCircle2, Clock, Building2, Scale
+  FileText, CheckCircle2, Clock, Building2, Scale, AlertTriangle
 } from 'lucide-react';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -38,16 +39,21 @@ function UrgenciaBadge({ dias }: { dias: number }) {
 export function BandejaEntrada({ onSelect }: { onSelect?: (id: string) => void }) {
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState<string | null>(null);
   const [search, setSearch]           = useState('');
   const [filtroModalidad, setFiltroModalidad] = useState<string>('todos');
 
-  useEffect(() => {
+  const cargar = () => {
+    setLoading(true);
+    setError(null);
     fetch(`${API_URL}/api/juridica/bandeja`)
-      .then(r => r.ok ? r.json() : [])
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(d => setSolicitudes(Array.isArray(d) ? d : []))
-      .catch(() => {})
+      .catch(() => setError('No se pudo cargar la bandeja de entrada. Intenta de nuevo.'))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { cargar(); }, []);
 
   const modalidades = ['todos', ...Array.from(new Set(solicitudes.map(s => s.modalidad).filter(Boolean)))];
 
@@ -102,6 +108,16 @@ export function BandejaEntrada({ onSelect }: { onSelect?: (id: string) => void }
               <span className="text-gray-400 text-xs">en bandeja</span>
             </div>
           </div>
+
+          {error && (
+            <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold">
+              <AlertTriangle size={16} />
+              <span className="flex-1">{error}</span>
+              <button onClick={cargar} className="text-xs font-black uppercase underline underline-offset-2 hover:opacity-70">
+                Reintentar
+              </button>
+            </div>
+          )}
 
           {/* Mini KPIs */}
           <div className="grid grid-cols-3 gap-3">
@@ -212,7 +228,7 @@ export function BandejaEntrada({ onSelect }: { onSelect?: (id: string) => void }
                         </span>
                         <span className="flex items-center gap-1">
                           <Building2 size={10} className="shrink-0" />
-                          {s.gerencia_nombre || '—'}
+                          {nombreGerenciaCompleto(s.gerencia_nombre) || '—'}
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock size={10} className="shrink-0" />

@@ -4,6 +4,7 @@ import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
 import { getCompanyUsers, getCompanyUsersFromGroup, hydrateUsersDepartment } from '../../lib/graphService';
 import { toast } from 'sonner';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 const DEFAULT_SECURITY_GROUP_ID = '1d5f9278-85f5-4f01-a651-e6c1e160cc55';
@@ -26,6 +27,7 @@ const SCREEN_OPTIONS = [
   { key: 'Financiera', label: 'Financiera' },
   { key: 'Administrador', label: 'Administrador' },
   { key: 'SecretariaComite', label: 'Secretaría de Comité' },
+  { key: 'Riesgos', label: 'Riesgos' },
 ];
 
 const SINGLE_SCREEN_ROLE_MAP: Record<string, string> = {
@@ -35,6 +37,7 @@ const SINGLE_SCREEN_ROLE_MAP: Record<string, string> = {
   Financiera: 'financiera',
   Administrador: 'administrador',
   SecretariaComite: 'secretaria_comite',
+  Riesgos: 'riesgos',
 };
 
 const tt = (s: string) => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
@@ -318,6 +321,7 @@ export function GestionUsuarios() {
     if (permisos.includes('Juridica'))      return { label: 'JURÍDICA',      color: 'bg-blue-50 text-blue-700 border-blue-200' };
     if (permisos.includes('Financiera'))    return { label: 'FINANCIERO',    color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     if (permisos.includes('Gerente'))       return { label: 'GERENCIA',      color: 'bg-violet-50 text-violet-700 border-violet-200' };
+    if (permisos.includes('Riesgos'))       return { label: 'RIESGOS',       color: 'bg-orange-50 text-orange-700 border-orange-200' };
     return null;
   };
 
@@ -465,7 +469,7 @@ export function GestionUsuarios() {
                     })()}
                   </td>
                   <td className="px-6 py-5 text-sm font-medium text-slate-600">
-                    <span className="flex items-center gap-1.5"><Building2 size={14} /> {usuario.gerencia_nombre || 'N/A'}</span>
+                    <span className="flex items-center gap-1.5"><Building2 size={14} /> {nombreGerenciaCompleto(usuario.gerencia_nombre) || 'N/A'}</span>
                   </td>
                   <td className="px-6 py-5">
                     <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${usuario.activo ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'

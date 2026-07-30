@@ -59,7 +59,7 @@ const fmtCOP = (v: any): string => {
 const FORMAS_PAGO: Record<string, string> = {
   anticipo: 'Anticipo',
   pago_unico: 'Pago único',
-  mensual: 'Mensual',
+  mensual: 'Mensual vencida',
 };
 
 const getFormaPagoTexto = (codigo: unknown): string => {
@@ -176,12 +176,20 @@ export function SeccionPresupuestoLectura({
         }
       />
 
-      <div style={{ ...rowStyle, borderBottom: solicitud.forma_pago === 'anticipo' && solicitud.justificacion_anticipo ? '1px solid #e5e7eb' : 'none' }}>
+      <div style={{ ...rowStyle, borderBottom: solicitud.forma_pago === 'anticipo' && (solicitud.porcentaje_anticipo != null || solicitud.justificacion_anticipo) ? '1px solid #e5e7eb' : 'none' }}>
         <div style={labelCellStyle}>{`${n3} Forma de pago:`}</div>
         <div style={valueCellStyle}>
           <ContenidoFormaPago s={solicitud} />
         </div>
       </div>
+      {solicitud.forma_pago === 'anticipo' && solicitud.porcentaje_anticipo != null && (
+        <div style={{ ...rowStyle, borderBottom: solicitud.justificacion_anticipo ? '1px solid #e5e7eb' : 'none' }}>
+          <div style={labelCellStyle}>Porcentaje de anticipo:</div>
+          <div style={{ ...valueCellStyle, backgroundColor: '#fffbeb' }}>
+            <span style={{ fontWeight: 700, color: '#92400e' }}>{solicitud.porcentaje_anticipo}%</span>
+          </div>
+        </div>
+      )}
       {solicitud.forma_pago === 'anticipo' && solicitud.justificacion_anticipo && (
         <div style={{ ...rowStyle, borderBottom: 'none' }}>
           <div style={labelCellStyle}>Justificación del anticipo:</div>

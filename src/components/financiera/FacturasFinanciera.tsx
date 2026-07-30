@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
 import { PeoplePicker } from '../ui/PeoplePicker';
+import { formatMilesInput } from '../../lib/formatPresupuesto';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
@@ -18,10 +19,12 @@ interface FacturaFinanciera {
   fecha_factura: string;
   no_contrato_oc: string;
   no_factura_cxc: string;
+  numero_ap: string;
   concepto: string;
   certificacion_supervisor: boolean;
   adjunto_url: string | null;
   adjunto_nombre: string | null;
+  nombre_proveedor: string | null;
   estado: 'pendiente' | 'aprobada' | 'rechazada';
   comentario_financiera: string | null;
   creado_por_email: string | null;
@@ -42,6 +45,7 @@ interface Contrato {
   titulo_contrato: string | null;
   supervisor_nombre: string | null;
   supervisor_email: string | null;
+  nombre_proveedor: string | null;
 }
 
 type FiltroEstado = 'todos' | 'pendiente' | 'aprobada' | 'rechazada';
@@ -71,6 +75,8 @@ const emptyForm = {
   fecha_factura: '',
   no_contrato_oc: '',
   no_factura_cxc: '',
+  numero_ap: '',
+  nombre_proveedor: '',
   concepto: '',
   valor: '',
   certificacion_supervisor: '' as '' | 'si' | 'no',
@@ -133,18 +139,20 @@ export function FacturasFinanciera() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setForm(prev => {
-      const updated = { ...prev, [name]: value };
+      const updated = { ...prev, [name]: name === 'valor' ? formatMilesInput(value) : value };
       // Auto-rellenar campos del contrato seleccionado
       if (name === 'solicitud_id') {
         const c = contratos.find(ct => ct.id === value);
         if (c) {
           updated.no_contrato_oc = c.codigo || '';
+          updated.nombre_proveedor = c.nombre_proveedor || '';
           if (c.supervisor_nombre) {
             updated.aprobador_1 = c.supervisor_nombre;
             updated.aprobador_1_email = c.supervisor_email || '';
           }
         } else {
           updated.no_contrato_oc = '';
+          updated.nombre_proveedor = '';
         }
       }
       return updated;
@@ -156,7 +164,7 @@ export function FacturasFinanciera() {
     // Normaliza formato colombiano: "1.200.000,50" → 1200000.50
     const valorNorm = form.valor.replace(/\./g, '').replace(',', '.');
     const valorNum = Number(valorNorm);
-    if (!form.solicitud_id || !form.fecha_factura || !form.no_contrato_oc || !form.no_factura_cxc || !form.concepto) {
+    if (!form.solicitud_id || !form.fecha_factura || !form.no_contrato_oc || !form.no_factura_cxc || !form.numero_ap || !form.concepto) {
       setErrorMsg('Completa todos los campos obligatorios.');
       return;
     }
@@ -179,6 +187,8 @@ export function FacturasFinanciera() {
           fecha_factura: form.fecha_factura,
           no_contrato_oc: form.no_contrato_oc,
           no_factura_cxc: form.no_factura_cxc,
+          numero_ap: form.numero_ap,
+          nombre_proveedor: form.nombre_proveedor || null,
           concepto: form.concepto,
           valor: valorNum,
           certificacion_supervisor: form.certificacion_supervisor === 'si' ? true : form.certificacion_supervisor === 'no' ? false : null,
@@ -291,7 +301,7 @@ export function FacturasFinanciera() {
                   </div>
                   <p className="text-sm font-semibold text-gray-800 truncate">{f.contrato_titulo || f.contrato_objeto}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                    <span className="font-mono font-semibold">{f.no_factura_cxc}</span>
+                    <span className="font-mono font-semibold">AP {f.numero_ap}</span>
                     <span>·</span>
                     <span>{formatDate(f.fecha_factura)}</span>
                   </div>
@@ -312,9 +322,13 @@ export function FacturasFinanciera() {
               {expandedId === f.id && (
                 <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 space-y-3 text-sm">
                   <div className="grid grid-cols-2 gap-3">
+                    <div><p className="text-[11px] font-semibold text-gray-400 uppercase">AP</p><p className="text-gray-800 font-semibold">{f.numero_ap}</p></div>
                     <div><p className="text-[11px] font-semibold text-gray-400 uppercase">No. Contrato/OC</p><p className="text-gray-800">{f.no_contrato_oc}</p></div>
                     <div><p className="text-[11px] font-semibold text-gray-400 uppercase">No. Factura/CxC</p><p className="text-gray-800">{f.no_factura_cxc}</p></div>
                   </div>
+                  {f.nombre_proveedor && (
+                    <div><p className="text-[11px] font-semibold text-gray-400 uppercase">Proveedor</p><p className="text-gray-800">{f.nombre_proveedor}</p></div>
+                  )}
                   <div><p className="text-[11px] font-semibold text-gray-400 uppercase">Concepto</p><p className="text-gray-800">{f.concepto}</p></div>
                   {(f.aprobador_1 || f.aprobador_2) && (
                     <div className="grid grid-cols-2 gap-3">
@@ -393,6 +407,33 @@ export function FacturasFinanciera() {
                   })}
                 </select>
               </div>
+
+              {/* AP — identificador de la factura de aquí en adelante */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">AP <span className="text-red-500">*</span></label>
+                <input type="text" name="numero_ap" value={form.numero_ap} onChange={handleChange} required
+                  placeholder="Ej. AP-2026-001"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2"
+                  style={{ fontFamily: 'Gabarito, sans-serif' }} />
+                <p className="text-[11px] text-gray-400 mt-0.5">Con este número se identificará la factura de aquí en adelante.</p>
+              </div>
+
+              {/* Proveedor — auto-completado desde el contrato */}
+              {form.solicitud_id && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase mb-1 flex items-center gap-1.5">
+                    Proveedor
+                    {form.nombre_proveedor && (
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded normal-case">Auto</span>
+                    )}
+                  </label>
+                  <input type="text" name="nombre_proveedor" value={form.nombre_proveedor}
+                    readOnly
+                    placeholder="Sin proveedor asociado al contrato"
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-gray-50 text-gray-700"
+                    style={{ fontFamily: 'Gabarito, sans-serif', borderColor: form.nombre_proveedor ? '#6ee7b7' : '#d1d5db' }} />
+                </div>
+              )}
 
               {/* Aprobadores — Directorio Activo */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -1,12 +1,33 @@
 import React from 'react';
-import { X, Printer } from 'lucide-react';
+import { X, Printer, Download } from 'lucide-react';
 import {
   getPresupuestoCertificadoDisplay,
   getPresupuestoDisplayText,
 } from '../../lib/formatPresupuesto';
 import { construirEtapasFlujo } from '../shared/TrazabilidadFlujo';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const RED = '#E84922';
+const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
+
+/** Nombre del anexo + enlace de descarga si tiene archivo cargado (en pantalla; no imprime). */
+function AnexoLinea({ a, numero }: { a: any; numero: number }) {
+  const nombre = a.nombre_documento || a.nombre || '—';
+  const url = a.archivo_url || a.archivoUrl;
+  return (
+    <div>
+      {numero}. {nombre}
+      {url && (
+        <a href={`${API_URL}${url}`} target="_blank" rel="noopener noreferrer"
+          className="print:hidden"
+          style={{ marginLeft: 6, color: RED, display: 'inline-flex', verticalAlign: 'middle' }}
+        >
+          <Download size={11} />
+        </a>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   solicitud: any;
@@ -72,7 +93,7 @@ export function FormatoPlaneacionImprimible({ solicitud, onClose }: Props) {
   const FORMAS_PAGO: Record<string, string> = {
     anticipo: 'Anticipo',
     pago_unico: 'Pago único',
-    mensual: 'Mensual',
+    mensual: 'Mensual vencida',
     quincenal: 'Quincenal',
     bimestral: 'Bimestral',
     trimestral: 'Trimestral',
@@ -208,7 +229,7 @@ export function FormatoPlaneacionImprimible({ solicitud, onClose }: Props) {
               </tr>
               <tr>
                 <td style={LBL}>Gerencia solicitante:</td>
-                <td style={VAL}>{solicitud.gerencia_nombre || '—'}</td>
+                <td style={VAL}>{nombreGerenciaCompleto(solicitud.gerencia_nombre) || '—'}</td>
                 <td style={LBL}>Supervisor del contrato:</td>
                 <td style={VAL}>{solicitud.supervision_nombre || solicitud.solicitante_nombre || '—'}</td>
               </tr>
@@ -233,8 +254,8 @@ export function FormatoPlaneacionImprimible({ solicitud, onClose }: Props) {
               <SH title="I. OBJETO, JUSTIFICACIÓN Y DESCRIPCIÓN DE LA NECESIDAD" />
               <FR label="1.0 Título del contrato:" value={solicitud.titulo_contrato} />
               <FR label="1.1 Objeto a contratar:" value={solicitud.objeto} />
-              <FR label="1.2 Justificación:" value={solicitud.justificacion} />
-              <FR label="1.3 Descripción de la necesidad:" value={solicitud.descripcion_necesidad_detalle} />
+              <FR label="1.2 Justificación y Descripción:" value={solicitud.justificacion} />
+              <FR label="1.3 Especificaciones técnicas:" value={solicitud.descripcion_necesidad_detalle} />
             </tbody>
           </table>
 
@@ -308,7 +329,18 @@ export function FormatoPlaneacionImprimible({ solicitud, onClose }: Props) {
             <table style={T}>
               <tbody>
                 <SH title="IV. IDENTIFICACIÓN DEL CONTRATO A CELEBRAR Y MODALIDAD DE SELECCIÓN." />
-                <FR label="4.1 Modalidad de selección:" value={solicitud.modalidad_seleccion || solicitud.justificacion_cd} />
+                <FR label="4.1 Causal de contratación:" value={solicitud.modalidad_seleccion} />
+                <FR label="4.2 Justificación de la causal:" value={solicitud.justificacion_cd} />
+                <tr>
+                  <td style={LBL}>4.3 Anexos y cargue de documentos</td>
+                  <td style={{ ...VAL, minHeight: 40 }} colSpan={3}>
+                    {anexosDocs.length > 0
+                      ? anexosDocs.map((a: any, i: number) => (
+                          <AnexoLinea key={i} a={a} numero={i + 1} />
+                        ))
+                      : <span style={{ color: '#aaa', fontStyle: 'italic' }}>—</span>}
+                  </td>
+                </tr>
                 <FR
                   label="Fecha del Comité:"
                   value={solicitud.fecha_comite
@@ -326,6 +358,9 @@ export function FormatoPlaneacionImprimible({ solicitud, onClose }: Props) {
               <FR label={`${n('4.1', '5.1')} Presupuesto para la contratación`} value={presupuestoTexto} />
               <FR label={`${n('4.2', '5.2')} Rubro presupuestal:`}   value={solicitud.rubro || solicitud.rubro_presupuestal} />
               <FR label={`${n('4.3', '5.3')} Forma de pago:`}        value={formaPagoDisplay} />
+              {solicitud.forma_pago === 'anticipo' && solicitud.porcentaje_anticipo != null && (
+                <FR label="Porcentaje de anticipo:" value={`${solicitud.porcentaje_anticipo}%`} />
+              )}
             </tbody>
           </table>
 
@@ -338,37 +373,43 @@ export function FormatoPlaneacionImprimible({ solicitud, onClose }: Props) {
             </tbody>
           </table>
 
-          {/* ═══════════ VI/VII. ANEXOS ═══════════ */}
+          {/* ═══════════ VI. ANEXOS (solo Invitación/TDR; en Directa vive en el punto 4.3) ═══════════ */}
+          {!esDirecta && (
+            <table style={T}>
+              <tbody>
+                <SH title="VI. ANEXOS." />
+                <tr>
+                  <td style={LBL}>6.1 Anexos</td>
+                  <td style={{ ...VAL, minHeight: 40 }} colSpan={3}>
+                    {anexosDocs.length > 0
+                      ? anexosDocs.map((a: any, i: number) => (
+                          <AnexoLinea key={i} a={a} numero={i + 1} />
+                        ))
+                      : <span style={{ color: '#aaa', fontStyle: 'italic' }}>—</span>}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          )}
+
+          {/* ═══════════ VII. CONCEPTO JURÍDICO Y GARANTÍAS ═══════════ */}
           <table style={T}>
             <tbody>
-              <SH title={`${n('VI', 'VII')}. ANEXOS.`} />
-              <tr>
-                <td style={LBL}>{`${n('6.1', '7.1')} Anexos`}</td>
-                <td style={{ ...VAL, minHeight: 40 }} colSpan={3}>
-                  {anexosDocs.length > 0
-                    ? anexosDocs.map((a: any, i: number) => (
-                        <div key={i}>{i + 1}. {a.nombre_documento || a.nombre || '—'}</div>
-                      ))
-                    : <span style={{ color: '#aaa', fontStyle: 'italic' }}>—</span>}
-                </td>
-              </tr>
+              <SH title="VII. CONCEPTO JURÍDICO Y GARANTÍAS." />
+              <FR label="7.1 Concepto jurídico:" value={solicitud.concepto_juridico} />
+              <FR label="7.2 Garantías:" value={solicitud.garantias} />
+              <FR label="7.3 ¿Tiene riesgos jurídicos?:" value={solicitud.tiene_riesgos_juridicos === true ? 'Sí' : solicitud.tiene_riesgos_juridicos === false ? 'No' : ''} />
+              {solicitud.tiene_riesgos_juridicos === true && (
+                <FR label="7.3.1 Riesgos:" value={solicitud.riesgos_juridicos} />
+              )}
             </tbody>
           </table>
 
-          {/* ═══════════ VII/VIII. RIESGOS ═══════════ */}
+          {/* ═══════════ VIII. CONCLUSIONES ═══════════ */}
           <table style={T}>
             <tbody>
-              <SH title={`${n('VII', 'VIII')}. RIESGOS Y CRITERIOS AMBIENTALES O DE SST.`} />
-              <FR label={`${n('7.1', '8.1')} Riesgos`}                     value={solicitud.riesgos} />
-              <FR label={`${n('7.2', '8.2')} Criterios ambientales o de SST`} value={solicitud.criterios_ambientales_sst} />
-            </tbody>
-          </table>
-
-          {/* ═══════════ VIII/IX. CONCLUSIONES ═══════════ */}
-          <table style={T}>
-            <tbody>
-              <SH title={`${n('VIII', 'IX')}. CONCLUSIONES POR PARTE DEL COMITÉ DE CONTRATACIONES${!esDirecta ? ' PARA TDR > 50 SMMLV' : ''}.`} />
-              <FR label={`${n('8.1', '9.1')} Conclusiones del Comité:`} value={solicitud.conclusiones_comite} />
+              <SH title={`VIII. CONCLUSIONES POR PARTE DEL COMITÉ DE CONTRATACIONES${!esDirecta ? ' PARA TDR > 50 SMMLV' : ''}.`} />
+              <FR label="8.1 Conclusiones del Comité:" value={solicitud.conclusiones_comite} />
             </tbody>
           </table>
 

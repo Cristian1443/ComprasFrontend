@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { FolderOpen, Upload, FileText, Trash2, Loader2, ArrowLeft, CheckCircle2, User, Save, ExternalLink, Hash, Lock, AlertCircle } from 'lucide-react';
 import { TipoDocumentoFinal } from '../../lib/flujoJuridico';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -330,7 +331,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
                     <option value="">— Seleccione un usuario —</option>
                     {usuarios.map(u => (
                       <option key={u.id} value={u.id}>
-                        {u.nombre}{u.cargo ? ` · ${u.cargo}` : ''}{u.gerencia_nombre ? ` (${u.gerencia_nombre})` : ''}
+                        {u.nombre}{u.cargo ? ` · ${u.cargo}` : ''}{u.gerencia_nombre ? ` (${nombreGerenciaCompleto(u.gerencia_nombre)})` : ''}
                       </option>
                     ))}
                   </select>

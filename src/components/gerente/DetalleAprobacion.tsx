@@ -124,7 +124,7 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
                 onBack();
             } else {
                 const error = await res.json();
-                throw new Error(error.error || 'Error al actualizar el estado');
+                throw new Error(error.mensaje || error.error || 'Error al actualizar el estado');
             }
         } catch (err) {
             console.error(err);

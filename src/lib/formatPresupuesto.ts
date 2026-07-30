@@ -33,6 +33,16 @@ export function parseValorMoneda(raw: string | number | null | undefined): numbe
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Formatea en vivo mientras el usuario escribe: "3000000" -> "3.000.000" (admite decimales con coma) */
+export function formatMilesInput(raw: string): string {
+  const limpio = raw.replace(/[^\d,]/g, '');
+  const idx = limpio.indexOf(',');
+  const entero = idx === -1 ? limpio : limpio.slice(0, idx);
+  const decimal = idx === -1 ? '' : limpio.slice(idx + 1).replace(/,/g, '');
+  const enteroFormateado = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return idx === -1 ? enteroFormateado : `${enteroFormateado},${decimal}`;
+}
+
 export function getValorMonedaTexto(s: {
   moneda?: string;
   valor_moneda_usd_texto?: string;

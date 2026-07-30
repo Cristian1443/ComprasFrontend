@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Loader2, CheckCircle2, XCircle, AlertTriangle,
-  Scale, Download,
+  Scale, Download, Clock,
 } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
@@ -13,6 +13,7 @@ import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
 import { EstampaAprobacion } from '../shared/EstampaAprobacion';
 import { FormatoPlaneacionImprimible } from '../secretaria/FormatoPlaneacionImprimible';
 import { PasosFlujoJuridica } from './PasosFlujoJuridica';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 import {
   construirEstadoFlujo,
   flujoCompleto,
@@ -21,6 +22,7 @@ import {
   pasoAccesible,
   requiereFlujoSecuencial,
 } from '../../lib/flujoJuridico';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -103,6 +105,164 @@ function ActionButton({
   );
 }
 
+/* ─── Modal de confirmación previo a la Formalización ─── */
+function ConfirmarFormalizacionModal({
+  confirmado, setConfirmado, procesando, onCancelar, onConfirmar,
+}: {
+  confirmado: boolean; setConfirmado: (v: boolean) => void;
+  procesando: boolean; onCancelar: () => void; onConfirmar: () => void;
+}) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 60, backgroundColor: 'rgba(15,23,42,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+      onClick={(e) => { if (e.target === e.currentTarget && !procesando) onCancelar(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" style={{ fontFamily: 'Gabarito, sans-serif' }}>
+        <div className="flex items-center gap-2 px-5 py-4" style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2f6fa3 100%)' }}>
+          <Scale size={18} className="text-white" />
+          <h3 className="font-black text-white">Confirmar Formalización</h3>
+        </div>
+        <div className="p-5 space-y-4">
+          <label className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-all">
+            <input
+              type="checkbox"
+              checked={confirmado}
+              onChange={(e) => setConfirmado(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-[#2f6fa3]"
+            />
+            <span className="text-sm text-slate-700 font-medium leading-snug">
+              Confirmo que este proceso ya fue <strong>publicado en el SECOP</strong>.
+            </span>
+          </label>
+
+          <div className="flex items-start gap-2.5 p-3 rounded-xl border border-amber-200 bg-amber-50">
+            <Clock size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800 leading-relaxed">
+              A partir de este momento, <strong>Jurídica cuenta con 3 días hábiles</strong> para completar la formalización del contrato.
+            </p>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onCancelar}
+              disabled={procesando}
+              className="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-slate-600 font-bold text-sm hover:bg-slate-50 transition-all disabled:opacity-60"
+              style={{ fontFamily: 'Gabarito, sans-serif' }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={onConfirmar}
+              disabled={!confirmado || procesando}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-xl font-bold text-sm transition-all ${
+                !confirmado || procesando ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110 active:scale-95 cursor-pointer'
+              }`}
+              style={{ backgroundColor: '#10B981', fontFamily: 'Gabarito, sans-serif' }}
+            >
+              {procesando ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+              {procesando ? 'Procesando...' : 'Confirmar Formalización'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ConceptoJuridicoEditable — Sección "Concepto Jurídico y Garantías" (la diligencia Jurídica) ─── */
+const textareaJurStyle: React.CSSProperties = {
+  width: '100%', padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: 6,
+  fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', resize: 'none',
+  outline: 'none', minHeight: 80, boxSizing: 'border-box', backgroundColor: '#fff',
+};
+const selectJurStyle: React.CSSProperties = {
+  ...textareaJurStyle, minHeight: 38, resize: undefined,
+};
+
+function ConceptoJuridicoEditable({
+  conceptoJuridico, setConceptoJuridico, garantias, setGarantias,
+  tieneRiesgos, setTieneRiesgos, riesgosJuridicos, setRiesgosJuridicos,
+  guardando, mensaje, onGuardar,
+}: {
+  conceptoJuridico: string; setConceptoJuridico: (v: string) => void;
+  garantias: string; setGarantias: (v: string) => void;
+  tieneRiesgos: 'si' | 'no' | ''; setTieneRiesgos: (v: 'si' | 'no' | '') => void;
+  riesgosJuridicos: string; setRiesgosJuridicos: (v: string) => void;
+  guardando: boolean; mensaje: string; onGuardar: () => void;
+}) {
+  const n1 = '7.1';
+  const n2 = '7.2';
+  const n3 = '7.3';
+  const n31 = '7.3.1';
+  return (
+    <>
+      <div style={rowStyle}>
+        <div style={labelCellStyle}>{n1} Concepto jurídico:</div>
+        <div style={valueCellStyle}>
+          <textarea
+            value={conceptoJuridico}
+            onChange={e => setConceptoJuridico(e.target.value)}
+            rows={4} style={textareaJurStyle}
+            placeholder="Registre el concepto jurídico sobre la modalidad de contratación..."
+          />
+        </div>
+      </div>
+      <div style={rowStyle}>
+        <div style={labelCellStyle}>{n2} Garantías:</div>
+        <div style={valueCellStyle}>
+          <textarea
+            value={garantias}
+            onChange={e => setGarantias(e.target.value)}
+            rows={3} style={textareaJurStyle}
+            placeholder="Indique las garantías exigidas al contratista..."
+          />
+        </div>
+      </div>
+      <div style={{ ...rowStyle, borderBottom: tieneRiesgos === 'si' ? '1px solid #e5e7eb' : 'none' }}>
+        <div style={labelCellStyle}>{n3} ¿Tiene riesgos jurídicos?:</div>
+        <div style={valueCellStyle}>
+          <select
+            value={tieneRiesgos}
+            onChange={e => setTieneRiesgos(e.target.value as 'si' | 'no' | '')}
+            style={{ ...selectJurStyle, maxWidth: 200 }}
+          >
+            <option value="">-- Seleccione --</option>
+            <option value="si">Sí</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+      </div>
+      {tieneRiesgos === 'si' && (
+        <div style={{ ...rowStyle, borderBottom: 'none' }}>
+          <div style={labelCellStyle}>{n31} Riesgos:</div>
+          <div style={valueCellStyle}>
+            <textarea
+              value={riesgosJuridicos}
+              onChange={e => setRiesgosJuridicos(e.target.value)}
+              rows={3} style={textareaJurStyle}
+              placeholder="Describa los riesgos jurídicos identificados..."
+            />
+          </div>
+        </div>
+      )}
+      <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          type="button"
+          onClick={onGuardar}
+          disabled={guardando}
+          className={`px-4 py-2 rounded-lg text-white text-sm font-bold transition-all ${guardando ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110 cursor-pointer'}`}
+          style={{ backgroundColor: '#2f6fa3', fontFamily: 'Gabarito, sans-serif' }}
+        >
+          {guardando ? 'Guardando...' : 'Guardar concepto jurídico'}
+        </button>
+        {mensaje && <span style={{ fontSize: '0.78rem', color: '#374151', fontFamily: 'Gabarito, sans-serif' }}>{mensaje}</span>}
+      </div>
+    </>
+  );
+}
+
 /* ══════════════════════════ COMPONENTE PRINCIPAL ══════════════════════════ */
 interface DetalleSolicitudJuridicaProps {
   solicitudId: string;
@@ -131,6 +291,18 @@ export function DetalleSolicitudJuridica({
   });
   const [procesandoRevision, setProcesandoRevision] = useState(false);
   const [mostrarFormato, setMostrarFormato] = useState(false);
+  const [showConfirmSecop, setShowConfirmSecop] = useState(false);
+  const [confirmadoSecop, setConfirmadoSecop] = useState(false);
+  const [showConfirmRechazo, setShowConfirmRechazo] = useState(false);
+
+  // Concepto Jurídico y Garantías (lo diligencia Jurídica)
+  const [conceptoJuridico, setConceptoJuridico] = useState('');
+  const [garantias, setGarantias] = useState('');
+  const [tieneRiesgosJur, setTieneRiesgosJur] = useState<'si' | 'no' | ''>('');
+  const [riesgosJuridicos, setRiesgosJuridicos] = useState('');
+  const [guardandoConcepto, setGuardandoConcepto] = useState(false);
+  const [mensajeConcepto, setMensajeConcepto] = useState('');
+  const [enviandoConcepto, setEnviandoConcepto] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -141,6 +313,10 @@ export function DetalleSolicitudJuridica({
         const data = await res.json();
         if (mounted) {
           setSolicitud(data);
+          setConceptoJuridico(data?.concepto_juridico || '');
+          setGarantias(data?.garantias || '');
+          setTieneRiesgosJur(data?.tiene_riesgos_juridicos === true ? 'si' : data?.tiene_riesgos_juridicos === false ? 'no' : '');
+          setRiesgosJuridicos(data?.riesgos_juridicos || '');
           if (requiereFlujoSecuencial(data?.modalidad)) {
             try {
               const [rCal, rDoc, rFirma] = await Promise.all([
@@ -235,6 +411,87 @@ export function DetalleSolicitudJuridica({
     }
   };
 
+  const handleGuardarConceptoJuridico = async () => {
+    if (!solicitud?.id) return;
+    setGuardandoConcepto(true);
+    setMensajeConcepto('');
+    try {
+      const resp = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/concepto-juridico`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          concepto_juridico: conceptoJuridico,
+          garantias,
+          tiene_riesgos_juridicos: tieneRiesgosJur === 'si',
+          riesgos_juridicos: tieneRiesgosJur === 'si' ? riesgosJuridicos : null,
+          usuario_email: accounts[0]?.username,
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || 'No se pudo guardar el concepto jurídico');
+      setSolicitud((prev: any) => (prev ? {
+        ...prev,
+        concepto_juridico: data.concepto_juridico,
+        garantias: data.garantias,
+        tiene_riesgos_juridicos: data.tiene_riesgos_juridicos,
+        riesgos_juridicos: data.riesgos_juridicos,
+      } : prev));
+      setMensajeConcepto('Concepto jurídico guardado correctamente.');
+    } catch (e: any) {
+      setMensajeConcepto(e.message || 'Error al guardar el concepto jurídico.');
+    } finally {
+      setGuardandoConcepto(false);
+    }
+  };
+
+  const handleEnviarConcepto = async () => {
+    if (!solicitud?.id) return;
+    if (!conceptoJuridico.trim() || !garantias.trim() || !tieneRiesgosJur) {
+      setMensajeConcepto('Diligencie el concepto jurídico, las garantías y si tiene riesgos jurídicos antes de enviar.');
+      return;
+    }
+    setEnviandoConcepto(true);
+    setMensajeConcepto('');
+    try {
+      // 1. Guardar los campos (por si hay cambios sin guardar)
+      const respGuardar = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/concepto-juridico`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          concepto_juridico: conceptoJuridico,
+          garantias,
+          tiene_riesgos_juridicos: tieneRiesgosJur === 'si',
+          riesgos_juridicos: tieneRiesgosJur === 'si' ? riesgosJuridicos : null,
+          usuario_email: accounts[0]?.username,
+        }),
+      });
+      if (!respGuardar.ok) {
+        const err = await respGuardar.json().catch(() => ({}));
+        throw new Error(err?.error || 'No se pudo guardar el concepto jurídico');
+      }
+
+      // 2. Enviar: deriva a Riesgos (si aplica) o directo a Comité
+      const resp = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/enviar-concepto-juridico`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario_email: accounts[0]?.username }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || 'No se pudo enviar el concepto jurídico');
+
+      alert(
+        tieneRiesgosJur === 'si'
+          ? 'Concepto jurídico enviado. La solicitud pasó al rol de Riesgos.'
+          : 'Concepto jurídico enviado. La solicitud pasó al Comité de Contratación.'
+      );
+      onBack();
+    } catch (e: any) {
+      setMensajeConcepto(e.message || 'Error al enviar el concepto jurídico.');
+    } finally {
+      setEnviandoConcepto(false);
+    }
+  };
+
   const abrirPaso = (paso: 'invitacion' | 'calificacion' | 'adjudicacion' | 'documentos_finales') => {
     if (!pasoAccesible(paso, estadoFlujo, ordenPasos)) {
       setMensaje(mensajeFlujoIncompleto(estadoFlujo, ordenPasos));
@@ -316,6 +573,12 @@ export function DetalleSolicitudJuridica({
   }
 
   const esDirecta = (solicitud.modalidad || '').toLowerCase() === 'directa';
+  const esInvitacion = String(solicitud.modalidad || '').toLowerCase().includes('invit');
+  // Directa/TDR/Invitación: primera visita de Jurídica — solo diligencia 7.1-7.3 y envía a Riesgos/Comité.
+  // Invitación no pasa por Comité: sin riesgos, retoma directo la revisión de Jurídica.
+  // En la segunda visita (tras Comité) el concepto ya quedó fijado y se muestra en modo lectura.
+  const faseConcepto = solicitud.estado === 'en_juridica_concepto';
+  const mostrarConceptoEditable = faseConcepto;
   const montoCOP = Number(solicitud.presupuesto_aprobado || solicitud.valor_en_cop || solicitud.valor_estimado || 0);
   const monedaSol = String(solicitud.moneda || 'COP').toUpperCase();
   const valorOriginalMoneda =
@@ -340,6 +603,37 @@ export function DetalleSolicitudJuridica({
           onClose={() => setMostrarFormato(false)}
         />
       )}
+      {showConfirmSecop && (
+        <ConfirmarFormalizacionModal
+          confirmado={confirmadoSecop}
+          setConfirmado={setConfirmadoSecop}
+          procesando={registrando === 'aprobado'}
+          onCancelar={() => { setShowConfirmSecop(false); setConfirmadoSecop(false); }}
+          onConfirmar={async () => {
+            await handleDecision('aprobado');
+            setShowConfirmSecop(false);
+            setConfirmadoSecop(false);
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={showConfirmRechazo}
+        variant="danger"
+        title="Rechazar solicitud"
+        message={
+          <>
+            Esta acción es <strong>irreversible</strong>: la solicitud quedará marcada como rechazada por Jurídica
+            y el solicitante deberá iniciar un nuevo proceso. ¿Confirmas que deseas rechazarla?
+          </>
+        }
+        confirmLabel="Sí, rechazar"
+        processing={registrando === 'rechazado'}
+        onCancel={() => setShowConfirmRechazo(false)}
+        onConfirm={async () => {
+          await handleDecision('rechazado');
+          setShowConfirmRechazo(false);
+        }}
+      />
       <div className="flex gap-6 items-start">
 
         {/* ══ CONTENIDO PRINCIPAL (izquierda) ══ */}
@@ -410,19 +704,38 @@ export function DetalleSolicitudJuridica({
               ) : undefined}
             />
 
-            <DetallePlaneacionContractualParte2 solicitud={solicitud} />
+            <DetallePlaneacionContractualParte2
+              solicitud={solicitud}
+              conceptoJuridicoSlot={
+                mostrarConceptoEditable ? (
+                  <ConceptoJuridicoEditable
+                    conceptoJuridico={conceptoJuridico}
+                    setConceptoJuridico={setConceptoJuridico}
+                    garantias={garantias}
+                    setGarantias={setGarantias}
+                    tieneRiesgos={tieneRiesgosJur}
+                    setTieneRiesgos={setTieneRiesgosJur}
+                    riesgosJuridicos={riesgosJuridicos}
+                    setRiesgosJuridicos={setRiesgosJuridicos}
+                    guardando={guardandoConcepto}
+                    mensaje={mensajeConcepto}
+                    onGuardar={handleGuardarConceptoJuridico}
+                  />
+                ) : undefined
+              }
+            />
 
-            {/* IX / VIII. Conclusiones del Comité */}
+            {/* VIII. Conclusiones del Comité */}
             {mostrarConclusionesComite && (
               <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
-                <SectionHeader title={`${esDirecta ? 'IX' : 'VIII'}. CONCLUSIONES POR PARTE DEL COMITÉ DE CONTRATACIONES.`} />
+                <SectionHeader title="VIII. CONCLUSIONES POR PARTE DEL COMITÉ DE CONTRATACIONES." />
                 <DataRow label="Decisión del Comité" value={solicitud.resultado_comite ? solicitud.resultado_comite.toUpperCase() : ''} />
                 <DataRow label="Conclusiones" value={solicitud.conclusiones_comite} last />
               </div>
             )}
 
-            <EstampaAprobacion etapa="juridica" solicitud={solicitud} />
-            <InstanciasAprobacion solicitud={solicitud} />
+            {!faseConcepto && <EstampaAprobacion etapa="juridica" solicitud={solicitud} />}
+            <InstanciasAprobacion solicitud={solicitud} precedidoPorConclusiones={mostrarConclusionesComite} />
 
           </div>
         </div>
@@ -441,7 +754,7 @@ export function DetalleSolicitudJuridica({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-black text-slate-800 truncate" style={{ fontFamily: 'Gabarito, sans-serif' }}>{solicitud.solicitante_nombre}</p>
-                <p className="text-xs text-slate-500 truncate" style={{ fontFamily: 'Gabarito, sans-serif' }}>{solicitud.gerencia_nombre}</p>
+                <p className="text-xs text-slate-500 truncate" style={{ fontFamily: 'Gabarito, sans-serif' }}>{nombreGerenciaCompleto(solicitud.gerencia_nombre)}</p>
               </div>
             </div>
           </div>
@@ -463,17 +776,19 @@ export function DetalleSolicitudJuridica({
             <div className="flex items-center gap-2">
               <Scale size={14} style={{ color: '#2f6fa3' }} />
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-600" style={{ fontFamily: 'Gabarito, sans-serif' }}>
-                Revisión Legal
+                {faseConcepto ? 'Concepto Jurídico' : 'Revisión Legal'}
               </p>
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed -mt-2" style={{ fontFamily: 'Gabarito, sans-serif' }}>
-              {esFlujoSecuencial
+              {faseConcepto
+                ? 'Diligencie el concepto jurídico, las garantías y si tiene riesgos jurídicos (sección VII) y envíe la solicitud.'
+                : esFlujoSecuencial
                 ? 'Siga el flujo de trabajo en orden antes de emitir el concepto legal.'
                 : 'Revisa la información y emite tu concepto legal.'}
             </p>
 
-            {esFlujoSecuencial && (
+            {!faseConcepto && esFlujoSecuencial && (
               <PasosFlujoJuridica
                 estado={estadoFlujo}
                 modalidad={solicitud?.modalidad}
@@ -486,6 +801,21 @@ export function DetalleSolicitudJuridica({
               />
             )}
 
+            {faseConcepto ? (
+              /* Fase 1 (Directa/TDR/Invitación): solo enviar el concepto jurídico a Riesgos/Comité */
+              <div className="border-t border-slate-100 pt-3 space-y-2">
+                <ActionButton
+                  disabled={enviandoConcepto}
+                  spinning={enviandoConcepto}
+                  onClick={handleEnviarConcepto}
+                  icon={CheckCircle2}
+                  color="#2f6fa3"
+                >
+                  {tieneRiesgosJur === 'si' ? 'Enviar a Riesgos' : esInvitacion ? 'Continuar' : 'Enviar a Comité'}
+                </ActionButton>
+              </div>
+            ) : (
+            <>
             {/* Aprobar / Rechazar */}
             <div className="border-t border-slate-100 pt-3 space-y-2">
               {resultadoJuridica ? (
@@ -505,16 +835,16 @@ export function DetalleSolicitudJuridica({
                   <ActionButton
                     disabled={!!registrando || !checklistCompleto}
                     spinning={registrando === 'aprobado'}
-                    onClick={() => handleDecision('aprobado')}
+                    onClick={() => { setConfirmadoSecop(false); setShowConfirmSecop(true); }}
                     icon={CheckCircle2}
                     color="#10B981"
                   >
-                    Aprobar Legal
+                    Formalización
                   </ActionButton>
                   <ActionButton
                     disabled={!!registrando}
                     spinning={registrando === 'rechazado'}
-                    onClick={() => handleDecision('rechazado')}
+                    onClick={() => setShowConfirmRechazo(true)}
                     icon={XCircle}
                     color="#EF4444"
                   >
@@ -533,6 +863,8 @@ export function DetalleSolicitudJuridica({
                 </div>
               )}
             </div>
+            </>
+            )}
           </div>
         </div>
       </div>

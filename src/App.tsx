@@ -8,6 +8,7 @@ import { VistasGerente } from './components/gerente/VistasGerente';
 import { VistasJuridica } from './components/juridica/VistasJuridica';
 import { VistasFinanciera } from './components/financiera/VistasFinanciera';
 import { VistasSecretariaComite } from './components/secretaria/VistasSecretariaComite';
+import { VistasRiesgos } from './components/riesgos/VistasRiesgos';
 import { VistasAdministrador } from './components/administrador/VistasAdministrador';
 import { LoginPage } from './components/LoginPage';
 import { RespuestaProponente } from './components/publico/RespuestaProponente';
@@ -15,7 +16,7 @@ import { PostulacionPublica } from './components/publico/PostulacionPublica';
 import { Loader2, ShieldAlert, SlidersHorizontal } from 'lucide-react';
 import { Toaster } from 'sonner';
 
-export type RolUsuario = 'Supervisor' | 'Gerente' | 'Juridica' | 'Financiera' | 'Administrador' | 'SecretariaComite';
+export type RolUsuario = 'Supervisor' | 'Gerente' | 'Juridica' | 'Financiera' | 'Administrador' | 'SecretariaComite' | 'Riesgos';
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 const ALL_ROLE_OPTIONS: { value: RolUsuario; label: string }[] = [
   { value: 'Supervisor', label: 'Solicitante (Supervisor)' },
@@ -24,6 +25,7 @@ const ALL_ROLE_OPTIONS: { value: RolUsuario; label: string }[] = [
   { value: 'Financiera', label: 'Financiera' },
   { value: 'Administrador', label: 'Administrador' },
   { value: 'SecretariaComite', label: 'Secretaría de Comité' },
+  { value: 'Riesgos', label: 'Riesgos' },
 ];
 const DB_ROLE_TO_VIEW: Record<string, RolUsuario> = {
   supervisor: 'Supervisor',
@@ -32,6 +34,7 @@ const DB_ROLE_TO_VIEW: Record<string, RolUsuario> = {
   financiera: 'Financiera',
   administrador: 'Administrador',
   secretaria_comite: 'SecretariaComite',
+  riesgos: 'Riesgos',
 };
 
 export default function App() {
@@ -241,6 +244,8 @@ export default function App() {
         return <VistasAdministrador />;
       case 'SecretariaComite':
         return <VistasSecretariaComite />;
+      case 'Riesgos':
+        return <VistasRiesgos />;
       default:
         return <VistasSupervisor />;
     }

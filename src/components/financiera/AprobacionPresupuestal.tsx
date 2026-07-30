@@ -9,7 +9,9 @@ import {
   ArrowLeft,
   BadgeCheck,
   RotateCcw,
-  Download
+  Download,
+  Search,
+  X
 } from 'lucide-react';
 import { FormatoPlaneacionImprimible } from '../secretaria/FormatoPlaneacionImprimible';
 import { SeccionPresupuestoLectura } from '../shared/SeccionPresupuestoLectura';
@@ -17,6 +19,7 @@ import { DetallePlaneacionContractualParte1, DetallePlaneacionContractualParte2 
 import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
 import { EstampaAprobacion } from '../shared/EstampaAprobacion';
 import { getPresupuestoCertificadoDisplay, parseValorMoneda } from '../../lib/formatPresupuesto';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -157,7 +160,7 @@ const getCausalTexto = (codigo: any): string => {
 const FORMAS_PAGO: Record<string, string> = {
   anticipo: 'Anticipo',
   pago_unico: 'Pago único',
-  mensual: 'Mensual',
+  mensual: 'Mensual vencida',
 };
 
 const getFormaPagoTexto = (codigo: any): string => {
@@ -189,6 +192,8 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
   const [presupuestoAprobado, setPresupuestoAprobado] = useState('');
   const [procesando, setProcesando] = useState(false);
   const [solicitudParaPDF, setSolicitudParaPDF] = useState<any | null>(null);
+  const [busqueda, setBusqueda] = useState('');
+  const [gerenciaFiltro, setGerenciaFiltro] = useState('');
   const [presupuestoGerencia, setPresupuestoGerencia] = useState<{
     monto_total: number; comprometido: number; disponible: number;
   } | null>(null);
@@ -403,6 +408,22 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
     return '';
   };
 
+  // Gerencias presentes en la bandeja, con el conteo de casos por cada una
+  const gerenciasConteo = solicitudes.reduce((acc: Record<string, number>, s) => {
+    const g = nombreGerenciaCompleto(s.gerencia_nombre) || 'Sin gerencia';
+    acc[g] = (acc[g] || 0) + 1;
+    return acc;
+  }, {});
+  const gerenciasDisponibles = Object.keys(gerenciasConteo).sort((a, b) => a.localeCompare(b));
+
+  const solicitudesFiltradas = solicitudes.filter((s) => {
+    const coincideGerencia = !gerenciaFiltro || (nombreGerenciaCompleto(s.gerencia_nombre) || 'Sin gerencia') === gerenciaFiltro;
+    const q = busqueda.trim().toLowerCase();
+    const coincideBusqueda = !q || [s.codigo, s.titulo_contrato, s.objeto, s.solicitante_nombre]
+      .some((campo) => String(campo || '').toLowerCase().includes(q));
+    return coincideGerencia && coincideBusqueda;
+  });
+
   /* ════════════ Vista de DETALLE FULL-WIDTH (cuando hay solicitud seleccionada) ════════════ */
   if (solicitudSeleccionada) {
     const sol = solicitudSeleccionada;
@@ -500,7 +521,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
               </div>
             )}
 
-            <InstanciasAprobacion solicitud={sol} />
+            <InstanciasAprobacion solicitud={sol} precedidoPorConclusiones={!esDirecta && mostrarConclusionesComite} />
 
             <EstampaAprobacion
               etapa="financiera"
@@ -530,7 +551,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[10px] text-emerald-200/70 font-bold uppercase tracking-wider">Gerencia</span>
-                      <span className="text-[11px] text-white font-bold text-right truncate">{sol.gerencia_nombre}</span>
+                      <span className="text-[11px] text-white font-bold text-right truncate">{nombreGerenciaCompleto(sol.gerencia_nombre)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-[10px] text-emerald-200/70 font-bold uppercase tracking-wider">Valor estimado</span>
@@ -681,13 +702,65 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
         </div>
         <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
           <div className="text-right">
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Pendientes</p>
-            <p className="text-sm font-black text-emerald-700">{solicitudes.length} Casos</p>
+            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Mostrando</p>
+            <p className="text-sm font-black text-emerald-700">{solicitudesFiltradas.length} de {solicitudes.length} Casos</p>
           </div>
           <div className="h-8 w-[1px] bg-slate-100"></div>
           <Calendar className="text-slate-400" size={20} />
         </div>
       </div>
+
+      {/* Buscador + filtro por gerencia */}
+      {solicitudes.length > 0 && (
+        <div className="flex flex-col md:flex-row gap-3 md:items-center">
+          <div className="relative flex-1 md:max-w-sm">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por código, objeto o solicitante..."
+              className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-50 transition-all"
+              style={{ fontFamily: 'Gabarito, sans-serif' }}
+            />
+            {busqueda && (
+              <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <button
+              onClick={() => setGerenciaFiltro('')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all"
+              style={!gerenciaFiltro
+                ? { backgroundColor: '#065F46', color: '#fff' }
+                : { backgroundColor: '#F1F5F9', color: '#64748B' }}
+            >
+              <Building2 size={13} /> Todas las gerencias
+              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${!gerenciaFiltro ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
+                {solicitudes.length}
+              </span>
+            </button>
+            {gerenciasDisponibles.map((g) => (
+              <button
+                key={g}
+                onClick={() => setGerenciaFiltro(g === gerenciaFiltro ? '' : g)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all"
+                style={gerenciaFiltro === g
+                  ? { backgroundColor: '#065F46', color: '#fff' }
+                  : { backgroundColor: '#F1F5F9', color: '#64748B' }}
+              >
+                {g}
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${gerenciaFiltro === g ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
+                  {gerenciasConteo[g]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Grid de tarjetas */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -699,17 +772,32 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
             <h3 className="text-xl font-black text-slate-900 mb-2 font-gabarito">Bandeja Vacía</h3>
             <p className="text-slate-400 font-medium italic">No hay registros pendientes de asignación presupuestal en este momento.</p>
           </div>
+        ) : solicitudesFiltradas.length === 0 ? (
+          <div className="col-span-full bg-white p-16 rounded-[3rem] text-center border-2 border-dashed border-slate-200">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="text-slate-200" size={32} />
+            </div>
+            <h3 className="text-lg font-black text-slate-900 mb-1 font-gabarito">Sin resultados</h3>
+            <p className="text-slate-400 font-medium italic">Ningún caso coincide con la búsqueda o el filtro seleccionado.</p>
+          </div>
         ) : (
-          solicitudes.map((solicitud) => (
+          solicitudesFiltradas.map((solicitud) => (
             <div key={solicitud.id} className="group bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm hover:shadow-xl hover:translate-y-[-4px] transition-all duration-500 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 opacity-40 rounded-bl-[5rem] -mr-8 -mt-8 group-hover:bg-emerald-100 transition-colors"></div>
 
               <div className="relative z-10">
                 <div className="flex justify-between items-start mb-6">
                   <div className="space-y-1">
-                    <span className="text-[11px] font-black text-emerald-600 font-mono tracking-tighter bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
-                      {solicitud.codigo}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] font-black text-emerald-600 font-mono tracking-tighter bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                        {solicitud.codigo}
+                      </span>
+                      {solicitud.gerencia_nombre && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-100">
+                          <Building2 size={10} /> {nombreGerenciaCompleto(solicitud.gerencia_nombre)}
+                        </span>
+                      )}
+                    </div>
                     <h3 className="text-lg font-black text-slate-900 leading-tight mt-3 line-clamp-2" style={{ fontFamily: 'Gabarito, sans-serif' }}>
                       {solicitud.titulo_contrato || solicitud.objeto}
                     </h3>
@@ -723,7 +811,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
                   <div className="space-y-1">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Solicitante</p>
                     <p className="text-sm font-bold text-slate-700 truncate">{solicitud.solicitante_nombre}</p>
-                    <p className="text-[10px] text-slate-400 font-medium truncate">{solicitud.gerencia_nombre}</p>
+                    <p className="text-[10px] text-slate-400 font-medium truncate">{nombreGerenciaCompleto(solicitud.gerencia_nombre)}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inversión Estimada</p>

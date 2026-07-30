@@ -16,7 +16,7 @@ interface SidebarFinancieraProps {
 export function SidebarFinanciera({ currentView, onNavigate, isOpen, onToggle, userName, userEmail, onLogout, pendingCount = 0 }: SidebarFinancieraProps) {
   const menuItems = [
     { id: 'dashboard' as ViewFinanciera, label: 'Panel Principal', icon: Home },
-    { id: 'aprobacion' as ViewFinanciera, label: 'Carga Presupuestal', icon: DollarSign },
+    { id: 'aprobacion' as ViewFinanciera, label: 'Solicitudes', icon: DollarSign },
     { id: 'vigencia' as ViewFinanciera, label: 'Presupuesto Vigencia', icon: Gauge },
     { id: 'historial' as ViewFinanciera, label: 'Historial', icon: History },
     { id: 'pagos' as ViewFinanciera, label: 'Aprobación de Facturas', icon: CreditCard },

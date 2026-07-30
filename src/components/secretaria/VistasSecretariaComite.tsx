@@ -12,6 +12,7 @@ import { DetalleSolicitudComite } from './DetalleSolicitudComite';
 import { ActaSesionComite } from './ActaSesionComite';
 import { SesionComite, DecisionRegistro, DecisionComite } from './SesionComite';
 import { parseValorMoneda } from '../../lib/formatPresupuesto';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -1077,7 +1078,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
                             <div style={s.previewItemMeta}>
                               <span style={s.previewItemMetaItem}>
                                 <Building2 size={11} color="#94a3b8" />
-                                {sol.gerencia_nombre}
+                                {nombreGerenciaCompleto(sol.gerencia_nombre)}
                               </span>
                               <span style={{ color: '#d1d5db' }}>·</span>
                               <span style={s.previewItemMetaItem}>
@@ -1447,7 +1448,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
                               <div style={s.avatar}>{String(sol.solicitante_nombre || 'S').charAt(0).toUpperCase()}</div>
                               <div>
                                 <p style={s.personName}>{sol.solicitante_nombre}</p>
-                                <p style={s.personGerencia}>{sol.gerencia_nombre}</p>
+                                <p style={s.personGerencia}>{nombreGerenciaCompleto(sol.gerencia_nombre)}</p>
                               </div>
                             </div>
                           </td>

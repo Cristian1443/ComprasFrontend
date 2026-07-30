@@ -137,6 +137,12 @@ export function SesionComite({
   };
 
   const marcarDecision = (valor: Exclude<DecisionComite, null>) => {
+    if (valor === 'en_revision' && !String(currentDec.discusion || '').trim()) {
+      setMostrarDiscusion(true);
+      window.setTimeout(() => textareaRef.current?.focus(), 50);
+      alert('Para devolver la solicitud debes registrar un comentario en el campo de discusión explicando el motivo.');
+      return;
+    }
     setDecisiones((prev) => ({
       ...prev,
       [currentId]: { ...(prev[currentId] || { discusion: '', decision: null }), decision: valor },
@@ -171,6 +177,15 @@ export function SesionComite({
   const cerrarComite = () => {
     if (!todasDecididas) {
       alert('Aún hay solicitudes sin decisión registrada.');
+      return;
+    }
+    const devueltasSinComentario = ids.filter(
+      (id) => decisiones[id]?.decision === 'en_revision' && !String(decisiones[id]?.discusion || '').trim()
+    );
+    if (devueltasSinComentario.length > 0) {
+      alert('Hay solicitudes marcadas como "En revisión" sin comentario. Debes indicar el motivo de la devolución antes de cerrar el comité.');
+      setCurrentIdx(ids.indexOf(devueltasSinComentario[0]));
+      setMostrarDiscusion(true);
       return;
     }
     const pendientesDiscusion = ids.filter((id) => !String(decisiones[id]?.discusion || '').trim());

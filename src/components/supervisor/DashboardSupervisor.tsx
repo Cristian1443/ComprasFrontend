@@ -130,7 +130,7 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
 
       {/* ── HEADER ── */}
       <div style={{ background: `linear-gradient(135deg, ${BRAND_DARK} 0%, ${BRAND} 100%)` }}>
-        <div className="max-w-[1400px] mx-auto px-6 lg:px-10 pt-8 pb-0 flex items-start justify-between gap-6">
+        <div className="max-w-[1400px] mx-auto px-6 lg:px-10 pt-8 pb-8 flex items-start justify-between gap-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/50 mb-2">Compras y Contratación · Supervisor</p>
             <h1 className="text-3xl font-black text-white tracking-tight">Panel de <span style={{ color: '#F08A24' }}>Control</span></h1>
@@ -143,21 +143,6 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
           >
             <Plus size={16} className="stroke-[2.5]" /> Nueva Solicitud
           </button>
-        </div>
-
-        {/* Stats en header */}
-        <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Total solicitudes', val: total, color: 'text-white' },
-            { label: 'Requieren acción', val: requierenAccion, color: requierenAccion > 0 ? 'text-orange-300' : 'text-white' },
-            { label: 'En revisión', val: enRevision, color: 'text-yellow-200' },
-            { label: 'Contratos supervisados', val: contratos.length, color: 'text-emerald-300' },
-          ].map((s, i) => (
-            <div key={i} className="rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.1)' }}>
-              <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
-              <p className="text-white/50 text-[11px] font-semibold uppercase tracking-wide mt-0.5">{s.label}</p>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -203,7 +188,7 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
                 {facturasPendientes.length} {facturasPendientes.length === 1 ? 'factura requiere' : 'facturas requieren'} tu certificación
               </p>
               <p className="text-amber-700 text-xs truncate mt-0.5">
-                {facturasPendientes.slice(0, 3).map(f => f.contrato_codigo || f.no_factura_cxc).filter(Boolean).join(' · ')}
+                {facturasPendientes.slice(0, 3).map(f => f.contrato_codigo || (f.numero_ap ? `AP ${f.numero_ap}` : f.no_factura_cxc)).filter(Boolean).join(' · ')}
               </p>
             </div>
             {onVerContrato && (
@@ -290,7 +275,7 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
                           <span className="text-xs font-black" style={{ color: BRAND }}>{p.codigo}</span>
                           <EstadoBadge estado={p.estado} />
                         </div>
-                        <p className="text-sm font-semibold text-gray-700 truncate mt-0.5">{p.objeto || 'Sin objeto'}</p>
+                        <p className="text-sm font-semibold text-gray-700 truncate mt-0.5">{p.titulo_contrato || p.objeto || 'Sin objeto'}</p>
                         <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400 flex-wrap">
                           <span className="capitalize">{p.modalidad || 'N/A'}</span>
                           {getValor(p) && <><span>·</span><span className="font-semibold text-emerald-700">{getValor(p)}</span></>}
@@ -336,7 +321,7 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] font-black" style={{ color: BRAND }}>{c.codigo || '—'}</p>
-                          <p className="text-xs font-semibold text-gray-700 truncate">{c.objeto || 'Sin objeto'}</p>
+                          <p className="text-xs font-semibold text-gray-700 truncate">{c.titulo_contrato || c.objeto || 'Sin objeto'}</p>
                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             {c.proveedor_nombre && <span className="text-[10px] text-gray-400">{c.proveedor_nombre}</span>}
                             {formatCOP(c.valor_en_cop) && <span className="text-[10px] font-bold text-emerald-700">{formatCOP(c.valor_en_cop)}</span>}
@@ -384,7 +369,7 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
                         <Receipt size={12} className="text-amber-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[11px] font-black text-amber-700">{f.no_factura_cxc || '—'}</p>
+                        <p className="text-[11px] font-black text-amber-700">{f.numero_ap ? `AP ${f.numero_ap}` : (f.no_factura_cxc || '—')}</p>
                         <p className="text-xs font-semibold text-gray-600 truncate">{f.contrato_objeto || f.contrato_codigo}</p>
                         {formatCOP(f.valor) && <p className="text-[10px] font-bold text-emerald-700 mt-0.5">{formatCOP(f.valor)}</p>}
                       </div>

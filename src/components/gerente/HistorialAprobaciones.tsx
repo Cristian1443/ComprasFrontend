@@ -26,6 +26,7 @@ interface SolicitudHistorial {
 interface FacturaHistorial {
     id: string;
     no_factura_cxc: string;
+    numero_ap: string;
     no_contrato_oc: string;
     concepto: string;
     valor: number | null;
@@ -121,7 +122,7 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
     );
 
     const filteredFac = facturas.filter(f =>
-        [f.no_factura_cxc, f.concepto, f.contrato_codigo, f.contrato_objeto].some(v =>
+        [f.numero_ap, f.no_factura_cxc, f.concepto, f.contrato_codigo, f.contrato_objeto].some(v =>
             v?.toLowerCase().includes(searchTerm.toLowerCase())
         )
     );
@@ -273,7 +274,7 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
                                                     <Receipt size={13} style={{ color: BRAND }} />
                                                 </div>
                                                 <span className="text-xs font-black text-gray-700 font-mono">
-                                                    {fac.no_factura_cxc || fac.no_contrato_oc || '-'}
+                                                    {fac.numero_ap ? `AP ${fac.numero_ap}` : (fac.no_factura_cxc || fac.no_contrato_oc || '-')}
                                                 </span>
                                             </div>
                                         </td>

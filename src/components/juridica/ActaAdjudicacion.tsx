@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Printer, Loader2, Download, Save, Send, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
+import { toast } from 'sonner';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -76,7 +77,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
         window.removeEventListener('message', handler);
         popup?.close();
       } else if (e.data?.adobeOk === false) {
-        alert('Error al conectar: ' + (e.data.error || 'desconocido'));
+        toast.error('Error al conectar: ' + (e.data.error || 'desconocido'));
         window.removeEventListener('message', handler);
       }
     };
@@ -128,7 +129,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
   const enviarAAdobe = async () => {
     const firmantesValidos = firmantes.filter(f => f.email.trim());
     if (firmantesValidos.length === 0) {
-      alert('Ingrese al menos un correo electrónico de firmante.');
+      toast.error('Ingrese al menos un correo electrónico de firmante.');
       return;
     }
     if (!actaRef.current) return;
@@ -352,7 +353,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
       await registrarActa('PDF');
     } catch (e) {
       console.error('Error generando PDF:', e);
-      alert('Error al generar el PDF. Intente con el botón Imprimir.');
+      toast.error('Error al generar el PDF. Intente con el botón Imprimir.');
     } finally {
       setGenerandoPdf(false);
     }

@@ -78,10 +78,10 @@ export function ReportesFinanciera() {
                 downloadCSV([headers, ...rows], `Ejecucion_Presupuestal_${new Date().toISOString().slice(0, 10)}.csv`);
             } else if (tipo === 'pagos') {
                 const facturas = await fetch(`${API_URL}/api/financiera/facturas`).then(r => r.json());
-                const headers = ['No. Factura / CxC', 'Código contrato', 'Objeto contrato', 'Concepto', 'Valor (COP)', 'Estado', 'Aprobado supervisor', 'Aprobado gerente', 'Fecha creación'];
+                const headers = ['AP', 'Código contrato', 'Objeto contrato', 'Concepto', 'Valor (COP)', 'Estado', 'Aprobado supervisor', 'Aprobado gerente', 'Fecha creación'];
                 const estadoLabel: Record<string, string> = { aprobada: 'Aprobada', pendiente: 'Pendiente', rechazada: 'Rechazada' };
                 const rows = (facturas as any[]).map(f => [
-                    f.no_factura_cxc || '',
+                    f.numero_ap || '',
                     f.contrato_codigo || '',
                     f.contrato_objeto || '',
                     f.concepto || '',

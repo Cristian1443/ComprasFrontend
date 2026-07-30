@@ -3,6 +3,7 @@ import { ArrowLeft, Printer, Loader2, PencilLine, Lock } from 'lucide-react';
 import { getPresupuestoCertificadoDisplay, getPresupuestoDisplayText } from '../../lib/formatPresupuesto';
 import { getCausalComiteDisplay } from './DetalleSolicitudComite';
 import { BloqueFirma } from '../shared/BloqueFirma';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -582,7 +583,7 @@ export function ActaSesionComite({
               ''
             ).trim();
             const origenPpto =
-              sol.rubro || sol.rubro_presupuestal || sol.gerencia_nombre || 'N/A';
+              sol.rubro || sol.rubro_presupuestal || nombreGerenciaCompleto(sol.gerencia_nombre) || 'N/A';
             const causal = getCausalComiteDisplay(sol) || 'No registrada';
             const supervisor = sol.supervision_nombre || sol.solicitante_nombre || 'N/A';
 

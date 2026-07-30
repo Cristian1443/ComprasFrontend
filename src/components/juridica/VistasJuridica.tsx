@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
 import { useAuthSync } from '../../lib/useAuthSync';
 import { SidebarJuridica } from './SidebarJuridica';
@@ -15,6 +16,38 @@ import { ActaAdjudicacion } from './ActaAdjudicacion';
 import { ContratosJuridica } from './ContratosJuridica';
 import { FormularioContractual } from './FormularioContractual';
 
+type Crumb = { label: string; onClick?: () => void };
+
+function BreadcrumbBar({ crumbs }: { crumbs: Crumb[] }) {
+  return (
+    <div
+      className="flex items-center gap-1.5 px-6 lg:px-8 py-2.5 border-b border-gray-200 bg-white text-xs"
+      style={{ fontFamily: 'Gabarito, sans-serif' }}
+    >
+      {crumbs.map((c, i) => {
+        const isLast = i === crumbs.length - 1;
+        return (
+          <React.Fragment key={i}>
+            {i > 0 && <ChevronRight size={12} className="text-gray-300 shrink-0" />}
+            {c.onClick && !isLast ? (
+              <button
+                onClick={c.onClick}
+                className="font-semibold text-gray-400 hover:text-gray-700 transition-colors"
+              >
+                {c.label}
+              </button>
+            ) : (
+              <span className={isLast ? 'font-black text-gray-800' : 'font-semibold text-gray-400'}>
+                {c.label}
+              </span>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 export function VistasJuridica() {
   const { instance, accounts } = useMsal();
   useAuthSync(); // Registra ultimo_acceso al ingresar al módulo
@@ -22,6 +55,8 @@ export function VistasJuridica() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [solicitudIdSeleccionada, setSolicitudIdSeleccionada] = useState<string | null>(null);
   const [contratoIdSeleccionado, setContratoIdSeleccionado] = useState<string | null>(null);
+  const [convocatoriaSubvista, setConvocatoriaSubvista] = useState<string | null>(null);
+  const [convocatoriaResetSignal, setConvocatoriaResetSignal] = useState(0);
   const account = accounts[0];
   const userName = account?.name || 'Área Jurídica';
   const userEmail = account?.username || 'juridica';
@@ -48,6 +83,69 @@ export function VistasJuridica() {
   const abrirActa = (id: string) => {
     setSolicitudIdSeleccionada(id);
     setCurrentView('acta_adjudicacion');
+  };
+
+  const goDashboard = () => { setSolicitudIdSeleccionada(null); setContratoIdSeleccionado(null); setCurrentView('dashboard'); };
+
+  const getBreadcrumb = (): Crumb[] => {
+    const crumbs: Crumb[] = [{ label: 'Jurídica', onClick: goDashboard }];
+
+    if (solicitudIdSeleccionada && (currentView === 'bandeja' || currentView === 'historial')) {
+      crumbs.push({
+        label: currentView === 'bandeja' ? 'Bandeja de Entrada' : 'Historial Jurídica',
+        onClick: () => setSolicitudIdSeleccionada(null),
+      });
+      crumbs.push({ label: 'Detalle de solicitud' });
+      return crumbs;
+    }
+
+    switch (currentView) {
+      case 'dashboard':
+        crumbs.push({ label: 'Dashboard Global' });
+        break;
+      case 'powerbi':
+        crumbs.push({ label: 'Dashboard BI' });
+        break;
+      case 'bandeja':
+        crumbs.push({ label: 'Bandeja de Entrada' });
+        break;
+      case 'historial':
+        crumbs.push({ label: 'Historial Jurídica' });
+        break;
+      case 'proveedores':
+        crumbs.push({ label: 'Proveedores' });
+        break;
+      case 'contratos':
+        crumbs.push({ label: 'Contratos' });
+        break;
+      case 'formulario_contractual':
+        crumbs.push({ label: 'Contratos', onClick: () => { setContratoIdSeleccionado(null); setCurrentView('contratos'); } });
+        crumbs.push({ label: 'Ficha de contrato' });
+        break;
+      case 'calificacion':
+        if (solicitudIdSeleccionada) crumbs.push({ label: 'Bandeja de Entrada', onClick: () => setCurrentView('bandeja') });
+        crumbs.push({ label: 'Calificación de proponentes' });
+        break;
+      case 'documentos':
+        if (solicitudIdSeleccionada) crumbs.push({ label: 'Bandeja de Entrada', onClick: () => setCurrentView('bandeja') });
+        crumbs.push({ label: 'Documentos finales' });
+        break;
+      case 'convocatorias':
+        if (solicitudIdSeleccionada) crumbs.push({ label: 'Bandeja de Entrada', onClick: () => setCurrentView('bandeja') });
+        crumbs.push({
+          label: 'Convocatorias',
+          onClick: convocatoriaSubvista ? () => setConvocatoriaResetSignal(n => n + 1) : undefined,
+        });
+        if (convocatoriaSubvista) crumbs.push({ label: convocatoriaSubvista });
+        break;
+      case 'acta_adjudicacion':
+        if (solicitudIdSeleccionada) crumbs.push({ label: 'Bandeja de Entrada', onClick: () => setCurrentView('bandeja') });
+        crumbs.push({ label: 'Acta de adjudicación' });
+        break;
+      default:
+        crumbs.push({ label: 'Dashboard Global' });
+    }
+    return crumbs;
   };
 
   const renderContent = () => {
@@ -100,7 +198,15 @@ export function VistasJuridica() {
       case 'documentos':
         return <GestionDocumentos solicitudId={solicitudIdSeleccionada} onBack={() => setCurrentView('bandeja')} />;
       case 'convocatorias':
-        return <ConvocatoriaProponentes solicitudId={solicitudIdSeleccionada} onBack={() => { setSolicitudIdSeleccionada(null); setCurrentView('bandeja'); }} userEmail={userEmail} />;
+        return (
+          <ConvocatoriaProponentes
+            solicitudId={solicitudIdSeleccionada}
+            onBack={() => { setSolicitudIdSeleccionada(null); setCurrentView('bandeja'); }}
+            userEmail={userEmail}
+            onSubvistaChange={setConvocatoriaSubvista}
+            resetSignal={convocatoriaResetSignal}
+          />
+        );
       case 'acta_adjudicacion':
         return <ActaAdjudicacion solicitudId={solicitudIdSeleccionada} onBack={() => setCurrentView('bandeja')} />;
       case 'contratos':
@@ -131,8 +237,11 @@ export function VistasJuridica() {
         userEmail={userEmail}
         onLogout={handleLogout}
       />
-      <main className={`flex-1 min-h-0 overflow-y-auto transition-all duration-300 ${isSidebarOpen ? 'ml-0 lg:ml-64' : 'ml-0'}`}>
-        {renderContent()}
+      <main className={`flex-1 min-h-0 overflow-y-auto transition-all duration-300 flex flex-col ${isSidebarOpen ? 'ml-0 lg:ml-64' : 'ml-0'}`}>
+        <BreadcrumbBar crumbs={getBreadcrumb()} />
+        <div className="flex-1 min-h-0">
+          {renderContent()}
+        </div>
       </main>
     </div>
   );

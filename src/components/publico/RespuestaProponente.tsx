@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Clock, CheckCircle2, XCircle, Send, Loader2, AlertTriangle, Lock, FileText,
-  Upload, Trash2, File, Paperclip
+  Upload, Trash2, File, Paperclip, PenLine, Landmark
 } from 'lucide-react';
+import { COLORES } from '../../styles/colores-corporativos';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
 const FONT = "'Gabarito', sans-serif";
@@ -16,6 +17,26 @@ interface ArchivoSubido {
   url: string;
   subido_en: string;
 }
+
+type DocumentoRA14Key = 'rut' | 'camara_comercio' | 'cedula_rl' | 'sarlaft' | 'certificacion_bancaria';
+
+interface DocumentoRA14 {
+  tipo: DocumentoRA14Key;
+  nombre: string;
+  nombre_almacenado: string;
+  tamano: number;
+  mimetype: string;
+  url: string;
+  subido_en: string;
+}
+
+const DOCUMENTOS_RA14: { tipo: DocumentoRA14Key; label: string }[] = [
+  { tipo: 'rut', label: 'RUT' },
+  { tipo: 'camara_comercio', label: 'Cámara de comercio' },
+  { tipo: 'cedula_rl', label: 'Fotocopia cédula de ciudadanía' },
+  { tipo: 'sarlaft', label: 'SARLAFT' },
+  { tipo: 'certificacion_bancaria', label: 'Certificación bancaria' },
+];
 
 interface ConvocatoriaData {
   invitacion_id: string;
@@ -32,6 +53,7 @@ interface ConvocatoriaData {
   ya_respondida: boolean;
   respuesta_texto: string | null;
   respuesta_archivos: ArchivoSubido[];
+  documentos_proveedor: DocumentoRA14[];
   respondida_en: string | null;
   vencida: boolean;
   puede_responder: boolean;
@@ -62,6 +84,62 @@ function tiempoRestante(fechaLimite: string): string {
   return `${mins} minuto${mins > 1 ? 's' : ''} restantes`;
 }
 
+/* ── Bloques reutilizables de la tabla RA1-4 (definidos fuera del componente
+     para no perder el foco de los inputs en cada render) ── */
+function SeccionRoja({ children }: { children: React.ReactNode }) {
+  return <div style={p.seccionRoja}>{children}</div>;
+}
+function EncabezadoTabla({ children }: { children: React.ReactNode }) {
+  return <div style={p.encabezadoTabla}>{children}</div>;
+}
+function Fila({ children, ultima }: { children: React.ReactNode; ultima?: boolean }) {
+  return <div style={{ ...p.fila, ...(ultima ? { borderBottom: 'none' } : {}) }}>{children}</div>;
+}
+function Campo({ label, children, minWidth = 220 }: { label: string; children: React.ReactNode; minWidth?: number }) {
+  return (
+    <div style={{ ...p.campo, minWidth }}>
+      <div style={p.celdaLabel}>{label}</div>
+      <div style={p.celdaValor}>{children}</div>
+    </div>
+  );
+}
+
+function DocInputRA14({ label, documento, subiendo, onSelect, onRemove }: {
+  label: string; documento: DocumentoRA14 | undefined; subiendo: boolean;
+  onSelect: (f: File) => void; onRemove: () => void;
+}) {
+  return (
+    <div style={p.docRow}>
+      <div style={p.docLabelWrap}>
+        {documento ? <CheckCircle2 size={16} color="#10B981" /> : <FileText size={16} color="#94a3b8" />}
+        <span style={p.docLabel}>{label} *</span>
+      </div>
+      {documento ? (
+        <div style={p.docFileChip}>
+          <span style={p.docFileName}>{documento.nombre}</span>
+          <button type="button" onClick={onRemove} style={p.docRemoveBtn} title="Quitar archivo">
+            <XCircle size={14} />
+          </button>
+        </div>
+      ) : subiendo ? (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 12, color: '#64748b' }}>
+          <Loader2 size={14} className="animate-spin" /> Subiendo...
+        </span>
+      ) : (
+        <label style={p.docUploadBtn}>
+          <Upload size={13} /> Adjuntar archivo
+          <input
+            type="file"
+            style={{ display: 'none' }}
+            accept=".pdf,.png,.jpg,.jpeg"
+            onChange={e => { const f = e.target.files?.[0]; if (f) onSelect(f); e.target.value = ''; }}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
 export function RespuestaProponente() {
   const [token, setToken] = useState('');
   const [data, setData] = useState<ConvocatoriaData | null>(null);
@@ -71,6 +149,16 @@ export function RespuestaProponente() {
   const [respuestaTexto, setRespuestaTexto] = useState('');
   const [archivosSubidos, setArchivosSubidos] = useState<ArchivoSubido[]>([]);
   const [subiendoArchivo, setSubiendoArchivo] = useState(false);
+
+  /* ── Formulario RA1-4 — Tesorería y documentos del proveedor ── */
+  const [banco, setBanco] = useState('');
+  const [bancoSucursal, setBancoSucursal] = useState('');
+  const [bancoEmailContacto, setBancoEmailContacto] = useState('');
+  const [tipoCuenta, setTipoCuenta] = useState('');
+  const [numeroCuenta, setNumeroCuenta] = useState('');
+  const [documentosRA14, setDocumentosRA14] = useState<DocumentoRA14[]>([]);
+  const [subiendoDocRA14, setSubiendoDocRA14] = useState<DocumentoRA14Key | null>(null);
+
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState('');
@@ -91,6 +179,7 @@ export function RespuestaProponente() {
       .then(d => {
         setData(d);
         setArchivosSubidos(Array.isArray(d.respuesta_archivos) ? d.respuesta_archivos : []);
+        setDocumentosRA14(Array.isArray(d.documentos_proveedor) ? d.documentos_proveedor : []);
       })
       .catch(() => setError('Enlace inválido o expirado. Por favor contacte al área jurídica.'))
       .finally(() => setCargando(false));
@@ -150,11 +239,67 @@ export function RespuestaProponente() {
     }
   };
 
+  /* ── Subir documento del formulario RA1-4 ── */
+  const handleSubirDocumentoRA14 = async (tipo: DocumentoRA14Key, file: File) => {
+    if (file.size > 20 * 1024 * 1024) {
+      setErrorEnvio(`El archivo "${file.name}" excede el límite de 20MB.`);
+      return;
+    }
+    setSubiendoDocRA14(tipo);
+    setErrorEnvio('');
+    try {
+      const formData = new FormData();
+      formData.append('archivo', file);
+      formData.append('token', token);
+      formData.append('tipo', tipo);
+
+      const resp = await fetch(`${API_URL}/api/proponente/subir-documento-ra14`, {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || 'Error al subir el documento');
+      setDocumentosRA14(prev => [...prev.filter(d => d.tipo !== tipo), result]);
+    } catch (err: any) {
+      setErrorEnvio(err.message || 'Error al subir el documento');
+    } finally {
+      setSubiendoDocRA14(null);
+    }
+  };
+
+  /* ── Eliminar documento del formulario RA1-4 ── */
+  const handleEliminarDocumentoRA14 = async (tipo: DocumentoRA14Key) => {
+    try {
+      const resp = await fetch(`${API_URL}/api/proponente/eliminar-documento-ra14`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, tipo }),
+      });
+      if (!resp.ok) {
+        const r = await resp.json();
+        throw new Error(r.error || 'Error');
+      }
+      setDocumentosRA14(prev => prev.filter(d => d.tipo !== tipo));
+    } catch (err: any) {
+      setErrorEnvio(err.message || 'Error al eliminar el documento');
+    }
+  };
+
   /* ── Enviar respuesta final ── */
   const handleEnviar = async () => {
     if (!respuestaTexto.trim() && archivosSubidos.length === 0) {
       setErrorEnvio('Debes escribir tu respuesta o adjuntar al menos un documento.');
       return;
+    }
+    if (!banco.trim() || !bancoSucursal.trim() || !bancoEmailContacto.trim() || !tipoCuenta.trim() || !numeroCuenta.trim()) {
+      setErrorEnvio('Completa todos los datos de tesorería (banco, sucursal, correo de contacto, tipo y número de cuenta).');
+      return;
+    }
+    for (const doc of DOCUMENTOS_RA14) {
+      if (!documentosRA14.some(d => d.tipo === doc.tipo)) {
+        setErrorEnvio(`Debes adjuntar el documento: ${doc.label}.`);
+        return;
+      }
     }
     setEnviando(true);
     setErrorEnvio('');
@@ -162,7 +307,11 @@ export function RespuestaProponente() {
       const resp = await fetch(`${API_URL}/api/proponente/responder`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, respuesta_texto: respuestaTexto, archivos: [] }),
+        body: JSON.stringify({
+          token, respuesta_texto: respuestaTexto, archivos: [],
+          banco: banco.trim(), banco_sucursal: bancoSucursal.trim(), banco_email_contacto: bancoEmailContacto.trim(),
+          tipo_cuenta: tipoCuenta.trim(), numero_cuenta: numeroCuenta.trim(),
+        }),
       });
       const result = await resp.json();
       if (!resp.ok) throw new Error(result.error || 'Error al enviar');
@@ -179,7 +328,7 @@ export function RespuestaProponente() {
     return (
       <div style={p.pageBg}>
         <div style={p.centrado}>
-          <Loader2 size={40} className="animate-spin" color="#3384D6" />
+          <Loader2 size={40} className="animate-spin" color={COLORES.sidebar} />
           <p style={p.loadText}>Cargando convocatoria...</p>
         </div>
       </div>
@@ -230,7 +379,7 @@ export function RespuestaProponente() {
                 </p>
                 {archivosResp.map((a, i) => (
                   <div key={i} style={p.fileItem}>
-                    <File size={14} color="#3384D6" />
+                    <File size={14} color={COLORES.sidebar} />
                     <span style={{ fontFamily: FONT, fontSize: 12, color: '#334155' }}>{a.nombre}</span>
                     <span style={{ fontFamily: FONT, fontSize: 11, color: '#94a3b8' }}>({fmtTamano(a.tamano)})</span>
                   </div>
@@ -315,7 +464,7 @@ export function RespuestaProponente() {
         {/* Requisitos */}
         <div style={p.requisitosSection}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <FileText size={18} color="#3384D6" />
+            <FileText size={18} color={COLORES.sidebar} />
             <h3 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: '#1e293b', margin: 0 }}>Requisitos solicitados</h3>
           </div>
           <div style={p.requisitosBox}>
@@ -329,7 +478,7 @@ export function RespuestaProponente() {
         {data.documento_adjunto_url && (
           <div style={{ padding: '0 28px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <Paperclip size={18} color="#1D4ED8" />
+              <Paperclip size={18} color={COLORES.sidebarHover} />
               <h3 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: '#1e293b', margin: 0 }}>
                 Documento de la convocatoria
               </h3>
@@ -341,28 +490,78 @@ export function RespuestaProponente() {
               style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '14px 18px', borderRadius: 10,
-                background: '#EFF6FF', border: '1px solid #BFDBFE',
+                background: COLORES.infoClaro, border: `1px solid ${COLORES.sidebarBorder}`,
                 textDecoration: 'none',
               }}
             >
-              <File size={22} color="#3384D6" style={{ flexShrink: 0 }} />
+              <File size={22} color={COLORES.sidebar} style={{ flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: '#1D4ED8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <p style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: COLORES.sidebarHover, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {data.documento_adjunto_nombre || 'Documento adjunto'}
                 </p>
-                <p style={{ fontFamily: FONT, fontSize: 11, color: '#3730A3', margin: '2px 0 0' }}>
+                <p style={{ fontFamily: FONT, fontSize: 11, color: COLORES.sidebarHover, margin: '2px 0 0' }}>
                   Haz clic para abrir o descargar
                 </p>
               </div>
-              <Upload size={15} color="#3384D6" style={{ flexShrink: 0, transform: 'rotate(180deg)' }} />
+              <Upload size={15} color={COLORES.sidebar} style={{ flexShrink: 0, transform: 'rotate(180deg)' }} />
             </a>
           </div>
         )}
 
+        {/* ══════════════════ RA1-4 — Tesorería y documentos del proveedor ══════════════════ */}
+        <div style={p.formSection}>
+          <SeccionRoja>RA1-4 Tesorería y documentos del proveedor</SeccionRoja>
+          <div style={p.tablaBox}>
+            <EncabezadoTabla>Tesorería</EncabezadoTabla>
+            <Fila>
+              <Campo label="Banco" minWidth={220}>
+                <input style={p.inputTabla} value={banco} onChange={e => setBanco(e.target.value)} placeholder="Ej: Banco de Bogotá" />
+              </Campo>
+              <Campo label="Sucursal" minWidth={200}>
+                <input style={p.inputTabla} value={bancoSucursal} onChange={e => setBancoSucursal(e.target.value)} placeholder="Ej: Las Aguas" />
+              </Campo>
+              <Campo label="Dirección correo persona contacto" minWidth={260}>
+                <input style={p.inputTabla} type="email" value={bancoEmailContacto} onChange={e => setBancoEmailContacto(e.target.value)} placeholder="tesoreria@empresa.com" />
+              </Campo>
+            </Fila>
+            <Fila ultima>
+              <Campo label="Tipo de cuenta" minWidth={220}>
+                <select style={p.inputTabla} value={tipoCuenta} onChange={e => setTipoCuenta(e.target.value)}>
+                  <option value="">Selecciona...</option>
+                  <option value="Ahorros">Ahorros</option>
+                  <option value="Corriente">Corriente</option>
+                </select>
+              </Campo>
+              <Campo label="Número cuenta" minWidth={220}>
+                <input style={p.inputTabla} value={numeroCuenta} onChange={e => setNumeroCuenta(e.target.value)} placeholder="Número de cuenta" />
+              </Campo>
+            </Fila>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <Landmark size={16} color={COLORES.sidebar} />
+              <h3 style={{ fontFamily: FONT, fontSize: 14, fontWeight: 800, color: '#1e293b', margin: 0 }}>Datos adjuntos</h3>
+            </div>
+            <div style={p.docsBox}>
+              {DOCUMENTOS_RA14.map(doc => (
+                <DocInputRA14
+                  key={doc.tipo}
+                  label={doc.label}
+                  documento={documentosRA14.find(d => d.tipo === doc.tipo)}
+                  subiendo={subiendoDocRA14 === doc.tipo}
+                  onSelect={f => handleSubirDocumentoRA14(doc.tipo, f)}
+                  onRemove={() => handleEliminarDocumentoRA14(doc.tipo)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* ── Sección de carga de archivos ── */}
         <div style={p.formSection}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Paperclip size={18} color="#6366F1" />
+            <Paperclip size={18} color={COLORES.sidebar} />
             <h3 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: '#1e293b', margin: 0 }}>Documentos adjuntos</h3>
           </div>
           <p style={{ fontFamily: FONT, fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
@@ -417,9 +616,10 @@ export function RespuestaProponente() {
 
         {/* ── Respuesta de texto ── */}
         <div style={p.formSection}>
-          <h3 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: '#1e293b', margin: '0 0 8px' }}>
-            ✍️ Su respuesta
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
+            <PenLine size={18} color={COLORES.sidebar} />
+            <h3 style={{ fontFamily: FONT, fontSize: 15, fontWeight: 800, color: '#1e293b', margin: 0 }}>Su respuesta</h3>
+          </div>
           <p style={{ fontFamily: FONT, fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
             Escriba su propuesta, detalle los documentos que adjunta y cualquier información relevante.
             Una vez enviada, <strong>no podrá modificarla</strong>.
@@ -440,8 +640,10 @@ export function RespuestaProponente() {
           )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
-            <p style={{ fontFamily: FONT, fontSize: 12, color: '#94a3b8', margin: 0 }}>
-              {archivosSubidos.length > 0 && `📎 ${archivosSubidos.length} documento${archivosSubidos.length > 1 ? 's' : ''} adjunto${archivosSubidos.length > 1 ? 's' : ''}`}
+            <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 12, color: '#94a3b8', margin: 0 }}>
+              {archivosSubidos.length > 0 && (
+                <><Paperclip size={13} /> {archivosSubidos.length} documento{archivosSubidos.length > 1 ? 's' : ''} adjunto{archivosSubidos.length > 1 ? 's' : ''}</>
+              )}
             </p>
             <button onClick={handleEnviar} disabled={enviando} style={p.btnEnviar}>
               {enviando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
@@ -462,37 +664,57 @@ export function RespuestaProponente() {
 
 /* ════════════════════ Estilos ════════════════════ */
 const p: Record<string, React.CSSProperties> = {
-  pageBg: { minHeight: '100vh', background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', display: 'flex', justifyContent: 'center', padding: '40px 16px', fontFamily: FONT },
+  pageBg: { minHeight: '100vh', background: COLORES.fondoApp, display: 'flex', justifyContent: 'center', padding: '40px 16px', fontFamily: FONT },
   centrado: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 400 },
   loadText: { fontFamily: FONT, fontSize: 15, color: '#64748b', fontWeight: 600 },
   errorTitle: { fontFamily: FONT, fontSize: 22, fontWeight: 900, color: '#991B1B', margin: '0 0 8px' },
   errorText: { fontFamily: FONT, fontSize: 14, color: '#64748b', textAlign: 'center', maxWidth: 400 },
-  mainCard: { background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 700, width: '100%', overflow: 'hidden' },
+  mainCard: { background: '#fff', borderRadius: 16, borderTop: `4px solid ${COLORES.primario}`, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 700, width: '100%', overflow: 'hidden' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 28px', borderBottom: '1px solid #f1f5f9' },
   logoBadge: { fontFamily: FONT, fontSize: 16, fontWeight: 600, color: '#1e293b' },
-  logoBold: { fontWeight: 900, color: '#E84922' },
-  timerBadge: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, background: '#FEF3C7', color: '#92400E', fontSize: 12, fontWeight: 700, fontFamily: FONT },
+  logoBold: { fontWeight: 900, color: COLORES.primario },
+  timerBadge: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 20, background: COLORES.advertenciaClaro, color: '#92400E', fontSize: 12, fontWeight: 700, fontFamily: FONT },
   infoSection: { padding: '24px 28px 16px', borderBottom: '1px solid #f1f5f9' },
-  codeBadge: { display: 'inline-block', padding: '3px 10px', background: '#3384D6', color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 800, margin: '0 0 8px', fontFamily: FONT },
+  codeBadge: { display: 'inline-block', padding: '3px 10px', background: COLORES.sidebar, color: '#fff', borderRadius: 6, fontSize: 11, fontWeight: 800, margin: '0 0 8px', fontFamily: FONT },
   titulo: { fontFamily: FONT, fontSize: 20, fontWeight: 900, color: '#1e293b', margin: '0 0 4px' },
   subtitulo: { fontFamily: FONT, fontSize: 13, color: '#64748b', margin: 0 },
-  welcomeBox: { margin: '0 28px', padding: '16px 20px', borderRadius: 10, background: '#EEF2FF', border: '1px solid #C7D2FE', marginTop: 20 },
-  plazoBox: { margin: '16px 28px', padding: '16px 20px', borderRadius: 10, background: '#FFF7ED', border: '1px solid #FED7AA' },
+  welcomeBox: { margin: '0 28px', padding: '16px 20px', borderRadius: 10, background: COLORES.infoClaro, border: `1px solid ${COLORES.sidebarBorder}`, marginTop: 20 },
+  plazoBox: { margin: '16px 28px', padding: '16px 20px', borderRadius: 10, background: COLORES.acentoClaro, border: '1px solid #FED7AA' },
   plazoLabel: { fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' as const, margin: '0 0 2px' },
   plazoValue: { fontFamily: FONT, fontSize: 14, fontWeight: 700, color: '#1e293b', margin: 0 },
   requisitosSection: { padding: '20px 28px' },
   requisitosBox: { padding: '16px 20px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' },
   formSection: { padding: '0 28px 24px' },
   textarea: { width: '100%', padding: '14px 16px', border: '2px solid #e2e8f0', borderRadius: 10, fontSize: 14, fontFamily: FONT, outline: 'none', resize: 'vertical' as const, boxSizing: 'border-box' as const, transition: 'border-color 0.2s' },
-  errorEnvio: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#FEF2F2', color: '#991B1B', fontSize: 13, fontWeight: 600, border: '1px solid #FECACA', marginTop: 10, fontFamily: FONT },
-  btnEnviar: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 28px', borderRadius: 10, background: '#10B981', color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer', fontSize: 14, fontFamily: FONT },
-  btnUpload: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 10, background: '#EEF2FF', color: '#3730A3', fontWeight: 700, border: '2px dashed #C7D2FE', cursor: 'pointer', fontSize: 13, fontFamily: FONT, width: '100%', justifyContent: 'center' },
-  btnEliminar: { background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center' },
+  errorEnvio: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: COLORES.errorClaro, color: '#991B1B', fontSize: 13, fontWeight: 600, border: '1px solid #FECACA', marginTop: 10, fontFamily: FONT },
+  btnEnviar: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 28px', borderRadius: 10, background: COLORES.exito, color: '#fff', fontWeight: 800, border: 'none', cursor: 'pointer', fontSize: 14, fontFamily: FONT },
+  btnUpload: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 10, background: COLORES.infoClaro, color: COLORES.sidebarHover, fontWeight: 700, border: `2px dashed ${COLORES.sidebarBorder}`, cursor: 'pointer', fontSize: 13, fontFamily: FONT, width: '100%', justifyContent: 'center' },
+  btnEliminar: { background: 'none', border: 'none', color: COLORES.error, cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex', alignItems: 'center' },
   archivoRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', marginBottom: 6 },
-  archivoIcon: { width: 36, height: 36, borderRadius: 8, background: '#EEF2FF', color: '#6366F1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  archivoIcon: { width: 36, height: 36, borderRadius: 8, background: COLORES.infoClaro, color: COLORES.sidebar, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   archivoNombre: { fontFamily: FONT, fontSize: 13, fontWeight: 700, color: '#1e293b', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
   archivoMeta: { fontFamily: FONT, fontSize: 11, color: '#94a3b8', margin: '2px 0 0' },
   footer: { textAlign: 'center' as const, padding: '16px 28px', borderTop: '1px solid #f1f5f9', color: '#94a3b8', fontSize: 11, fontFamily: FONT },
   respuestaPreview: { marginTop: 20, padding: 16, borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', textAlign: 'left' as const },
   fileItem: { display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' },
+
+  /* ── Tabla RA1-4 ── */
+  seccionRoja: { background: COLORES.primario, color: '#fff', padding: '10px 18px', fontFamily: FONT, fontWeight: 900, fontSize: 14, borderRadius: '10px 10px 0 0' },
+  tablaBox: { border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 10px 10px', overflow: 'hidden', marginBottom: 4 },
+  encabezadoTabla: { background: '#eef2f7', padding: '8px 16px', fontFamily: FONT, fontWeight: 800, fontSize: 12, color: '#334155', textTransform: 'uppercase' as const, letterSpacing: '0.03em', borderBottom: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0' },
+  fila: { display: 'flex', flexWrap: 'wrap' as const, borderBottom: '1px solid #e2e8f0' },
+  campo: { flex: '1 1 240px', display: 'flex', borderRight: '1px solid #e2e8f0' },
+  celdaLabel: { background: '#f8fafc', padding: '10px 12px', fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', width: 150, flexShrink: 0 },
+  celdaValor: { padding: '6px 10px', display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 },
+  inputTabla: { width: '100%', padding: '7px 9px', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' as const, background: '#fff' },
+
+  /* ── Datos adjuntos RA1-4 ── */
+  docsBox: { border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' },
+  docRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderBottom: '1px solid #e2e8f0', background: '#fff' },
+  docLabelWrap: { display: 'flex', alignItems: 'center', gap: 8 },
+  docLabel: { fontFamily: FONT, fontSize: 13, fontWeight: 600, color: '#334155' },
+  docUploadBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: `1px dashed ${COLORES.sidebarBorder}`, background: COLORES.infoClaro, color: COLORES.sidebarHover, fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer' },
+  docFileChip: { display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', borderRadius: 8, background: '#F0FDF4', border: '1px solid #BBF7D0' },
+  docFileName: { fontFamily: FONT, fontSize: 12, color: '#065F46', fontWeight: 600, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
+  docRemoveBtn: { background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' },
 };

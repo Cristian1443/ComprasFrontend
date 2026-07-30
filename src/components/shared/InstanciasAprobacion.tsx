@@ -42,15 +42,16 @@ interface Aprobador {
 export interface InstanciasAprobacionProps {
   solicitud: Record<string, any>;
   className?: string;
+  /** true si la vista ya renderizó la sección "Conclusiones del Comité" (VIII) justo antes de esta —
+   *  en ese caso esta sección pasa a ser IX; si no, es VIII. */
+  precedidoPorConclusiones?: boolean;
 }
 
 /** VIII/IX. Instancias de aprobación — Gerente, Financiera y (si aplica) Comité, lado a lado. */
-export function InstanciasAprobacion({ solicitud, className }: InstanciasAprobacionProps) {
-  const modalidad = String(solicitud?.modalidad || '').toLowerCase();
-  const esInvitacion = modalidad.includes('invit');
-  const esDirecta = modalidad.includes('directa');
+export function InstanciasAprobacion({ solicitud, className, precedidoPorConclusiones }: InstanciasAprobacionProps) {
+  const esInvitacion = String(solicitud?.modalidad || '').toLowerCase().includes('invit');
   const estado = String(solicitud?.estado || '').toLowerCase();
-  const numeroSeccion = esDirecta ? 'IX' : 'VIII';
+  const numeroSeccion = precedidoPorConclusiones ? 'IX' : 'VIII';
 
   // Al devolver/rechazar y volver a enviar, el backend conserva la fecha/comentario/nombre de la
   // decisión anterior — por eso el estado "en curso" (enviado_gerente / en_financiera) se evalúa
@@ -68,6 +69,14 @@ export function InstanciasAprobacion({ solicitud, className }: InstanciasAprobac
     : solicitud?.fecha_respuesta_financiera ? 'aprobado'
     : 'pendiente';
   const zanjadoFinanciera = estadoFinanciera === 'aprobado' || estadoFinanciera === 'rechazado';
+
+  const tieneRiesgos = solicitud?.tiene_riesgos_juridicos === true;
+
+  const estadoRiesgos: EstadoInstancia =
+    estado === 'en_riesgos' ? 'en_proceso'
+    : estado === 'rechazado_riesgos' ? 'rechazado'
+    : solicitud?.fecha_respuesta_riesgos ? 'aprobado'
+    : 'pendiente';
 
   const aprobadores: Aprobador[] = [
     {
@@ -94,10 +103,24 @@ export function InstanciasAprobacion({ solicitud, className }: InstanciasAprobac
     },
   ];
 
+  if (tieneRiesgos) {
+    aprobadores.push({
+      numero: aprobadores.length + 1,
+      rol: 'Riesgos',
+      subtitulo: 'Evaluación de riesgos jurídicos',
+      estado: estadoRiesgos,
+      comentarioLabel: 'Comentario',
+      comentario: estadoRiesgos !== 'pendiente' ? (solicitud?.comentario_riesgos || null) : null,
+      identificadorLabel: 'Nombre',
+      identificador: estadoRiesgos !== 'pendiente' ? (solicitud?.riesgos_nombre || null) : null,
+      fecha: estadoRiesgos !== 'pendiente' ? (solicitud?.fecha_respuesta_riesgos || null) : null,
+    });
+  }
+
   if (!esInvitacion) {
     const resultadoComite = String(solicitud?.resultado_comite || '').toLowerCase();
     aprobadores.push({
-      numero: 3,
+      numero: aprobadores.length + 1,
       rol: 'Secretaría de Comité',
       subtitulo: 'Comité de Contratación',
       estado:

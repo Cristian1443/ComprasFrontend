@@ -16,6 +16,7 @@ interface Factura {
   fecha_factura: string;
   no_contrato_oc: string;
   no_factura_cxc: string;
+  numero_ap: string;
   concepto: string;
   valor: number | null;
   certificacion_supervisor: boolean;
@@ -57,8 +58,7 @@ export function FacturasContrato({ solicitudId, userEmail }: FacturasContratoPro
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [procesandoId, setProcesandoId] = useState<string | null>(null);
-  const [rechazandoId, setRechazandoId] = useState<string | null>(null);
-  const [comentario, setComentario] = useState('');
+  const [comentarios, setComentarios] = useState<Record<string, string>>({});
 
   const cargarFacturas = useCallback(async () => {
     setLoading(true);
@@ -89,14 +89,22 @@ export function FacturasContrato({ solicitudId, userEmail }: FacturasContratoPro
       await fetch(`${API_BASE}/api/supervisor/facturas/${id}/certificar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aprobado, comentario: comentarioTexto || null }),
+        body: JSON.stringify({ aprobado, comentario: comentarioTexto?.trim() || null }),
       });
-      setRechazandoId(null);
-      setComentario('');
+      setComentarios(prev => { const c = { ...prev }; delete c[id]; return c; });
       await cargarFacturas();
     } finally {
       setProcesandoId(null);
     }
+  };
+
+  const rechazar = (id: string) => {
+    const texto = (comentarios[id] || '').trim();
+    if (!texto) {
+      alert('Indica el motivo del rechazo en el comentario.');
+      return;
+    }
+    certificar(id, false, texto);
   };
 
   const formatDate = (iso: string) => {
@@ -212,7 +220,7 @@ export function FacturasContrato({ solicitudId, userEmail }: FacturasContratoPro
                     </button>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="font-semibold text-gray-800 text-sm">{f.no_factura_cxc}</span>
+                        <span className="font-semibold text-gray-800 text-sm">AP {f.numero_ap}</span>
                         <EstadoBadge estado={f.estado} />
                       </div>
                       <span className="text-xs text-gray-400 block mt-0.5">
@@ -221,24 +229,35 @@ export function FacturasContrato({ solicitudId, userEmail }: FacturasContratoPro
                     </div>
                   </div>
 
-                  {/* Línea 2: botones de acción (solo si pendiente) */}
+                  {/* Línea 2: comentario + botones de acción (solo si pendiente) */}
                   {f.aprobado_supervisor === null && f.estado === 'pendiente' && (
-                    <div className="flex gap-2 mt-2 ml-5">
-                      <button
-                        onClick={() => certificar(f.id, true)}
-                        disabled={procesandoId === f.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                      >
-                        {procesandoId === f.id ? <Loader2 size={11} className="animate-spin" /> : <ThumbsUp size={11} />}
-                        Aprobar
-                      </button>
-                      <button
-                        onClick={() => { setRechazandoId(f.id); setComentario(''); }}
-                        disabled={procesandoId === f.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
-                      >
-                        <ThumbsDown size={11} /> Rechazar
-                      </button>
+                    <div className="mt-2 ml-5 space-y-2">
+                      <textarea
+                        value={comentarios[f.id] || ''}
+                        onChange={e => setComentarios(prev => ({ ...prev, [f.id]: e.target.value }))}
+                        rows={2}
+                        placeholder="Comentario (obligatorio si rechazas)..."
+                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-300 resize-none bg-white"
+                        style={{ fontFamily: 'Gabarito, sans-serif' }}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => certificar(f.id, true, comentarios[f.id])}
+                          disabled={procesandoId === f.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          {procesandoId === f.id ? <Loader2 size={11} className="animate-spin" /> : <ThumbsUp size={11} />}
+                          Aprobar
+                        </button>
+                        <button
+                          onClick={() => rechazar(f.id)}
+                          disabled={procesandoId === f.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                        >
+                          {procesandoId === f.id ? <Loader2 size={11} className="animate-spin" /> : <ThumbsDown size={11} />}
+                          Rechazar
+                        </button>
+                      </div>
                     </div>
                   )}
                   {f.aprobado_supervisor === true && (
@@ -253,36 +272,11 @@ export function FacturasContrato({ solicitudId, userEmail }: FacturasContratoPro
                   )}
                 </div>
 
-                {/* Panel de rechazo */}
-                {rechazandoId === f.id && (
-                  <div className="border-t border-red-100 px-3 py-3 bg-red-50">
-                    <p className="text-xs font-semibold text-red-700 mb-2">Motivo del rechazo (opcional)</p>
-                    <textarea
-                      value={comentario}
-                      onChange={e => setComentario(e.target.value)}
-                      rows={2}
-                      placeholder="Indica el motivo..."
-                      className="w-full px-3 py-2 text-sm border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300 resize-none bg-white"
-                      style={{ fontFamily: 'Gabarito, sans-serif' }}
-                    />
-                    <div className="flex gap-2 mt-2">
-                      <button onClick={() => setRechazandoId(null)}
-                        className="flex-1 px-3 py-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                        style={{ fontFamily: 'Gabarito, sans-serif' }}>Cancelar</button>
-                      <button onClick={() => certificar(f.id, false, comentario)} disabled={procesandoId === f.id}
-                        className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-                        style={{ fontFamily: 'Gabarito, sans-serif' }}>
-                        {procesandoId === f.id ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />}
-                        Confirmar rechazo
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 {/* Detalle expandido */}
                 {expandedId === f.id && (
                   <div className="px-4 pb-3 pt-2 border-t border-gray-100 space-y-2 text-sm text-gray-700">
                     <div className="grid grid-cols-2 gap-2">
+                      <div><p className="text-[11px] font-semibold text-gray-400 uppercase">AP</p><p className="font-semibold">{f.numero_ap}</p></div>
                       <div><p className="text-[11px] font-semibold text-gray-400 uppercase">No. Contrato/OC</p><p>{f.no_contrato_oc}</p></div>
                       <div><p className="text-[11px] font-semibold text-gray-400 uppercase">No. Factura/CxC</p><p>{f.no_factura_cxc}</p></div>
                     </div>

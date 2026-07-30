@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   PenLine, Save, Loader2, CheckCircle2, AlertTriangle,
-  ShieldCheck, KeyRound, Mail,
+  ShieldCheck, KeyRound, Mail, Cloud,
 } from 'lucide-react';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
@@ -21,6 +21,16 @@ interface AdobeConfig {
   tiene_client_secret: boolean;
   tiene_refresh_token: boolean;
   tiene_integration_key: boolean;
+}
+
+interface GraphConfig {
+  modo: 'mock' | 'produccion';
+  tenant_id: string | null;
+  site_search: string;
+  drive_name: string;
+  parent_path: string;
+  tiene_client_id: boolean;
+  tiene_client_secret: boolean;
 }
 
 const ROL_LABEL: Record<string, { titulo: string; sub: string }> = {
@@ -56,13 +66,26 @@ export function ConfiguracionFirmas() {
     refresh_token: '',
   });
 
+  // Graph (SharePoint) form
+  const [graph, setGraph] = useState<GraphConfig | null>(null);
+  const [graphForm, setGraphForm] = useState({
+    modo: 'mock' as 'mock' | 'produccion',
+    tenant_id: '',
+    client_id: '',
+    client_secret: '',
+    site_search: 'Documental',
+    drive_name: 'Expedientes',
+    parent_path: 'Pruebas tecnicas',
+  });
+
   const cargar = async () => {
     setCargando(true);
     try {
-      const [r1, r2, r3] = await Promise.all([
+      const [r1, r2, r3, r4] = await Promise.all([
         fetch(`${API_URL}/api/configuracion/firmantes`),
         fetch(`${API_URL}/api/configuracion/adobe-sign`),
         fetch(`${API_URL}/api/adobe-sign/oauth/redirect-uri`),
+        fetch(`${API_URL}/api/configuracion/graph-app`),
       ]);
       if (r1.ok) {
         const todos = await r1.json();
@@ -78,6 +101,18 @@ export function ConfiguracionFirmas() {
       if (r3.ok) {
         const u = await r3.json();
         setOauthUrls({ redirect_uri: u.redirect_uri, connect_url: u.connect_url });
+      }
+      if (r4.ok) {
+        const d = await r4.json();
+        setGraph(d);
+        setGraphForm((p) => ({
+          ...p,
+          modo: d.modo || 'mock',
+          tenant_id: d.tenant_id || '',
+          site_search: d.site_search || p.site_search,
+          drive_name: d.drive_name || p.drive_name,
+          parent_path: d.parent_path || p.parent_path,
+        }));
       }
     } finally {
       setCargando(false);
@@ -152,6 +187,42 @@ export function ConfiguracionFirmas() {
           : 'Configuración Adobe Sign guardada.',
       });
       setAdobeForm((p) => ({ ...p, client_secret: '', refresh_token: '', integration_key: '' }));
+      await cargar();
+      setTimeout(() => setMensaje(null), 3000);
+    } catch (e: any) {
+      setMensaje({ tipo: 'error', texto: e.message || 'Error' });
+    } finally {
+      setGuardando(null);
+    }
+  };
+
+  const guardarGraph = async () => {
+    setGuardando('graph');
+    setMensaje(null);
+    try {
+      const body: any = {
+        modo: graphForm.modo,
+        site_search: graphForm.site_search,
+        drive_name: graphForm.drive_name,
+        parent_path: graphForm.parent_path,
+      };
+      if (graphForm.tenant_id) body.tenant_id = graphForm.tenant_id;
+      if (graphForm.client_id) body.client_id = graphForm.client_id;
+      if (graphForm.client_secret) body.client_secret = graphForm.client_secret;
+
+      const r = await fetch(`${API_URL}/api/configuracion/graph-app`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error('Error al guardar configuración de SharePoint');
+      setMensaje({
+        tipo: 'ok',
+        texto: graphForm.client_secret
+          ? 'Credenciales guardadas. El Client Secret se oculta por seguridad, pero quedó almacenado.'
+          : 'Configuración de SharePoint guardada.',
+      });
+      setGraphForm((p) => ({ ...p, client_secret: '' }));
       await cargar();
       setTimeout(() => setMensaje(null), 3000);
     } catch (e: any) {
@@ -391,6 +462,134 @@ export function ConfiguracionFirmas() {
             className="px-6 py-3 bg-[#1f4e79] text-white rounded-2xl font-black text-sm flex items-center gap-2 disabled:opacity-50"
           >
             {guardando === 'adobe' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Guardar credenciales
+          </button>
+        </div>
+      </div>
+
+      {/* ───── SharePoint (App Registration / Microsoft Graph) ───── */}
+      <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-6 mb-6 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-sky-50 rounded-xl text-sky-600">
+              <Cloud size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">SharePoint (subida automática)</h3>
+              <p className="text-xs text-slate-400 font-medium">
+                App Registration de Azure AD para guardar el PDF firmado en 03.Postcontractual
+                sin depender de que el supervisor tenga el navegador abierto.
+              </p>
+            </div>
+          </div>
+          <div
+            className="px-4 py-2 rounded-xl border text-xs font-black flex items-center gap-2"
+            style={{
+              background: graph?.modo === 'produccion' ? '#ECFDF5' : '#FFFBEB',
+              color: graph?.modo === 'produccion' ? '#065F46' : '#92400E',
+              borderColor: (graph?.modo === 'produccion' ? '#065F46' : '#92400E') + '40',
+            }}
+          >
+            <ShieldCheck size={13} /> {graph?.modo === 'produccion' ? 'PRODUCCIÓN' : 'MODO PRUEBA'}
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500 italic mb-5">
+          {graph?.modo === 'produccion'
+            ? 'Sube archivos reales a SharePoint con permisos de aplicación.'
+            : 'Las subidas a SharePoint son simuladas. No se sube nada real hasta configurar credenciales y pasar a producción.'}
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Modo</label>
+            <select
+              value={graphForm.modo}
+              onChange={(e) => setGraphForm({ ...graphForm, modo: e.target.value as any })}
+              className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700"
+            >
+              <option value="mock">Mock (pruebas)</option>
+              <option value="produccion">Producción</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Tenant ID</label>
+            <input
+              type="text"
+              value={graphForm.tenant_id}
+              onChange={(e) => setGraphForm({ ...graphForm, tenant_id: e.target.value })}
+              placeholder={graph?.tenant_id ? graph.tenant_id : 'ID del directorio de Azure AD'}
+              className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-700"
+            />
+          </div>
+
+          <div className="md:col-span-2 mt-1 p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+            <p className="text-[11px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-2">
+              <KeyRound size={12} /> Credenciales de la App Registration
+            </p>
+            <input
+              type="text"
+              value={graphForm.client_id}
+              onChange={(e) => setGraphForm({ ...graphForm, client_id: e.target.value })}
+              placeholder={graph?.tiene_client_id ? '••••••••• (configurado)' : 'Client ID (Application ID)'}
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono text-slate-700"
+            />
+            <input
+              type="password"
+              value={graphForm.client_secret}
+              onChange={(e) => setGraphForm({ ...graphForm, client_secret: e.target.value })}
+              placeholder={graph?.tiene_client_secret ? '••••••••• (ya guardado · escribe solo para reemplazar)' : 'Client Secret'}
+              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono text-slate-700"
+            />
+            {graph?.tiene_client_secret && !graphForm.client_secret && (
+              <p className="text-[11px] text-emerald-700 font-bold">✓ Client Secret guardado en el servidor</p>
+            )}
+          </div>
+
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Sitio SharePoint</label>
+            <input
+              type="text"
+              value={graphForm.site_search}
+              onChange={(e) => setGraphForm({ ...graphForm, site_search: e.target.value })}
+              className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Biblioteca</label>
+            <input
+              type="text"
+              value={graphForm.drive_name}
+              onChange={(e) => setGraphForm({ ...graphForm, drive_name: e.target.value })}
+              className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Carpeta raíz</label>
+            <input
+              type="text"
+              value={graphForm.parent_path}
+              onChange={(e) => setGraphForm({ ...graphForm, parent_path: e.target.value })}
+              className="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-700"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-950 space-y-2">
+          <p className="font-black uppercase tracking-wider">Cómo obtener las credenciales</p>
+          <p>1) En Azure AD → App Registrations → New registration.</p>
+          <p>2) API permissions → Microsoft Graph → Application permissions → <code>Sites.ReadWrite.All</code> → conceder consentimiento del administrador.</p>
+          <p>3) Certificates &amp; secrets → New client secret → pégalo aquí junto con el Client ID y el Tenant ID.</p>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end">
+          <button
+            onClick={guardarGraph}
+            disabled={guardando === 'graph'}
+            className="px-6 py-3 bg-[#1f4e79] text-white rounded-2xl font-black text-sm flex items-center gap-2 disabled:opacity-50"
+          >
+            {guardando === 'graph' ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             Guardar credenciales
           </button>
         </div>

@@ -33,7 +33,7 @@ interface Proveedor {
   datos_contacto: string | null; valor_con_impuestos: number | null; moneda: string;
 }
 interface ContratoDetalle {
-  id: string; codigo: string; objeto: string; estado: string;
+  id: string; codigo: string; objeto: string; titulo_contrato: string | null; estado: string;
   valor_en_cop: number | null; valor_estimado: number | null;
   plazo_ejecucion_meses: number | null; plazo_ejecucion_dias: number | null;
   modalidad: string; solicitante_nombre: string; creado_en: string | null;
@@ -86,12 +86,24 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
   });
 
   // ── Carga del contrato ─────────────────────────────────────────────────
-  useEffect(() => {
+  const cargarContrato = useCallback(() => {
     if (!userEmail || !solicitudId) return;
     fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}?email=${encodeURIComponent(userEmail)}`)
       .then(r => { if (!r.ok) throw new Error('API error'); return r.json(); })
       .then(setContrato).catch(() => setContrato(null)).finally(() => setLoading(false));
   }, [userEmail, solicitudId]);
+
+  useEffect(() => { cargarContrato(); }, [cargarContrato]);
+
+  // Mientras la evaluación ya se guardó pero el contrato aún no queda
+  // "finalizado" (esperando la firma electrónica del supervisor), se
+  // refresca periódicamente para reflejar la subida a SharePoint y el
+  // cierre automático del contrato apenas se complete la firma.
+  useEffect(() => {
+    if (!contrato?.evaluacion || contrato.estado === 'finalizado') return;
+    const t = setInterval(cargarContrato, 8000);
+    return () => clearInterval(t);
+  }, [contrato?.evaluacion, contrato?.estado, cargarContrato]);
 
   // ── Carga de facturas aprobadas para ejecucion financiera ──────────────
   useEffect(() => {
@@ -232,9 +244,7 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
 
   const handleEvaluacionGuardada = () => {
     setVerEvaluacion(false);
-    if (userEmail && solicitudId)
-      fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}?email=${encodeURIComponent(userEmail)}`)
-        .then(r => r.json()).then(setContrato);
+    cargarContrato();
   };
 
   const formatCurrency = (val: number | null | undefined) => {
@@ -326,11 +336,20 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
                 {contrato.modalidad}
               </span>
             )}
+            {contrato.estado === 'finalizado' ? (
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                <CheckCircle2 size={11} /> Finalizado
+              </span>
+            ) : contrato.evaluacion && (
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                <Loader2 size={11} className="animate-spin" /> Esperando firma del supervisor
+              </span>
+            )}
           </div>
 
-          {/* Objeto */}
+          {/* Título de la contratación */}
           <h1 className="text-lg font-black text-gray-900 leading-snug mb-4 max-w-4xl">
-            {contrato.objeto}
+            {contrato.titulo_contrato || contrato.objeto}
           </h1>
 
           {/* Chips de datos del contrato */}
@@ -627,6 +646,7 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
               correo: contrato.proveedor?.datos_contacto || '',
               tipoContratacion: contrato.modalidad || '',
               numeroContrato: contrato.codigo || '',
+              tituloContratacion: contrato.titulo_contrato || contrato.objeto || '',
               proponenteId: contrato.proveedor?.id,
             }}
             onVolver={() => setVerEvaluacion(false)}

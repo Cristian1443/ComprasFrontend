@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Save, Send, FileText, User, Building2, Shield, ChevronDown, ChevronUp, Lock, Plus, Trash2, Calendar, Download } from 'lucide-react';
+import { ArrowLeft, Save, Send, FileText, User, Building2, Shield, ChevronDown, ChevronUp, Lock, Plus, Trash2, Calendar, Download, Upload } from 'lucide-react';
 import { datosExistentes } from './datosSolicitudes';
 import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
 import { FormatoPlaneacionImprimible } from '../secretaria/FormatoPlaneacionImprimible';
@@ -188,6 +188,54 @@ function FinancieraField({
   );
 }
 
+/* ──────────── ConceptoJuridicoLectura — solo lectura, la diligencia Jurídica ──────────── */
+function ConceptoJuridicoLectura({ solicitud }: { solicitud: any }) {
+  const rowStyle: React.CSSProperties = { display: 'flex', borderBottom: '1px solid #e5e7eb' };
+  const labelCellStyle: React.CSSProperties = {
+    width: 200, minWidth: 160, flexShrink: 0, padding: '16px',
+    fontWeight: 600, fontSize: '0.8rem', color: '#1F2937',
+    borderRight: '1px solid #e5e7eb', backgroundColor: '#fafafa',
+    fontFamily: 'Gabarito, sans-serif', display: 'flex', alignItems: 'flex-start', paddingTop: 20
+  };
+  const n1 = '7.1';
+  const n2 = '7.2';
+  const n3 = '7.3';
+  const n31 = '7.3.1';
+  const s = solicitud || {};
+  const pendiente = <span style={{ color: '#9CA3AF', fontStyle: 'italic' }}>Pendiente de diligenciar por el área Jurídica.</span>;
+  const tieneRiesgos = s.tiene_riesgos_juridicos === true;
+  return (
+    <>
+      <div style={rowStyle}>
+        <div style={labelCellStyle}>{n1} Concepto jurídico:</div>
+        <div style={{ flex: 1, padding: 16, fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#1F2937', whiteSpace: 'pre-wrap' }}>
+          {s.concepto_juridico || pendiente}
+        </div>
+      </div>
+      <div style={rowStyle}>
+        <div style={labelCellStyle}>{n2} Garantías:</div>
+        <div style={{ flex: 1, padding: 16, fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#1F2937', whiteSpace: 'pre-wrap' }}>
+          {s.garantias || pendiente}
+        </div>
+      </div>
+      <div style={{ ...rowStyle, borderBottom: tieneRiesgos ? '1px solid #e5e7eb' : 'none' }}>
+        <div style={labelCellStyle}>{n3} ¿Tiene riesgos jurídicos?:</div>
+        <div style={{ flex: 1, padding: 16, fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#1F2937' }}>
+          {s.tiene_riesgos_juridicos === true ? 'Sí' : s.tiene_riesgos_juridicos === false ? 'No' : pendiente}
+        </div>
+      </div>
+      {tieneRiesgos && (
+        <div style={{ ...rowStyle, borderBottom: 'none' }}>
+          <div style={labelCellStyle}>{n31} Riesgos:</div>
+          <div style={{ flex: 1, padding: 16, fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#1F2937', whiteSpace: 'pre-wrap' }}>
+            {s.riesgos_juridicos || pendiente}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ─────────── TIPOS ─────────── */
 interface FormularioSolicitudProps {
   onBack: () => void;
@@ -228,6 +276,8 @@ interface Anexo {
   nombre: string;
   tipo: string;
   fecha: string;
+  archivoUrl?: string;
+  archivoNombre?: string;
 }
 
 function normalizarModalidad(valor: string | null | undefined): 'directa' | 'invitacion' | 'tdr' {
@@ -241,6 +291,28 @@ function normalizarModalidad(valor: string | null | undefined): 'directa' | 'inv
   if (limpio.includes('invit')) return 'invitacion';
   return 'directa';
 }
+
+/** Suma días hábiles (lunes a viernes) a una fecha, sin contar el propio día de partida. */
+function sumarDiasHabiles(fechaBase: Date, diasHabiles: number): Date {
+  const resultado = new Date(fechaBase);
+  let agregados = 0;
+  while (agregados < diasHabiles) {
+    resultado.setDate(resultado.getDate() + 1);
+    const dia = resultado.getDay();
+    if (dia !== 0 && dia !== 6) agregados++;
+  }
+  return resultado;
+}
+
+/** Formatea una fecha como YYYY-MM-DD en horario local (para usar en <input type="date">). */
+function formatFechaISOLocal(fecha: Date): string {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  const d = String(fecha.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+const DIAS_HABILES_MINIMOS_CONTRATO = 3;
 
 /* ─────────────────── COMPONENTE PRINCIPAL ─────────────────── */
 export function FormularioSolicitud({
@@ -377,6 +449,7 @@ export function FormularioSolicitud({
               : prev.efectoEstimarPresupuesto),
           formaPago: det.forma_pago || prev.formaPago,
           justificacionAnticipo: det.justificacion_anticipo || prev.justificacionAnticipo,
+          porcentajeAnticipo: det.porcentaje_anticipo != null ? String(det.porcentaje_anticipo) : prev.porcentajeAnticipo,
           // Mostrar el rubro definitivo asignado por Financiera; si no existe, usar el sugerido por el solicitante.
           rubroPresupuestal: det.rubro || det.rubro_presupuestal || prev.rubroPresupuestal,
           fechaComite: det.fecha_comite
@@ -428,6 +501,8 @@ export function FormularioSolicitud({
               nombre: a.nombre || a.nombre_documento || '',
               tipo: a.tipo || '',
               fecha: a.fecha || a.fecha_documento || '',
+              archivoUrl: a.archivoUrl || a.archivo_url || '',
+              archivoNombre: a.archivoNombre || a.archivo_nombre_original || '',
             }))
           );
         }
@@ -511,6 +586,7 @@ export function FormularioSolicitud({
     rubroPresupuestal: datosIniciales.rubroPresupuestal || '',
     formaPago: datosIniciales.formaPago || '',
     justificacionAnticipo: datosIniciales.justificacionAnticipo || '',
+    porcentajeAnticipo: datosIniciales.porcentajeAnticipo || '',
     moneda: datosIniciales.moneda || 'COP',
     valorMonedaCOP: datosIniciales.valorMonedaCOP || '',
     valorMonedaUSD: datosIniciales.valorMonedaUSD || '',
@@ -520,8 +596,17 @@ export function FormularioSolicitud({
     plazoEjecucionDias: datosIniciales.plazoEjecucionDias || '',
   });
 
-  // Filtra cualquier campo de valor/dinero: solo dígitos, puntos y comas (separadores de miles/decimales).
-  const soloNumeros = (v: string): string => v.replace(/[^0-9.,]/g, '');
+  // Filtra y formatea cualquier campo de valor/dinero: agrega puntos de miles mientras se escribe (coma opcional para decimales).
+  const soloNumeros = (v: string): string => {
+    let limpio = v.replace(/[^0-9,]/g, '');
+    const idxComa = limpio.indexOf(',');
+    if (idxComa > -1) {
+      limpio = limpio.slice(0, idxComa + 1) + limpio.slice(idxComa + 1).replace(/,/g, '');
+    }
+    const [entero, decimal] = limpio.split(',');
+    const enteroFormateado = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return decimal !== undefined ? `${enteroFormateado},${decimal}` : enteroFormateado;
+  };
 
   // Convierte texto monetario a número para validaciones sin imponer formato en UI.
   const parseValorMoneda = (raw: string | number | null | undefined): number => {
@@ -596,6 +681,11 @@ export function FormularioSolicitud({
   const esTDR = modalidadNormalizada === 'tdr';
   const esInvitacionOTdr = esInvitacion || esTDR;
 
+  // Fecha mínima permitida para "Fecha estimada en la que se requiere el contrato":
+  // al menos 3 días hábiles a partir de hoy (no se permite el mismo día).
+  const fechaMinimaContrato = formatFechaISOLocal(sumarDiasHabiles(new Date(), DIAS_HABILES_MINIMOS_CONTRATO));
+  const fechaMinimaContratoDisplay = new Date(`${fechaMinimaContrato}T00:00:00`).toLocaleDateString('es-CO');
+
   const numProponentes = esDirecta ? 1 : 3;
 
   const proponenteVacio = (): Proponente => ({
@@ -659,6 +749,7 @@ export function FormularioSolicitud({
   const [anexosDocs, setAnexosDocs] = useState<Anexo[]>(
     datosIniciales.anexosDocs || [{ nombre: '', tipo: '', fecha: '' }]
   );
+  const [subiendoAnexo, setSubiendoAnexo] = useState(false);
 
   // Sección VIII — Riesgos y SST
   const [riesgosCriterios, setRiesgosCriterios] = useState({
@@ -706,6 +797,33 @@ export function FormularioSolicitud({
     setAnexosDocs(n);
   };
 
+  const subirArchivosAnexo = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setSubiendoAnexo(true);
+    try {
+      const form = new FormData();
+      Array.from(files).forEach(f => form.append('archivos', f));
+      const res = await fetch(`${API_URL}/api/solicitudes/upload`, { method: 'POST', body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'No se pudieron subir los documentos.');
+      const nuevos: Anexo[] = (data.archivos || []).map((a: any) => ({
+        nombre: a.nombre || '',
+        tipo: a.tipo || '',
+        fecha: new Date().toISOString().slice(0, 10),
+        archivoUrl: a.url || '',
+        archivoNombre: a.nombre || '',
+      }));
+      setAnexosDocs(prev => {
+        const sinVacias = prev.filter(a => a.nombre.trim() || a.archivoUrl);
+        return [...sinVacias, ...nuevos];
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Error al subir los documentos.');
+    } finally {
+      setSubiendoAnexo(false);
+    }
+  };
+
   const getPayload = (overrides?: { anexos_solicitante?: any[] }) => ({
     email: userEmail,
     justificacion: datosPlaneacion.descripcionNecesidad,
@@ -728,6 +846,7 @@ export function FormularioSolicitud({
     efecto_estimar_presupuesto: datosPlaneacion.efectoEstimarPresupuesto,
     forma_pago: datosPlaneacion.formaPago,
     justificacion_anticipo: datosPlaneacion.justificacionAnticipo || null,
+    porcentaje_anticipo: datosPlaneacion.porcentajeAnticipo !== '' ? Number(datosPlaneacion.porcentajeAnticipo) : null,
     rubro_presupuestal: datosPlaneacion.rubroPresupuestal,
     criterios_contratacion: datosPlaneacion.descripcionNecesidad,
     fecha_comite: datosPlaneacion.fechaComite,
@@ -824,6 +943,10 @@ export function FormularioSolicitud({
     if (!datosPlaneacion.plazoEjecucionMeses && !datosPlaneacion.plazoEjecucionDias) {
       alert("Debe indicar el plazo de ejecución (meses o días)."); return;
     }
+    if (datosPlaneacion.fechaEstimadaSolicitud && datosPlaneacion.fechaEstimadaSolicitud < fechaMinimaContrato) {
+      alert(`La 'Fecha estimada en la que se requiere el contrato' debe ser ${fechaMinimaContratoDisplay} o posterior (mínimo ${DIAS_HABILES_MINIMOS_CONTRATO} días hábiles a partir de hoy).`);
+      return;
+    }
     if (!supervisionEntregables.supervisionId && !supervisionEntregables.supervision) {
       alert("Debe seleccionar un Supervisor válido de la lista de empleados."); return;
     }
@@ -887,6 +1010,83 @@ export function FormularioSolicitud({
   const selectStyle: React.CSSProperties = {
     ...inputStyle
   };
+
+  /* ── Tabla de Anexos (con cargue de archivo) — reutilizada en Directa (4.3) e Invitación/TDR (VI) ── */
+  const renderTablaAnexos = () => (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', fontFamily: 'Gabarito, sans-serif' }}>
+        <thead>
+          <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
+            <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 38, textAlign: 'center' }}>#</th>
+            <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', textAlign: 'left' }}>Nombre del documento</th>
+            <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 90, textAlign: 'center' }}>Archivo</th>
+            <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 40 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {anexosDocs.map((a, i) => (
+            <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+              <td style={{ border: '1px solid #e5e7eb', padding: 6, textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
+              <td style={{ border: '1px solid #e5e7eb', padding: 4 }}>
+                <input type="text" value={a.nombre} onChange={e => handleAnexoChange(i, 'nombre', e.target.value)}
+                  style={{ ...inputStyle, border: '1px solid transparent' }}
+                  placeholder="Nombre del documento"
+                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                  onBlur={e => e.target.style.borderColor = 'transparent'}
+                />
+              </td>
+              <td style={{ border: '1px solid #e5e7eb', padding: 4, textAlign: 'center' }}>
+                {a.archivoUrl ? (
+                  <a href={`${API_URL}${a.archivoUrl}`} target="_blank" rel="noopener noreferrer"
+                    title={a.archivoNombre || 'Ver archivo'}
+                    style={{ color: 'var(--brand-primary)', display: 'inline-flex' }}
+                  >
+                    <Download size={14} />
+                  </a>
+                ) : (
+                  <span style={{ color: '#9CA3AF', fontSize: '0.72rem', fontStyle: 'italic' }}>Sin archivo</span>
+                )}
+              </td>
+              <td style={{ border: '1px solid #e5e7eb', padding: 4, textAlign: 'center' }}>
+                <button type="button" onClick={() => eliminarAnexo(i)}
+                  style={{ color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ marginTop: 10, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <label
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 14px', border: '1px solid var(--brand-primary)', borderRadius: 6,
+            color: '#fff', backgroundColor: subiendoAnexo ? '#9CA3AF' : 'var(--brand-primary)',
+            cursor: subiendoAnexo ? 'not-allowed' : 'pointer',
+            fontSize: '0.8rem', fontFamily: 'Gabarito, sans-serif', fontWeight: 600
+          }}
+        >
+          <Upload size={14} /> {subiendoAnexo ? 'Subiendo...' : 'Cargar documento(s)'}
+          <input
+            type="file" multiple hidden disabled={subiendoAnexo}
+            onChange={e => { subirArchivosAnexo(e.target.files); e.target.value = ''; }}
+          />
+        </label>
+        <button type="button" onClick={agregarAnexo}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 14px', border: '1px solid var(--brand-primary)', borderRadius: 6,
+            color: 'var(--brand-primary)', backgroundColor: '#fff', cursor: 'pointer',
+            fontSize: '0.8rem', fontFamily: 'Gabarito, sans-serif', fontWeight: 600
+          }}
+        >
+          <Plus size={14} /> Agregar documento
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="ux-page p-4 lg:p-8">
@@ -1112,15 +1312,21 @@ export function FormularioSolicitud({
                         <div style={{ flex: 1, display: 'flex', borderRight: '1px solid #d1d5db' }}>
                           <div style={{ ...pdfLabel, lineHeight: 1.35 }}>Fecha estimada en la que se requiere el contrato</div>
                           <div style={pdfCell}>
-                            <p style={pdfHint}>Incluya la fecha en la que se requiere iniciar el contrato</p>
+                            <p style={pdfHint}>Incluya la fecha en la que se requiere iniciar el contrato. Debe ser mínimo {DIAS_HABILES_MINIMOS_CONTRATO} días hábiles a partir de hoy (no se permite el mismo día).</p>
                             <input
                               type="date"
+                              min={fechaMinimaContrato}
                               value={datosPlaneacion.fechaEstimadaSolicitud}
                               onChange={e => setDatosPlaneacion({ ...datosPlaneacion, fechaEstimadaSolicitud: e.target.value })}
                               style={inputStyle}
                               onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                               onBlur={e => e.target.style.borderColor = '#D1D5DB'}
                             />
+                            {datosPlaneacion.fechaEstimadaSolicitud && datosPlaneacion.fechaEstimadaSolicitud < fechaMinimaContrato && (
+                              <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: 6 }}>
+                                La fecha debe ser {fechaMinimaContratoDisplay} o posterior (mínimo {DIAS_HABILES_MINIMOS_CONTRATO} días hábiles).
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div style={{ flex: 1 }} />
@@ -1149,32 +1355,32 @@ export function FormularioSolicitud({
                         </span>
                       </div>
 
-                      {/* ── 1.1 Justificación ── */}
+                      {/* ── 1.1 Justificación y Descripción ── */}
                       <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
-                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.1 Justificación:</div>
+                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.1 Justificación y Descripción:</div>
                         <div style={pdfCell}>
                           <p style={pdfHint}>En este apartado se redactará la justificación por la cual se requiere el objeto a contratar, indicando la necesidad a satisfacer de conformidad con el propósito superior de La Corporación, objetivos y metas de los cual se deriva la contratación, así como las funciones del área solicitante.</p>
                           <textarea
                             value={datosPlaneacion.descripcionNecesidad}
                             onChange={e => setDatosPlaneacion({ ...datosPlaneacion, descripcionNecesidad: e.target.value })}
                             rows={5} style={textareaStyle} required
-                            placeholder="Redacte aquí la justificación..."
+                            placeholder="Redacte aquí la justificación y descripción..."
                             onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                             onBlur={e => e.target.style.borderColor = '#D1D5DB'}
                           />
                         </div>
                       </div>
 
-                      {/* ── 1.2 Descripción de la necesidad ── */}
+                      {/* ── 1.2 Especificaciones técnicas ── */}
                       <div style={{ display: 'flex' }}>
-                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.2 Descripción de la necesidad:</div>
+                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.2 Especificaciones técnicas:</div>
                         <div style={pdfCell}>
-                          <p style={pdfHint}>Describa de forma clara y concisa la necesidad específica que da origen a esta contratación.</p>
+                          <p style={pdfHint}>Describa de forma clara y concisa las especificaciones técnicas del bien o servicio a contratar.</p>
                           <textarea
                             value={datosPlaneacion.descripcionNecesidadDetalle}
                             onChange={e => setDatosPlaneacion({ ...datosPlaneacion, descripcionNecesidadDetalle: e.target.value })}
                             rows={4} style={textareaStyle} required
-                            placeholder="Describa la necesidad específica que origina esta contratación..."
+                            placeholder="Describa las especificaciones técnicas de esta contratación..."
                             onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                             onBlur={e => e.target.style.borderColor = '#D1D5DB'}
                           />
@@ -1537,9 +1743,9 @@ export function FormularioSolicitud({
                   <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
                     <SectionHeader title="IV. IDENTIFICACIÓN DEL CONTRATO A CELEBRAR Y MODALIDAD DE SELECCIÓN." />
 
-                    {/* 4.1 Modalidad selección */}
+                    {/* 4.1 Causal de contratación */}
                     <div style={rowStyle}>
-                      <div style={labelCellStyle}>4.1 Modalidad de selección:</div>
+                      <div style={labelCellStyle}>4.1 Causal de contratación:</div>
                       <div style={{ flex: 1, padding: 16 }}>
                         <FieldLabel
                           label=""
@@ -1564,6 +1770,31 @@ export function FormularioSolicitud({
                           <option value="ix">IX. Contratación de bienes y servicios relacionados con capacitaciones y Sistema de Gestión de Seguridad y Salud en el Trabajo (SG-SST).</option>
                           <option value="x">X. Cuando sea requerido por urgencia manifiesta de contar con el bien y/o servicio de manera inmediata.</option>
                         </select>
+                      </div>
+                    </div>
+
+                    {/* 4.2 Justificación de la causal */}
+                    <div style={rowStyle}>
+                      <div style={labelCellStyle}>4.2 Justificación de la causal:</div>
+                      <div style={{ flex: 1, padding: 16 }}>
+                        <FieldLabel label="" hint="Sustente por qué la causal seleccionada aplica a esta contratación." />
+                        <textarea
+                          value={datosPlaneacion.justificacionCD}
+                          onChange={e => setDatosPlaneacion({ ...datosPlaneacion, justificacionCD: e.target.value })}
+                          rows={4} style={textareaStyle}
+                          placeholder="Justifique la causal de contratación directa seleccionada..."
+                          onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                          onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 4.3 Anexos y cargue de documentos */}
+                    <div style={{ ...rowStyle, borderBottom: 'none' }}>
+                      <div style={labelCellStyle}>4.3 Anexos y cargue de documentos:</div>
+                      <div style={{ flex: 1, padding: 16 }}>
+                        <FieldLabel label="" hint="Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo, y cargar el archivo correspondiente." />
+                        {renderTablaAnexos()}
                       </div>
                     </div>
 
@@ -1625,20 +1856,35 @@ export function FormularioSolicitud({
                             <option value="">-- Seleccione la forma de pago --</option>
                             <option value="anticipo">Anticipo</option>
                             <option value="pago_unico">Pago único</option>
-                            <option value="mensual">Mensual</option>
+                            <option value="mensual">Mensual vencida</option>
                           </select>
 
                           {datosPlaneacion.formaPago === 'anticipo' && (
                             <div style={{ marginTop: 12 }}>
-                              <FieldLabel label="Justificación del anticipo" hint="Explique la razón por la que se requiere anticipo para este contrato." />
-                              <textarea
-                                value={datosPlaneacion.justificacionAnticipo}
-                                onChange={e => setDatosPlaneacion({ ...datosPlaneacion, justificacionAnticipo: e.target.value })}
-                                rows={4} style={textareaStyle} required
-                                placeholder="Indique la justificación del anticipo..."
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                              />
+                              <FieldLabel label="Porcentaje de anticipo" required={true} hint="Indique el porcentaje (%) del valor del contrato que se entregará como anticipo." />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: 160 }}>
+                                <input
+                                  type="number" min="0" max="100"
+                                  value={datosPlaneacion.porcentajeAnticipo}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, porcentajeAnticipo: e.target.value })}
+                                  style={{ ...inputStyle, textAlign: 'center' }} required
+                                  placeholder="0"
+                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                                />
+                                <span style={{ fontSize: '0.875rem', color: '#374151', fontWeight: 500 }}>%</span>
+                              </div>
+                              <div style={{ marginTop: 16 }}>
+                                <FieldLabel label="Justificación del anticipo" hint="Explique la razón por la que se requiere anticipo para este contrato." />
+                                <textarea
+                                  value={datosPlaneacion.justificacionAnticipo}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, justificacionAnticipo: e.target.value })}
+                                  rows={4} style={textareaStyle} required
+                                  placeholder="Indique la justificación del anticipo..."
+                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                                />
+                              </div>
                             </div>
                           )}
 
@@ -1728,52 +1974,9 @@ export function FormularioSolicitud({
                 <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
                   <SectionHeader title={`${esDirecta ? 'VI' : 'V'}. SUPERVISIÓN Y ENTREGABLES DEL CONTRATO.`} />
 
-                  <div style={rowStyle}>
-                    <div style={labelCellStyle}>{esDirecta ? '6.1' : '5.1'} Posibilidad de Supervisión:</div>
-                    <div style={{ flex: 1, padding: 16 }}>
-                      <FieldLabel label="" required={true} hint="La supervisión del contrato estará a cargo del [cargo], según lo indicado por el Gerente de Área Solicitante o su delegado, y de conformidad con el Manual de Supervisión e Interventoría de la entidad." />
-                      <input
-                        list="empleados-list"
-                        value={supervisionEntregables.supervision}
-                        onChange={e => {
-                          const val = e.target.value;
-                          // Buscamos el empleado exacto ya sea por el valor mostrado o por el nombre
-                          const emp = listaEmpleados.find(emp => {
-                            const cargoStr = emp.cargo ? ` - ${emp.cargo}` : '';
-                            const label = `${emp.nombre}${cargoStr} (${emp.email})`;
-                            return label === val || emp.nombre === val || emp.email === val;
-                          });
-                          setSupervisionEntregables({
-                            ...supervisionEntregables,
-                            supervision: val,
-                            supervisionId: emp ? emp.id : '' // Si el usuario borra o escribe algo no válido, se limpia
-                          });
-                        }}
-                        style={inputStyle}
-                        placeholder="Empiece a escribir para buscar en el listado de empleados..."
-                        onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                        onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                      />
-                      <datalist id="empleados-list">
-                        {listaEmpleados.map((emp, i) => {
-                          const cargoStr = emp.cargo ? ` - ${emp.cargo}` : '';
-                          return <option key={i} value={`${emp.nombre}${cargoStr} (${emp.email})`} />;
-                        })}
-                      </datalist>
-                      <p style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: 6, fontStyle: 'italic' }}>
-                        * Desplegable automático: Escriba el nombre o cargo para buscar personal disponible en la empresa.
-                      </p>
-                      {errorCargaEmpleados ? (
-                        <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: 6 }}>
-                          {errorCargaEmpleados}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-
                   {/* Obligaciones Específicas */}
                   <div style={rowStyle}>
-                    <div style={labelCellStyle}>{esDirecta ? '6.2' : '5.2'} Obligaciones Específicas:</div>
+                    <div style={labelCellStyle}>{esDirecta ? '6.1' : '5.1'} Obligaciones Específicas:</div>
                     <div style={{ flex: 1, padding: 16 }}>
                       <FieldLabel label="" hint="Liste las obligaciones específicas que debe cumplir el contratista durante la ejecución del contrato." />
                       {obligaciones.map((ob, i) => (
@@ -1809,7 +2012,7 @@ export function FormularioSolicitud({
 
                   {/* Entregables dinámicos con porcentaje */}
                   <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                    <div style={labelCellStyle}>{esDirecta ? '6.3' : '5.3'} Entregables:</div>
+                    <div style={labelCellStyle}>{esDirecta ? '6.2' : '5.2'} Entregables:</div>
                     <div style={{ flex: 1, padding: 16 }}>
                       <FieldLabel label="" hint="Describa cada entregable. Si el pago está ligado al entregable, indique el porcentaje. La suma de los porcentajes con valor debe ser 100%." />
                       {(() => {
@@ -1920,91 +2123,26 @@ export function FormularioSolicitud({
                   </div>
                 </div>
 
-                {/* ── SECCIÓN VI/VII — Anexos — mismo contenido en las 3 modalidades ── */}
+                {/* ── SECCIÓN VI — Anexos — solo Invitación/TDR (en Directa se diligencia en el punto 4.3) ── */}
+                {!esDirecta && (
                 <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
-                  <SectionHeader title={`${esDirecta ? 'VII' : 'VI'}. ANEXOS.`} />
+                  <SectionHeader title="VI. ANEXOS." />
 
                   <div style={{ padding: '10px 20px', backgroundColor: '#fff8f7', borderBottom: '1px solid #fdd5c9' }}>
                     <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic' }}>
-                      Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo.
+                      Relacionar todos los documentos que se hayan generado o tenido en cuenta para la elaboración del presente estudio previo, y cargar el archivo correspondiente.
                     </p>
                   </div>
-                  <div style={{ overflowX: 'auto', padding: '12px 16px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', fontFamily: 'Gabarito, sans-serif' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                          <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 38, textAlign: 'center' }}>#</th>
-                          <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', textAlign: 'left' }}>Nombre del documento</th>
-                          <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', width: 40 }}></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {anexosDocs.map((a, i) => (
-                          <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                            <td style={{ border: '1px solid #e5e7eb', padding: 6, textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
-                            <td style={{ border: '1px solid #e5e7eb', padding: 4 }}>
-                              <input type="text" value={a.nombre} onChange={e => handleAnexoChange(i, 'nombre', e.target.value)}
-                                style={{ ...inputStyle, border: '1px solid transparent' }}
-                                placeholder="Nombre del documento"
-                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                onBlur={e => e.target.style.borderColor = 'transparent'}
-                              />
-                            </td>
-                            <td style={{ border: '1px solid #e5e7eb', padding: 4, textAlign: 'center' }}>
-                              <button type="button" onClick={() => eliminarAnexo(i)}
-                                style={{ color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer' }}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <button type="button" onClick={agregarAnexo}
-                      style={{
-                        marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
-                        padding: '6px 14px', border: '1px solid var(--brand-primary)', borderRadius: 6,
-                        color: 'var(--brand-primary)', backgroundColor: '#fff', cursor: 'pointer',
-                        fontSize: '0.8rem', fontFamily: 'Gabarito, sans-serif', fontWeight: 600
-                      }}
-                    >
-                      <Plus size={14} /> Agregar documento
-                    </button>
+                  <div style={{ padding: '12px 16px' }}>
+                    {renderTablaAnexos()}
                   </div>
                 </div>
+                )}
 
-                {/* ── SECCIÓN VII/VIII — Riesgos y SST ── */}
+                {/* ── SECCIÓN VII — Concepto Jurídico y Garantías ── */}
                 <div className="rounded-xl overflow-hidden shadow-md border border-gray-200">
-                  <SectionHeader title={`${esDirecta ? 'VIII' : 'VII'}. RIESGOS Y CRITERIOS AMBIENTALES O DE SST.`} />
-
-                  <div style={rowStyle}>
-                    <div style={labelCellStyle}>{esDirecta ? '8.1' : '7.1'} Riesgos:</div>
-                    <div style={{ flex: 1, padding: 16 }}>
-                      <FieldLabel label="" hint='El riesgo es un evento que puede generar efectos adversos y de distinta magnitud en el logro de los objetivos del Proceso de Contratación o en la ejecución de un Contrato. Por lo anterior, describa los posibles riesgos que se podrían presentar en la etapa precontractual, contractual y de ejecución del proceso de contratación descrito en el presente documento.' />
-                      <textarea value={riesgosCriterios.riesgos}
-                        onChange={e => setRiesgosCriterios({ ...riesgosCriterios, riesgos: e.target.value })}
-                        rows={4} style={textareaStyle}
-                        placeholder="El proyecto se ha identificado con el nivel de riesgo..."
-                        onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                        onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                    <div style={labelCellStyle}>{esDirecta ? '8.2' : '7.2'} Criterios ambientales o de SST:</div>
-                    <div style={{ flex: 1, padding: 16 }}>
-                      <FieldLabel label="" hint="Teniendo en cuenta las características de la contratación a solicitar, describa los requerimientos ambientales o de seguridad y salud en el trabajo que se deban exigir al contratista o proveedor (si aplica)." />
-                      <textarea value={riesgosCriterios.criteriosSST}
-                        onChange={e => setRiesgosCriterios({ ...riesgosCriterios, criteriosSST: e.target.value })}
-                        rows={3} style={textareaStyle}
-                        placeholder="Relacionar los requisitos del proveedor respecto a la seguridad y salud en el trabajo..."
-                        onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                        onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                      />
-                    </div>
-                  </div>
+                  <SectionHeader title="VII. CONCEPTO JURÍDICO Y GARANTÍAS." />
+                  <ConceptoJuridicoLectura solicitud={solicitudDetalle} />
                 </div>
 
                 <InstanciasAprobacion solicitud={{ ...solicitudDetalle, modalidad: datosPlaneacion.modalidad }} />

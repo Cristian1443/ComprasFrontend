@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Filter, Eye, CheckCircle, XCircle, Clock, TrendingUp, ChevronRight, LayoutDashboard, ListFilter, Sparkles, ArrowUpRight, ClipboardList, Inbox, History } from 'lucide-react';
 import { DetalleAprobacion } from './DetalleAprobacion';
 import { UxCard, UxEmptyState, UxLoadingState, UxStatusPill } from '../ui/ux';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -189,7 +190,7 @@ export function ListaAprobaciones({ userEmail, onActionSuccess }: { userEmail: s
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[10px] font-bold text-gray-400 uppercase">{sol.solicitante_nombre}</span>
                                                     <span className="w-1 h-1 rounded-full bg-gray-200"></span>
-                                                    <span className="text-[10px] text-gray-400 italic">{sol.gerencia_nombre}</span>
+                                                    <span className="text-[10px] text-gray-400 italic">{nombreGerenciaCompleto(sol.gerencia_nombre)}</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-6 text-center">

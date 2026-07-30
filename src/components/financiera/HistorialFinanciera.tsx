@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { nombreGerenciaCompleto } from '../../lib/gerencias';
+import { formatMilesInput } from '../../lib/formatPresupuesto';
 import {
     Search,
     Download,
@@ -42,6 +44,7 @@ interface SolicitudHistorial {
 interface Factura {
     id: string;
     no_factura_cxc: string;
+    numero_ap: string;
     fecha_factura: string;
     valor: number | null;
     estado: 'pendiente' | 'aprobada' | 'rechazada';
@@ -294,11 +297,11 @@ export function HistorialFinanciera() {
                                         <td className="px-6 py-5 whitespace-nowrap">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-[10px] font-black text-emerald-600 uppercase">
-                                                    {getSiglaGerencia(row.gerencia_nombre)}
+                                                    {getSiglaGerencia(nombreGerenciaCompleto(row.gerencia_nombre))}
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="text-sm font-semibold text-slate-600">{row.solicitante_nombre}</span>
-                                                    <span className="text-[10px] text-slate-400 font-medium">{row.gerencia_nombre}</span>
+                                                    <span className="text-[10px] text-slate-400 font-medium">{nombreGerenciaCompleto(row.gerencia_nombre)}</span>
                                                 </div>
                                             </div>
                                         </td>
@@ -424,7 +427,7 @@ export function HistorialFinanciera() {
                                                                         <Receipt size={14} className="text-slate-300 shrink-0 mt-0.5" />
                                                                         <div className="flex-1 min-w-0">
                                                                             <div className="flex items-center justify-between gap-2 flex-wrap">
-                                                                                <span className="text-xs font-bold text-slate-800">{f.no_factura_cxc}</span>
+                                                                                <span className="text-xs font-bold text-slate-800">AP {f.numero_ap}</span>
                                                                                 {f.estado === 'aprobada'
                                                                                     ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700"><CheckCircle2 size={9} />Aprobada</span>
                                                                                     : f.estado === 'rechazada'
@@ -553,7 +556,7 @@ export function HistorialFinanciera() {
                                     <Building2 size={14} className="text-slate-400 mt-0.5 shrink-0" />
                                     <div>
                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gerencia</p>
-                                        <p className="text-sm font-semibold text-slate-700">{detalleData.gerencia_nombre || '—'}</p>
+                                        <p className="text-sm font-semibold text-slate-700">{nombreGerenciaCompleto(detalleData.gerencia_nombre) || '—'}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-2">
@@ -680,18 +683,18 @@ interface MiniFormFacturaProps {
 }
 
 function MiniFormFactura({ solicitudId, codigoContrato, onSuccess, onCancel }: MiniFormFacturaProps) {
-    const [form, setForm] = useState({ no_contrato_oc: '', no_factura_cxc: '', fecha_factura: '', concepto: '', valor: '' });
+    const [form, setForm] = useState({ no_contrato_oc: '', no_factura_cxc: '', numero_ap: '', fecha_factura: '', concepto: '', valor: '' });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-        setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+        setForm(p => ({ ...p, [e.target.name]: e.target.name === 'valor' ? formatMilesInput(e.target.value) : e.target.value }));
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
         const valorNorm = form.valor.replace(/\./g, '').replace(',', '.');
         const valorNum = Number(valorNorm);
-        if (!form.no_contrato_oc || !form.no_factura_cxc || !form.fecha_factura || !form.concepto) {
+        if (!form.no_contrato_oc || !form.no_factura_cxc || !form.numero_ap || !form.fecha_factura || !form.concepto) {
             setError('Completa todos los campos obligatorios.');
             return;
         }
@@ -710,6 +713,7 @@ function MiniFormFactura({ solicitudId, codigoContrato, onSuccess, onCancel }: M
                     nombre_solicitud: codigoContrato,
                     no_contrato_oc: form.no_contrato_oc,
                     no_factura_cxc: form.no_factura_cxc,
+                    numero_ap: form.numero_ap,
                     fecha_factura: form.fecha_factura,
                     concepto: form.concepto,
                     valor: valorNum,
@@ -734,6 +738,11 @@ function MiniFormFactura({ solicitudId, codigoContrato, onSuccess, onCancel }: M
                 <Plus size={12} /> Nueva factura — {codigoContrato}
             </p>
             <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-0.5">AP *</label>
+                    <input name="numero_ap" value={form.numero_ap} onChange={handle} required
+                        className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-300" />
+                </div>
                 <div>
                     <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-0.5">No. Contrato/OC *</label>
                     <input name="no_contrato_oc" value={form.no_contrato_oc} onChange={handle} required
