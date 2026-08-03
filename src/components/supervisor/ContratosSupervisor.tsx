@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Search, FileCheck2, ArrowRight, Clock, AlertTriangle, CheckCircle2, TrendingUp } from 'lucide-react';
 
@@ -156,7 +157,7 @@ export function ContratosSupervisor({ userEmail, onVerDetalle }: ContratosSuperv
 
   useEffect(() => {
     if (!userEmail) { setLoading(false); return; }
-    fetch(`${API_BASE}/api/supervisor/contratos?email=${encodeURIComponent(userEmail)}`)
+    apiFetch(`${API_BASE}/api/supervisor/contratos?email=${encodeURIComponent(userEmail)}`)
       .then(r => r.json())
       .then(d => setContratos(Array.isArray(d) ? d : []))
       .catch(() => setContratos([]))

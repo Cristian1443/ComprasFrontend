@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
     ArrowLeft, CheckCircle, BadgeCheck,
@@ -58,7 +59,7 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
 
     const abrirPDF = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
+            const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
             if (res.ok) {
                 const data = await res.json();
                 setSolicitudParaPDF(data);
@@ -82,7 +83,7 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
     useEffect(() => {
         const cargarDetalle = async () => {
             try {
-                const res = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
+                const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
                 if (!res.ok) return;
                 const det = await res.json();
                 /* Reemplazar con el detalle completo — el listado no trae todas las columnas */
@@ -108,7 +109,7 @@ export function DetalleAprobacion({ solicitud, usuarioActual, onBack, onActionSu
 
         setProcesando(true);
         try {
-            const res = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/estado`, {
+            const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}/estado`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

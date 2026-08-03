@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import { FolderOpen, Upload, FileText, Trash2, Loader2, ArrowLeft, CheckCircle2, User, Save, ExternalLink, Hash, Lock, AlertCircle } from 'lucide-react';
 import { TipoDocumentoFinal } from '../../lib/flujoJuridico';
@@ -45,7 +46,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
 
   useEffect(() => {
     const loadSolicitudes = async () => {
-      const res = await fetch(`${API_URL}/api/juridica/solicitudes`);
+      const res = await apiFetch(`${API_URL}/api/juridica/solicitudes`);
       const data = await res.json();
       const arr = Array.isArray(data) ? data : [];
       setSolicitudes(arr);
@@ -53,7 +54,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
     };
     loadSolicitudes().catch(console.error);
 
-    fetch(`${API_URL}/api/usuarios`)
+    apiFetch(`${API_URL}/api/usuarios`)
       .then(r => r.json())
       .then(d => setUsuarios(Array.isArray(d) ? d : []))
       .catch(console.error);
@@ -68,7 +69,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/api/juridica/solicitudes/${id}/documentos`);
+      const res = await apiFetch(`${API_URL}/api/juridica/solicitudes/${id}/documentos`);
       const data = await res.json();
       setDetalle(data);
       setSupervisionId(data?.solicitud?.supervision_id || '');
@@ -104,7 +105,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
         formData.append('tipo', tipo);
         formData.append('descripcion', TIPOS_FINALES.find((t) => t.tipo === tipo)?.label || '');
 
-        const resp = await fetch(
+        const resp = await apiFetch(
           `${API_URL}/api/juridica/solicitudes/${selectedId}/documentos/upload`,
           { method: 'POST', body: formData }
         );
@@ -123,7 +124,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
 
   const removeDoc = async (docId: string) => {
     if (!selectedId) return;
-    await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/documentos/${docId}`, { method: 'DELETE' });
+    await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/documentos/${docId}`, { method: 'DELETE' });
     await loadDocs(selectedId);
   };
 
@@ -132,7 +133,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
     setSavingSuper(true);
     setError(null);
     try {
-      const resp = await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/supervisor`, {
+      const resp = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/supervisor`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ supervision_id: supervisionId }),
@@ -155,7 +156,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
     setSavingCodigo(true);
     setCodigoMsg(null);
     try {
-      const resp = await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/codigo`, {
+      const resp = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/codigo`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ anio: codigoAnio, consecutivo: codigoConsec }),

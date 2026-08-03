@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Loader2, Save, CheckCircle2, Lock, ShieldAlert, ClipboardCheck, ArrowRight } from 'lucide-react';
 
@@ -57,7 +58,7 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
     if (selectedId || !userEmail) return;
     let mounted = true;
     setLoadingPendientes(true);
-    fetch(`${API_URL}/api/supervisor/solicitudes-en-calificacion?email=${encodeURIComponent(userEmail)}`)
+    apiFetch(`${API_URL}/api/supervisor/solicitudes-en-calificacion?email=${encodeURIComponent(userEmail)}`)
       .then(r => r.ok ? r.json() : [])
       .then(d => { if (mounted) setPendientes(Array.isArray(d) ? d : []); })
       .catch(() => { if (mounted) setPendientes([]); })
@@ -72,7 +73,7 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
       setLoading(true);
       setErrorAcceso(null);
       try {
-        const res = await fetch(`${API_URL}/api/supervisor/solicitudes/${selectedId}/calificacion?email=${encodeURIComponent(userEmail)}`);
+        const res = await apiFetch(`${API_URL}/api/supervisor/solicitudes/${selectedId}/calificacion?email=${encodeURIComponent(userEmail)}`);
         const data = await res.json();
         if (!mounted) return;
         if (!res.ok) {
@@ -173,7 +174,7 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
         habilitantes_revisados: Array.from(habilitantesRevisados),
         finalizada: finalizar
       };
-      const res = await fetch(`${API_URL}/api/supervisor/solicitudes/${selectedId}/calificacion`, {
+      const res = await apiFetch(`${API_URL}/api/supervisor/solicitudes/${selectedId}/calificacion`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

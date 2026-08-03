@@ -1,11 +1,9 @@
+import "./lib/preventTranslateDomCrash";
 import { createRoot } from "react-dom/client";
-import { PublicClientApplication } from "@azure/msal-browser";
 import { MsalProvider } from "@azure/msal-react";
-import { msalConfig } from "./authConfig";
+import { msalInstance } from "./lib/msalInstance";
 import App from "./App.tsx";
 import "./index.css";
-
-const msalInstance = new PublicClientApplication(msalConfig);
 
 // Inicializar MSAL y manejar la respuesta del redirect antes de renderizar
 msalInstance.initialize().then(() => {

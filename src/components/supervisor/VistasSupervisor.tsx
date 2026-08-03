@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
@@ -59,7 +60,7 @@ export function VistasSupervisor() {
     setContratoSeleccionado(solicitudId);
     try {
       const email = accounts[0]?.username;
-      const res = await fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}${email ? `?email=${encodeURIComponent(email)}` : ''}`);
+      const res = await apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}${email ? `?email=${encodeURIComponent(email)}` : ''}`);
       const data = await res.json();
       if (data.supervision_aceptada === true) {
         setCurrentView('detalleContrato');

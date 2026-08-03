@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, Plus, Trash2, Loader2, CheckCircle2, XCircle, Package, ClipboardList,
@@ -35,7 +36,7 @@ export function AceptarSupervision({ solicitudId, userEmail, onAceptar, onBack }
 
   useEffect(() => {
     const url = `${API_BASE}/api/supervisor/contratos/${solicitudId}${userEmail ? `?email=${encodeURIComponent(userEmail)}` : ''}`;
-    fetch(url)
+    apiFetch(url)
       .then(r => r.json())
       .then(d => {
         setContrato(d);
@@ -78,7 +79,7 @@ export function AceptarSupervision({ solicitudId, userEmail, onAceptar, onBack }
     setError(null);
     try {
       const entregablesTexto = entregables.map(e => e.trim()).filter(Boolean).join('\n');
-      const res = await fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/aceptar`, {
+      const res = await apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/aceptar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,7 +102,7 @@ export function AceptarSupervision({ solicitudId, userEmail, onAceptar, onBack }
     setGuardando(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/aceptar`, {
+      const res = await apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/aceptar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aceptada: false, entregables: '', documentos: [] }),

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import {
     Search, Eye, Loader2, ChevronDown, ChevronUp,
@@ -115,7 +116,7 @@ export function HistorialJuridica({ onSelect }: { onSelect?: (id: string) => voi
     const fetchHistorial = () => {
         setLoading(true);
         setError(null);
-        fetch(`${API_URL}/api/juridica/historial`)
+        apiFetch(`${API_URL}/api/juridica/historial`)
             .then(res => { if (!res.ok) throw new Error(); return res.json(); })
             .then(data => setHistorial(Array.isArray(data) ? data : []))
             .catch(err => {

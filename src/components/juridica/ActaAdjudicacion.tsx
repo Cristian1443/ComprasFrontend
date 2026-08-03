@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Printer, Loader2, Download, Save, Send, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -36,7 +37,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
   const consultarFirmaEstado = async () => {
     if (!solicitudId) return;
     try {
-      const r = await fetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/acta-firma-estado`);
+      const r = await apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/acta-firma-estado`);
       const d = await r.json();
       setFirmaEstado(d);
       // Si ya está firmado, detener el polling
@@ -47,7 +48,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
   };
 
   useEffect(() => {
-    fetch(`${API_URL}/api/adobe-sign/status`)
+    apiFetch(`${API_URL}/api/adobe-sign/status`)
       .then(r => r.json())
       .then(d => { setAdobeConectado(d.connected); setAdobeConfigurado(d.configured); })
       .catch(() => {});
@@ -89,7 +90,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/calificacion`);
+        const res = await apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/calificacion`);
         const json = await res.json();
         setData(json);
       } catch (error) {
@@ -201,7 +202,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
 
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
 
-      const res = await fetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/enviar-acta-adobe-sign`, {
+      const res = await apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/enviar-acta-adobe-sign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -286,7 +287,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
     if (!solicitudId) return;
     setSavingCc(true);
     try {
-      await fetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/calificacion`, {
+      await apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/calificacion`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cc_recomendado: valor })
@@ -317,7 +318,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
   const registrarActa = async (tipo: string) => {
     if (!solicitudId) return;
     try {
-      await fetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/acta-generada`, {
+      await apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/acta-generada`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tipo, ganador_nombre: ganador?.nombre_proveedor || null })

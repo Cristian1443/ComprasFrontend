@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   FileText, Eye, Upload, CheckCircle2, AlertCircle,
@@ -72,13 +73,13 @@ export function DocumentosSoporte({ userEmail }: DocumentosSoporteProps) {
     if (!email) { setSolicitudes([]); setCargando(false); return; }
 
     setCargando(true);
-    fetch(`${API_URL}/api/solicitudes?email=${encodeURIComponent(email)}`)
+    apiFetch(`${API_URL}/api/solicitudes?email=${encodeURIComponent(email)}`)
       .then(r => r.ok ? r.json() : [])
       .then(async (base: any[]) => {
         const detallados = await Promise.all(
           base.map(async (s: any) => {
             try {
-              const r = await fetch(`${API_URL}/api/solicitudes/${s.id}`);
+              const r = await apiFetch(`${API_URL}/api/solicitudes/${s.id}`);
               return r.ok ? { ...s, ...await r.json() } : s;
             } catch { return s; }
           })
@@ -95,10 +96,10 @@ export function DocumentosSoporte({ userEmail }: DocumentosSoporteProps) {
       const form = new FormData();
       form.append('file', file);
       form.append('solicitud_id', solicitudId);
-      const r = await fetch(`${API_URL}/api/solicitudes/${solicitudId}/anexos`, { method: 'POST', body: form });
+      const r = await apiFetch(`${API_URL}/api/solicitudes/${solicitudId}/anexos`, { method: 'POST', body: form });
       if (r.ok) {
         // Recargar esa solicitud
-        const det = await fetch(`${API_URL}/api/solicitudes/${solicitudId}`);
+        const det = await apiFetch(`${API_URL}/api/solicitudes/${solicitudId}`);
         if (det.ok) {
           const data = await det.json();
           setSolicitudes(prev => prev.map(s => s.id === solicitudId ? { ...s, ...data } : s));

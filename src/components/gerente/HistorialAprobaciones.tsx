@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import {
     Search, Download, Eye, CheckCircle2, XCircle, Clock, Loader2, Receipt
@@ -72,18 +73,18 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
 
     const cargarHistorial = () => {
         if (!userEmail) return;
-        fetch(`${API_URL}/api/gerente/historial?email=${userEmail}`)
+        apiFetch(`${API_URL}/api/gerente/historial?email=${userEmail}`)
             .then(r => r.ok ? r.json() : [])
             .then(setHistorial).catch(() => {}).finally(() => setLoadingSol(false));
     };
 
     useEffect(() => {
         if (!userEmail) return;
-        fetch(`${API_URL}/api/usuarios/me?email=${userEmail}`)
+        apiFetch(`${API_URL}/api/usuarios/me?email=${userEmail}`)
             .then(r => r.ok ? r.json() : null)
             .then(setUsuarioActual).catch(() => {});
         cargarHistorial();
-        fetch(`${API_URL}/api/gerente/historial-facturas?email=${userEmail}`)
+        apiFetch(`${API_URL}/api/gerente/historial-facturas?email=${userEmail}`)
             .then(r => r.ok ? r.json() : [])
             .then(setFacturas).catch(() => {}).finally(() => setLoadingFac(false));
     }, [userEmail]);

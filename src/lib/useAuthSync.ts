@@ -1,3 +1,4 @@
+import { apiFetch } from './apiClient';
 // ============================================================
 // Hook: useAuthSync
 // Sincroniza el usuario de Azure AD con la base de datos
@@ -48,7 +49,7 @@ export function useAuthSync() {
                 const profile = await getUserProfile(tokenResponse.accessToken);
 
                 // Llamar al API para sincronizar en la BD
-                const response = await fetch(`${API_URL}/api/auth/sync`, {
+                const response = await apiFetch(`${API_URL}/api/auth/sync`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

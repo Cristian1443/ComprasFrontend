@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
@@ -200,7 +201,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
 
   const abrirPDF = async (sol: any) => {
     try {
-      const res = await fetch(`${API_URL}/api/solicitudes/${sol.id}`);
+      const res = await apiFetch(`${API_URL}/api/solicitudes/${sol.id}`);
       if (res.ok) {
         const data = await res.json();
         setSolicitudParaPDF(data);
@@ -215,7 +216,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
   const fetchSolicitudes = async () => {
     setCargando(true);
     try {
-      const res = await fetch(`${API_URL}/api/solicitudes?estado=en_financiera`);
+      const res = await apiFetch(`${API_URL}/api/solicitudes?estado=en_financiera`);
       if (res.ok) {
         const data = await res.json();
         setSolicitudes(data);
@@ -229,7 +230,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
 
   const fetchRubros = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/rubros`);
+      const res = await apiFetch(`${API_URL}/api/rubros`);
       if (res.ok) {
         const data = await res.json();
         setRubros(data);
@@ -247,7 +248,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
   useEffect(() => {
     if (!rubro) { setPresupuestoGerencia(null); return; }
     const year = new Date().getFullYear();
-    fetch(`${API_URL}/api/financiera/presupuesto-vigencia?vigencia=${year}`)
+    apiFetch(`${API_URL}/api/financiera/presupuesto-vigencia?vigencia=${year}`)
       .then((res) => res.ok ? res.json() : [])
       .then((data: any[]) => {
         const found = Array.isArray(data) ? data.find((p: any) => p.gerencia_nombre === rubro) : null;
@@ -259,7 +260,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
   const handleAprobar = async (solicitud: SolicitudPresupuestal) => {
     let detalleCompleto: SolicitudPresupuestal = solicitud;
     try {
-      const res = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
+      const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
       if (res.ok) {
         const det = await res.json();
         detalleCompleto = { ...solicitud, ...det };
@@ -296,7 +297,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
 
     setProcesando(true);
     try {
-      const res = await fetch(`${API_URL}/api/solicitudes/${solicitudSeleccionada.id}/aprobar-financiera`, {
+      const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitudSeleccionada.id}/aprobar-financiera`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -333,7 +334,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
     }
     setProcesando(true);
     try {
-      const res = await fetch(`${API_URL}/api/solicitudes/${solicitudSeleccionada.id}/aprobar-financiera`, {
+      const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitudSeleccionada.id}/aprobar-financiera`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -365,7 +366,7 @@ export function AprobacionPresupuestal({ financieraId, onActionSuccess }: Aproba
     if (!feedback) return;
 
     try {
-      const res = await fetch(`${API_URL}/api/solicitudes/${solic.id}/aprobar-financiera`, {
+      const res = await apiFetch(`${API_URL}/api/solicitudes/${solic.id}/aprobar-financiera`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, Edit, Trash2, Search, Loader2, Shield, Mail, Building2, Clock } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
@@ -105,8 +106,8 @@ export function GestionUsuarios() {
     try {
       // 1) Datos locales + mapa de permisos guardados en configuracion
       const [res, permRes] = await Promise.all([
-        fetch(`${API_URL}/api/admin/usuarios`),
-        fetch(`${API_URL}/api/admin/permisos-pantallas`),
+        apiFetch(`${API_URL}/api/admin/usuarios`),
+        apiFetch(`${API_URL}/api/admin/permisos-pantallas`),
       ]);
       const dataLocal: Usuario[] = res.ok ? await res.json() : [];
       const permData = permRes.ok ? await permRes.json() : {};
@@ -251,7 +252,7 @@ export function GestionUsuarios() {
     setGuardandoPermisos(true);
     const emailGuardado = usuarioEditando.email.toLowerCase();
     try {
-      const res = await fetch(`${API_URL}/api/admin/permisos-pantallas`, {
+      const res = await apiFetch(`${API_URL}/api/admin/permisos-pantallas`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailGuardado, permisos: permisosEdicion }),
@@ -262,7 +263,7 @@ export function GestionUsuarios() {
       setUsuarioEditando(null);
 
       // Verify persistence: re-read the full permissions map from DB
-      const verifyRes = await fetch(`${API_URL}/api/admin/permisos-pantallas`);
+      const verifyRes = await apiFetch(`${API_URL}/api/admin/permisos-pantallas`);
       if (verifyRes.ok) {
         const verifyData = await verifyRes.json();
         const savedMap: Record<string, string[]> = verifyData?.permisos ?? {};

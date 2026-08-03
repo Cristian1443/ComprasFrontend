@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Receipt, CheckCircle2, XCircle, Clock,
@@ -57,7 +58,7 @@ export function FacturasGerente() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/gerente/facturas`);
+      const r = await apiFetch(`${API_BASE}/api/gerente/facturas`);
       const data = r.ok ? await r.json() : [];
       setFacturas(Array.isArray(data) ? data : []);
     } catch {
@@ -72,7 +73,7 @@ export function FacturasGerente() {
   const aprobar = async (id: string, aprobado: boolean, comentarioTexto?: string) => {
     setProcesandoId(id);
     try {
-      await fetch(`${API_BASE}/api/gerente/facturas/${id}/aprobar`, {
+      await apiFetch(`${API_BASE}/api/gerente/facturas/${id}/aprobar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aprobado, comentario: comentarioTexto?.trim() || null }),

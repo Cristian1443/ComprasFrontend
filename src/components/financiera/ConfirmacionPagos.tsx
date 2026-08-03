@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Receipt, CheckCircle2, Clock, Loader2, CalendarCheck, AlertCircle, Landmark, CreditCard, ArrowLeftRight, Search } from 'lucide-react';
 
@@ -63,7 +64,7 @@ export function ConfirmacionPagos({ userEmail }: ConfirmacionPagosProps) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/financiera/facturas-aprobadas`);
+      const r = await apiFetch(`${API_BASE}/api/financiera/facturas-aprobadas`);
       if (r.ok) setFacturas(await r.json());
     } catch {
       setFacturas([]);
@@ -118,7 +119,7 @@ export function ConfirmacionPagos({ userEmail }: ConfirmacionPagosProps) {
     setError(null);
     setProcesandoLote(true);
     try {
-      const r = await fetch(`${API_BASE}/api/financiera/facturas/pagar-lote`, {
+      const r = await apiFetch(`${API_BASE}/api/financiera/facturas/pagar-lote`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

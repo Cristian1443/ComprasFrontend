@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, ClipboardList, ExternalLink, FileText, CheckCircle2,
@@ -88,7 +89,7 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
   // ── Carga del contrato ─────────────────────────────────────────────────
   const cargarContrato = useCallback(() => {
     if (!userEmail || !solicitudId) return;
-    fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}?email=${encodeURIComponent(userEmail)}`)
+    apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}?email=${encodeURIComponent(userEmail)}`)
       .then(r => { if (!r.ok) throw new Error('API error'); return r.json(); })
       .then(setContrato).catch(() => setContrato(null)).finally(() => setLoading(false));
   }, [userEmail, solicitudId]);
@@ -108,7 +109,7 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
   // ── Carga de facturas aprobadas para ejecucion financiera ──────────────
   useEffect(() => {
     if (!solicitudId) return;
-    fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/facturas`)
+    apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/facturas`)
       .then(r => r.ok ? r.json() : { facturas: [] })
       .then(data => {
         const aprobadas = (data.facturas || []).filter((f: any) => f.estado === 'aprobada');
@@ -121,9 +122,9 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
 
   // ── Carga entregables e informes ───────────────────────────────────────
   useEffect(() => {
-    fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/entregables-lista`)
+    apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/entregables-lista`)
       .then(r => r.json()).then(d => setEntregables(Array.isArray(d) ? d : [])).catch(() => {});
-    fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/informes-lista`)
+    apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/informes-lista`)
       .then(r => r.json()).then(d => setInformes(Array.isArray(d) ? d : [])).catch(() => {});
   }, [solicitudId]);
 
@@ -132,7 +133,7 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
     const ahora = new Date().toISOString();
     setEntregables(prev => prev.map(e => e.id === item.id ? { ...e, completado: true, fecha_completado: ahora } : e));
     try {
-      const res = await fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/entregables-lista/${item.id}`, {
+      const res = await apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/entregables-lista/${item.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
@@ -150,7 +151,7 @@ export function DetalleContratoSupervisor({ solicitudId, userEmail, onBack }: De
     const ahora = new Date().toISOString();
     setInformes(prev => prev.map(i => i.id === item.id ? { ...i, completado: true, fecha_completado: ahora } : i));
     try {
-      const res = await fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/informes-lista/${item.id}`, {
+      const res = await apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/informes-lista/${item.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });

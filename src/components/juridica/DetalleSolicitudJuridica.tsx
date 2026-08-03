@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
@@ -309,7 +310,7 @@ export function DetalleSolicitudJuridica({
     const run = async () => {
       setCargando(true);
       try {
-        const res = await fetch(`${API_URL}/api/solicitudes/${solicitudId}`);
+        const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitudId}`);
         const data = await res.json();
         if (mounted) {
           setSolicitud(data);
@@ -320,9 +321,9 @@ export function DetalleSolicitudJuridica({
           if (requiereFlujoSecuencial(data?.modalidad)) {
             try {
               const [rCal, rDoc, rFirma] = await Promise.all([
-                fetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/calificacion`),
-                fetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/documentos`),
-                fetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/acta-firma-estado`),
+                apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/calificacion`),
+                apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/documentos`),
+                apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitudId}/acta-firma-estado`),
               ]);
               const dCal = await rCal.json();
               const dDoc = await rDoc.json();
@@ -389,7 +390,7 @@ export function DetalleSolicitudJuridica({
     setProcesandoRevision(true);
     setMensaje('');
     try {
-      const resp = await fetch(`${API_URL}/api/juridica/solicitudes/${solicitud.id}/flujo/revision-inicial`, {
+      const resp = await apiFetch(`${API_URL}/api/juridica/solicitudes/${solicitud.id}/flujo/revision-inicial`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario_email: accounts[0]?.username }),
@@ -416,7 +417,7 @@ export function DetalleSolicitudJuridica({
     setGuardandoConcepto(true);
     setMensajeConcepto('');
     try {
-      const resp = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/concepto-juridico`, {
+      const resp = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}/concepto-juridico`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -454,7 +455,7 @@ export function DetalleSolicitudJuridica({
     setMensajeConcepto('');
     try {
       // 1. Guardar los campos (por si hay cambios sin guardar)
-      const respGuardar = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/concepto-juridico`, {
+      const respGuardar = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}/concepto-juridico`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -471,7 +472,7 @@ export function DetalleSolicitudJuridica({
       }
 
       // 2. Enviar: deriva a Riesgos (si aplica) o directo a Comité
-      const resp = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/enviar-concepto-juridico`, {
+      const resp = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}/enviar-concepto-juridico`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario_email: accounts[0]?.username }),
@@ -510,7 +511,7 @@ export function DetalleSolicitudJuridica({
     }
     setRegistrando(decision);
     try {
-      const resp = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/juridica`, {
+      const resp = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}/juridica`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resultado: decision, usuario_email: accounts[0]?.username }),

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Search, Star, ArrowRight, FileText, CheckCircle2, Clock, RotateCcw } from 'lucide-react';
 
@@ -74,7 +75,7 @@ export function MisSolicitudes({ onEdit, onEvaluar, userEmail }: MisSolicitudesP
 
   useEffect(() => {
     if (!emailSupervisor) { setSolicitudes([]); setCargando(false); return; }
-    fetch(`${API_URL}/api/solicitudes?email=${encodeURIComponent(emailSupervisor)}`)
+    apiFetch(`${API_URL}/api/solicitudes?email=${encodeURIComponent(emailSupervisor)}`)
       .then(r => r.ok ? r.json() : [])
       .then(d => setSolicitudes(Array.isArray(d) ? d : []))
       .catch(() => setSolicitudes([]))

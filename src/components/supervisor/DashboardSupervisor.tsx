@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import {
   Plus, FileText, Clock, XCircle, CheckCircle2, ArrowRight,
@@ -78,10 +79,10 @@ export function DashboardSupervisor({ onNewRequest, onVerDetalle, onVerContrato,
     if (!email) { setCargando(false); return; }
     const q = encodeURIComponent(email);
     Promise.all([
-      fetch(`${API_URL}/api/solicitudes?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`${API_URL}/api/supervisor/contratos?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`${API_URL}/api/supervisor/facturas-pendientes?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`${API_URL}/api/supervisor/solicitudes-en-calificacion?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      apiFetch(`${API_URL}/api/solicitudes?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      apiFetch(`${API_URL}/api/supervisor/contratos?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      apiFetch(`${API_URL}/api/supervisor/facturas-pendientes?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      apiFetch(`${API_URL}/api/supervisor/solicitudes-en-calificacion?email=${q}`).then(r => r.ok ? r.json() : []).catch(() => []),
     ]).then(([sols, cons, facts, califs]) => {
       setSolicitudes(Array.isArray(sols) ? sols : []);
       setContratos(Array.isArray(cons) ? cons : []);

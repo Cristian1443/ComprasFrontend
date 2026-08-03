@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   Inbox, Loader2, Search, ArrowRight,
@@ -46,7 +47,7 @@ export function BandejaEntrada({ onSelect }: { onSelect?: (id: string) => void }
   const cargar = () => {
     setLoading(true);
     setError(null);
-    fetch(`${API_URL}/api/juridica/bandeja`)
+    apiFetch(`${API_URL}/api/juridica/bandeja`)
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(d => setSolicitudes(Array.isArray(d) ? d : []))
       .catch(() => setError('No se pudo cargar la bandeja de entrada. Intenta de nuevo.'))

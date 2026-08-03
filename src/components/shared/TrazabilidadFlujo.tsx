@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   CheckCircle2,
@@ -230,7 +231,7 @@ export function TrazabilidadFlujo({
     let cancel = false;
     (async () => {
       try {
-        const r = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/firmas`);
+        const r = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}/firmas`);
         if (!r.ok) return;
         const lista = await r.json();
         if (cancel) return;

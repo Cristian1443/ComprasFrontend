@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   PenLine, CheckCircle2, XCircle, Clock, Loader2, FileDown, Send,
@@ -73,7 +74,7 @@ export function BloqueFirma({
 
   const cargarEstadoFirma = useCallback(async () => {
     try {
-      const r = await fetch(`${API_URL}/api/solicitudes/${solicitudId}/firmas`);
+      const r = await apiFetch(`${API_URL}/api/solicitudes/${solicitudId}/firmas`);
       if (!r.ok) return;
       const todas: FirmaAPI[] = await r.json();
       const mia = todas.find((f) => f.etapa === etapa) || null;
@@ -94,7 +95,7 @@ export function BloqueFirma({
     if (!firma || !['enviado', 'firmando'].includes(firma.estado_firma)) return;
     const t = setInterval(async () => {
       try {
-        const r = await fetch(`${API_URL}/api/firmas/${firma.firma_id}/estado`);
+        const r = await apiFetch(`${API_URL}/api/firmas/${firma.firma_id}/estado`);
         if (r.ok) await cargarEstadoFirma();
       } catch { /* no-op */ }
     }, 8000);
@@ -105,7 +106,7 @@ export function BloqueFirma({
     setEnviando(true);
     setError(null);
     try {
-      const resp = await fetch(`${API_URL}/api/solicitudes/${solicitudId}/firmas/${etapa}/iniciar`, {
+      const resp = await apiFetch(`${API_URL}/api/solicitudes/${solicitudId}/firmas/${etapa}/iniciar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payloadIniciar || {}),
@@ -125,7 +126,7 @@ export function BloqueFirma({
     setEnviando(true);
     try {
       // cancela y re-inicia
-      await fetch(`${API_URL}/api/firmas/${firma.firma_id}/cancelar`, {
+      await apiFetch(`${API_URL}/api/firmas/${firma.firma_id}/cancelar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ motivo: 'Reenvío de firma' }),

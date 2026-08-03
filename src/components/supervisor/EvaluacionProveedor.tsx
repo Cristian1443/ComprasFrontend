@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Lock, ShieldAlert, AlertTriangle, CheckCircle2, Loader2, Send } from 'lucide-react';
 import { BloqueFirma } from '../shared/BloqueFirma';
@@ -86,7 +87,7 @@ export function EvaluacionProveedor({
   useEffect(() => {
     if (!solicitudId || !userEmail) { setCargandoExistente(false); return; }
     let cancelado = false;
-    fetch(`${API_URL}/api/supervisor/contratos/${solicitudId}?email=${encodeURIComponent(userEmail)}`)
+    apiFetch(`${API_URL}/api/supervisor/contratos/${solicitudId}?email=${encodeURIComponent(userEmail)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (cancelado || !data?.evaluacion) return;
@@ -136,7 +137,7 @@ export function EvaluacionProveedor({
 
     try {
       // 1) Persistir la calificación (dispara el bloqueo automático si total < 70)
-      const respEval = await fetch(`${API_URL}/api/supervisor/evaluacion`, {
+      const respEval = await apiFetch(`${API_URL}/api/supervisor/evaluacion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -156,7 +157,7 @@ export function EvaluacionProveedor({
       setBloqueado(!!dataEval.bloqueado);
 
       // 2) Enviar el PDF a firma electrónica del supervisor del contrato
-      const respFirma = await fetch(`${API_URL}/api/solicitudes/${solicitudId}/firmas/proveedor/iniciar`, {
+      const respFirma = await apiFetch(`${API_URL}/api/solicitudes/${solicitudId}/firmas/proveedor/iniciar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),

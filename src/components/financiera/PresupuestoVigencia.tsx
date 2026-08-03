@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CalendarDays, Building2, DollarSign, AlertTriangle, CheckCircle2, Plus, RefreshCw,
@@ -169,7 +170,7 @@ export function PresupuestoVigencia() {
   const cargarPresupuestos = useCallback(async () => {
     setCargando(true);
     try {
-      const res = await fetch(`${API_URL}/api/financiera/presupuesto-vigencia?vigencia=${vigencia}`);
+      const res = await apiFetch(`${API_URL}/api/financiera/presupuesto-vigencia?vigencia=${vigencia}`);
       if (res.ok) {
         const data = await res.json();
         // pg devuelve bigint como string → parsear a número
@@ -228,7 +229,7 @@ export function PresupuestoVigencia() {
     setProcesando(true);
     setErrorForm(null);
     try {
-      const res = await fetch(`${API_URL}/api/financiera/presupuesto-vigencia`, {
+      const res = await apiFetch(`${API_URL}/api/financiera/presupuesto-vigencia`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -256,7 +257,7 @@ export function PresupuestoVigencia() {
   const cargarReconocimientos = useCallback(async (gerenciaNombre: string) => {
     setCargandoReco(true);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${API_URL}/api/financiera/reconocimientos-gasto?vigencia=${vigencia}&gerencia_nombre=${encodeURIComponent(gerenciaNombre)}`
       );
       const data = res.ok ? await res.json() : [];
@@ -293,7 +294,7 @@ export function PresupuestoVigencia() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const r = await fetch(`${API_URL}/api/financiera/reconocimientos-gasto/upload`, { method: 'POST', body: fd });
+      const r = await apiFetch(`${API_URL}/api/financiera/reconocimientos-gasto/upload`, { method: 'POST', body: fd });
       if (r.ok) {
         const d = await r.json();
         setFormReco((prev) => ({ ...prev, soporteNombre: file.name, soporteUrl: `${API_URL}${d.url}` }));
@@ -317,7 +318,7 @@ export function PresupuestoVigencia() {
     setGuardandoReco(true);
     setErrorReco(null);
     try {
-      const res = await fetch(`${API_URL}/api/financiera/reconocimientos-gasto`, {
+      const res = await apiFetch(`${API_URL}/api/financiera/reconocimientos-gasto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -354,7 +355,7 @@ export function PresupuestoVigencia() {
     setProcesandoAnulacion(true);
     setErrorReco(null);
     try {
-      const res = await fetch(`${API_URL}/api/financiera/reconocimientos-gasto/${id}/anular`, {
+      const res = await apiFetch(`${API_URL}/api/financiera/reconocimientos-gasto/${id}/anular`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ motivo: motivoAnulacion.trim(), anulado_por_email: userEmail || null }),

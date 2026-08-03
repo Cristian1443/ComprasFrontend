@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
@@ -33,7 +34,7 @@ export function VistasGerente() {
         if (!userEmail) return;
         setLoadingMetrics(true);
         try {
-            const res = await fetch(`${API_URL}/api/gerente/metrics?email=${userEmail}`);
+            const res = await apiFetch(`${API_URL}/api/gerente/metrics?email=${userEmail}`);
             if (res.ok) {
                 const data = await res.json();
                 setMetrics(data);

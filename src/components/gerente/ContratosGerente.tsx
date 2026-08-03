@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Search, FileCheck2, ArrowRight, AlertTriangle, TrendingUp, Loader2 } from 'lucide-react';
 import { DetalleAprobacion } from './DetalleAprobacion';
@@ -148,10 +149,10 @@ export function ContratosGerente({ userEmail }: { userEmail?: string }) {
 
     useEffect(() => {
         if (!userEmail) { setLoading(false); return; }
-        fetch(`${API_URL}/api/usuarios/me?email=${userEmail}`)
+        apiFetch(`${API_URL}/api/usuarios/me?email=${userEmail}`)
             .then(r => r.ok ? r.json() : null)
             .then(setUsuarioActual).catch(() => {});
-        fetch(`${API_URL}/api/gerente/contratos?email=${encodeURIComponent(userEmail)}`)
+        apiFetch(`${API_URL}/api/gerente/contratos?email=${encodeURIComponent(userEmail)}`)
             .then(r => r.json())
             .then(d => setContratos(Array.isArray(d) ? d : []))
             .catch(() => setContratos([]))

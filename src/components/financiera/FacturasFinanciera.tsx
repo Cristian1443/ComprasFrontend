@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Receipt, CheckCircle2, XCircle, Clock,
@@ -103,7 +104,7 @@ export function FacturasFinanciera() {
   const cargarFacturas = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/financiera/facturas`);
+      const r = await apiFetch(`${API_BASE}/api/financiera/facturas`);
       const data = r.ok ? await r.json() : [];
       setFacturas(Array.isArray(data) ? data : []);
     } catch {
@@ -115,7 +116,7 @@ export function FacturasFinanciera() {
 
   const cargarContratos = useCallback(async () => {
     try {
-      const r = await fetch(`${API_BASE}/api/financiera/contratos`);
+      const r = await apiFetch(`${API_BASE}/api/financiera/contratos`);
       const data = r.ok ? await r.json() : [];
       setContratos(Array.isArray(data) ? data : []);
     } catch {
@@ -176,7 +177,7 @@ export function FacturasFinanciera() {
     setErrorMsg(null);
     try {
       const contrato = contratos.find(c => c.id === form.solicitud_id);
-      const r = await fetch(`${API_BASE}/api/financiera/facturas`, {
+      const r = await apiFetch(`${API_BASE}/api/financiera/facturas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -554,7 +555,7 @@ export function FacturasFinanciera() {
                     try {
                       const fd = new FormData();
                       fd.append('file', file);
-                      const r = await fetch(`${API_BASE}/api/facturas/upload`, { method: 'POST', body: fd });
+                      const r = await apiFetch(`${API_BASE}/api/facturas/upload`, { method: 'POST', body: fd });
                       if (r.ok) {
                         const d = await r.json();
                         setForm(prev => ({ ...prev, adjunto_nombre: file.name, adjunto_url_real: `${API_BASE}${d.url}` }));

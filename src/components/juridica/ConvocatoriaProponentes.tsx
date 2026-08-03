@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, Send, Clock, Users, Mail, Copy, CheckCircle2,
@@ -216,7 +217,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     const url = solicitudId
       ? `${API_URL}/api/convocatorias?solicitud_id=${solicitudId}`
       : `${API_URL}/api/convocatorias`;
-    fetch(url)
+    apiFetch(url)
       .then(r => r.json())
       .then(d => setConvocatorias(Array.isArray(d) ? d : []))
       .catch(() => setConvocatorias([]))
@@ -226,7 +227,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
   /* ════ Pre-llenar desde solicitud ════ */
   useEffect(() => {
     if (!solicitudId) return;
-    fetch(`${API_URL}/api/solicitudes/${solicitudId}`)
+    apiFetch(`${API_URL}/api/solicitudes/${solicitudId}`)
       .then(r => r.json())
       .then(sol => {
         if (Array.isArray(sol.proponentes) && sol.proponentes.length > 0) {
@@ -259,7 +260,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
 
     const poll = async () => {
       try {
-        const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}`);
+        const resp = await apiFetch(`${API_URL}/api/convocatorias/${detalleConv.id}`);
         if (!resp.ok) return;
         const data = await resp.json();
         setDetalleConv(data.convocatoria);
@@ -279,7 +280,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
 
   const crearBase = async () => {
     const propsFiltrados = proponentes.filter(p => p.email.trim());
-    const resp = await fetch(`${API_URL}/api/convocatorias`, {
+    const resp = await apiFetch(`${API_URL}/api/convocatorias`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -305,7 +306,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     if (!detalleConv) return;
     setReenviando(invId);
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}/invitaciones/${invId}/enviar-link`, {
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${detalleConv.id}/invitaciones/${invId}/enviar-link`, {
         method: 'POST',
       });
       if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Error al reenviar'); }
@@ -324,7 +325,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     if (new Date(nuevaFechaFase2) <= new Date()) { toast.error('La nueva fecha debe ser en el futuro.'); return; }
     setGuardandoFechaFase2(true);
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}`, {
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${detalleConv.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fecha_limite: new Date(nuevaFechaFase2).toISOString() }),
@@ -344,7 +345,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     const listUrl = solicitudId
       ? `${API_URL}/api/convocatorias?solicitud_id=${solicitudId}`
       : `${API_URL}/api/convocatorias`;
-    const listResp = await fetch(listUrl);
+    const listResp = await apiFetch(listUrl);
     setConvocatorias(await listResp.json());
     await verDetalle(convId);
   };
@@ -359,7 +360,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     setCreando(true); setFaseCreando(1);
     try {
       const convId = await crearBase();
-      await fetch(`${API_URL}/api/convocatorias/${convId}/enviar-fase1`, {
+      await apiFetch(`${API_URL}/api/convocatorias/${convId}/enviar-fase1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario_email: userEmail }),
@@ -387,7 +388,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
       if (convIdCreado) {
         // Convocatoria ya creada por "Enviar Fase 1" — actualizar descripción y documento
         convId = convIdCreado;
-        await fetch(`${API_URL}/api/convocatorias/${convId}`, {
+        await apiFetch(`${API_URL}/api/convocatorias/${convId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -399,7 +400,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
         // Flujo normal: crear nueva convocatoria con todos los campos
         convId = await crearBase();
       }
-      const r2 = await fetch(`${API_URL}/api/convocatorias/${convId}/enviar-invitacion-masiva`, {
+      const r2 = await apiFetch(`${API_URL}/api/convocatorias/${convId}/enviar-invitacion-masiva`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fecha_limite: fechaLimitePropuesta, usuario_email: userEmail }),
@@ -416,7 +417,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
   /* ════ Ver detalle de una convocatoria ════ */
   const verDetalle = async (convId: string) => {
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${convId}`);
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${convId}`);
       const data = await resp.json();
       setDetalleConv(data.convocatoria);
       setDetalleInvitaciones(data.invitaciones || []);
@@ -437,7 +438,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
   const toggleLinkPublico = async (convId: string, activar: boolean) => {
     setTogglingLink(true);
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${convId}/link-publico`, {
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${convId}/link-publico`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activo: activar }),
@@ -471,7 +472,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     if (!detalleConv) return;
     setEliminandoInv(invId);
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}/invitaciones/${invId}`, {
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${detalleConv.id}/invitaciones/${invId}`, {
         method: 'DELETE',
       });
       if (!resp.ok) throw new Error('Error al eliminar');
@@ -488,7 +489,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
   const guardarRequisitos = async () => {
     if (!detalleConv || editRequisitos === detalleConv.descripcion_requisitos) return;
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${detalleConv.id}`, {
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${detalleConv.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ descripcion_requisitos: editRequisitos }),
@@ -509,7 +510,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     try {
       const formData = new FormData();
       formData.append('documento', file);
-      const resp = await fetch(`${API_URL}/api/convocatorias/upload-documento`, { method: 'POST', body: formData });
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/upload-documento`, { method: 'POST', body: formData });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Error al subir');
       setDocAdjunto({ url: data.url, nombre: data.nombre });
@@ -525,7 +526,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     setEnviandoFase1(true);
     setError('');
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${convId}/enviar-fase1`, {
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${convId}/enviar-fase1`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario_email: userEmail }),
@@ -533,14 +534,14 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
       const data = await resp.json();
       if (!resp.ok) {
         if (data.ya_enviada) {
-          const det = await fetch(`${API_URL}/api/convocatorias/${convId}`);
+          const det = await apiFetch(`${API_URL}/api/convocatorias/${convId}`);
           const d = await det.json();
           setDetalleConv(d.convocatoria);
         }
         throw new Error(data.error || 'Error al enviar');
       }
       setResultadoFase1({ total: data.total_notificados });
-      const det = await fetch(`${API_URL}/api/convocatorias/${convId}`);
+      const det = await apiFetch(`${API_URL}/api/convocatorias/${convId}`);
       const d = await det.json();
       setDetalleConv(d.convocatoria);
       setDetalleInvitaciones(d.invitaciones || []);
@@ -564,7 +565,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     // Guardar descripción y documento antes de enviar
     await guardarRequisitos();
     if (docAdjunto && docAdjunto.url !== detalleConv?.documento_adjunto_url) {
-      await fetch(`${API_URL}/api/convocatorias/${convId}`, {
+      await apiFetch(`${API_URL}/api/convocatorias/${convId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documento_adjunto_url: docAdjunto.url, documento_adjunto_nombre: docAdjunto.nombre }),
@@ -573,7 +574,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     setEnviandoMasivo(true);
     setError('');
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${convId}/enviar-invitacion-masiva`, {
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${convId}/enviar-invitacion-masiva`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fecha_limite: fechaLimiteMasivo, usuario_email: userEmail }),
@@ -582,7 +583,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
       if (!resp.ok) {
         // Si ya fue enviada, refrescar para mostrar estado correcto y ocultar el botón
         if (data.ya_enviada) {
-          const det = await fetch(`${API_URL}/api/convocatorias/${convId}`);
+          const det = await apiFetch(`${API_URL}/api/convocatorias/${convId}`);
           const d = await det.json();
           setDetalleConv(d.convocatoria);
           setDetalleInvitaciones(d.invitaciones || []);
@@ -591,7 +592,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
       }
       setResultadoMasivo({ total: data.total_enviados, mensaje: data.mensaje });
       // Refrescar detalle
-      const det = await fetch(`${API_URL}/api/convocatorias/${convId}`);
+      const det = await apiFetch(`${API_URL}/api/convocatorias/${convId}`);
       const d = await det.json();
       setDetalleConv(d.convocatoria);
       setDetalleInvitaciones(d.invitaciones || []);
@@ -606,7 +607,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
   const eliminarConvocatoria = async (convId: string) => {
     setEliminandoConv(convId);
     try {
-      const resp = await fetch(`${API_URL}/api/convocatorias/${convId}`, { method: 'DELETE' });
+      const resp = await apiFetch(`${API_URL}/api/convocatorias/${convId}`, { method: 'DELETE' });
       if (!resp.ok) throw new Error('Error al eliminar');
       setConvocatorias(prev => prev.filter(c => c.id !== convId));
       toast.success('Convocatoria eliminada.');

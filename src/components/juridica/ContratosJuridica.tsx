@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Search, FileCheck2, ExternalLink, Loader2, CheckCircle2, Clock, XCircle, ChevronRight } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
@@ -80,7 +81,7 @@ export function ContratosJuridica({ onSelect }: ContratosJuridicaProps = {}) {
   const cargarContratos = () => {
     setLoading(true);
     setError(null);
-    fetch(`${API_BASE}/api/juridica/contratos`)
+    apiFetch(`${API_BASE}/api/juridica/contratos`)
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(data => setContratos(Array.isArray(data) ? data : []))
       .catch(() => setError('No se pudieron cargar los contratos. Intenta de nuevo.'))

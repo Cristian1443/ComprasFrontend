@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Settings, Save, CheckCircle, Loader2, DollarSign, FileText, Bell, Globe, ShieldCheck, Activity, Cpu } from 'lucide-react';
 import { ConfiguracionFirmas } from './ConfiguracionFirmas';
@@ -20,7 +21,7 @@ export function Parametros() {
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/admin/configuracion`);
+      const res = await apiFetch(`${API_URL}/api/admin/configuracion`);
       if (res.ok) {
         const data = await res.json();
         setParametros(prev => ({ ...prev, ...data }));
@@ -39,7 +40,7 @@ export function Parametros() {
   const handleGuardar = async () => {
     setGuardando(true);
     try {
-      const res = await fetch(`${API_URL}/api/admin/configuracion`, {
+      const res = await apiFetch(`${API_URL}/api/admin/configuracion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parametros)

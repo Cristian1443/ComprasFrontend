@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import { useMsal } from '@azure/msal-react';
 import {
@@ -408,7 +409,7 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
     const run = async () => {
       setCargando(true);
       try {
-        const res = await fetch(`${API_URL}/api/solicitudes/${solicitudId}`);
+        const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitudId}`);
         const data = await res.json();
         if (mounted) {
           setSolicitud({
@@ -470,7 +471,7 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
   const handleComite = async (resultado: 'aprobado' | 'rechazado') => {
     setRegistrandoComite(resultado);
     try {
-      const resp = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/comite`, {
+      const resp = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}/comite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resultado, usuario_email: accounts[0]?.username })

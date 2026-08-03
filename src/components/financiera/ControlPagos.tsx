@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { CreditCard, Receipt, TrendingUp, CheckCircle2, Clock, XCircle, Loader2, AlertCircle } from 'lucide-react';
 import { FacturasFinanciera } from './FacturasFinanciera';
@@ -55,7 +56,7 @@ function ResumenEjecucion() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_BASE}/api/financiera/resumen-ejecucion`)
+    apiFetch(`${API_BASE}/api/financiera/resumen-ejecucion`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => {
         setKpis(data.kpis);

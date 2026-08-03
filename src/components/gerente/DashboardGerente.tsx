@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import {
     Users, FileText, CheckCircle, Clock,
@@ -78,7 +79,7 @@ export function DashboardGerente({
     useEffect(() => {
         if (initialMetrics) { setMetrics(initialMetrics); setLoading(false); return; }
         if (!userEmail) return;
-        fetch(`${API_URL}/api/gerente/metrics?email=${userEmail}`)
+        apiFetch(`${API_URL}/api/gerente/metrics?email=${userEmail}`)
             .then(r => r.ok ? r.json() : null)
             .then(d => { if (d) setMetrics(d); })
             .catch(console.error)

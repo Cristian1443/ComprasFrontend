@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   Clock, CheckCircle2, XCircle, FileCheck2, Loader2,
@@ -76,7 +77,7 @@ export function DashboardJuridica({
   const load = async () => {
     try {
       setError('');
-      const res = await fetch(`${API_URL}/api/juridica/metrics`);
+      const res = await apiFetch(`${API_URL}/api/juridica/metrics`);
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Error al cargar');
       setMetrics(await res.json());
     } catch (err: any) {

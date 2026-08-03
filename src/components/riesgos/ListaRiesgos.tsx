@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Search, ChevronRight, ShieldAlert, ClipboardList } from 'lucide-react';
 import { DetalleRiesgos } from './DetalleRiesgos';
@@ -16,7 +17,7 @@ export function ListaRiesgos({ userEmail, onActionSuccess }: { userEmail: string
     const fetchSolicitudes = async () => {
         try {
             setCargando(true);
-            const res = await fetch(`${API_URL}/api/riesgos/solicitudes`);
+            const res = await apiFetch(`${API_URL}/api/riesgos/solicitudes`);
             const data = await res.json();
             setSolicitudes(Array.isArray(data) ? data : []);
         } catch (err) {
@@ -31,7 +32,7 @@ export function ListaRiesgos({ userEmail, onActionSuccess }: { userEmail: string
         const loadInitialData = async () => {
             if (!userEmail) return;
             try {
-                const resUser = await fetch(`${API_URL}/api/usuarios/me?email=${userEmail}`);
+                const resUser = await apiFetch(`${API_URL}/api/usuarios/me?email=${userEmail}`);
                 if (resUser.ok) {
                     const userData = await resUser.json();
                     setUsuarioActual(userData);

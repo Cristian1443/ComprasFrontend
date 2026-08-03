@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, ExternalLink, Loader2, FileText, CheckCircle2,
@@ -87,9 +88,9 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
       setLoading(true);
       try {
         const [rSol, rDocs, rCal] = await Promise.allSettled([
-          fetch(`${API_URL}/api/solicitudes/${contratoId}`).then(r => r.json()),
-          fetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/documentos`).then(r => r.json()),
-          fetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/calificacion`).then(r => r.json()),
+          apiFetch(`${API_URL}/api/solicitudes/${contratoId}`).then(r => r.json()),
+          apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/documentos`).then(r => r.json()),
+          apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/calificacion`).then(r => r.json()),
         ]);
         if (rSol.status === 'fulfilled') setSol(rSol.value);
         if (rDocs.status === 'fulfilled') setDocs(Array.isArray(rDocs.value) ? rDocs.value : []);

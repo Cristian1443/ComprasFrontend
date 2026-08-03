@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Printer, FileStack, ChevronRight } from 'lucide-react';
 import { FichaComite } from './DetalleSolicitudComite';
@@ -22,7 +23,7 @@ export function FichasSeleccionadasComite({ ids, onBack }: FichasSeleccionadasCo
         setProgreso(0);
         const results: any[] = [];
         for (let i = 0; i < ids.length; i++) {
-          const res = await fetch(`${API_URL}/api/solicitudes/${ids[i]}`);
+          const res = await apiFetch(`${API_URL}/api/solicitudes/${ids[i]}`);
           const data = await res.json();
           results.push(data);
           if (mounted) setProgreso(Math.round(((i + 1) / ids.length) * 100));

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Search, Receipt, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
@@ -47,7 +48,7 @@ export function HistorialFacturasSupervisor({ userEmail }: HistorialFacturasSupe
 
     useEffect(() => {
         if (!userEmail) return;
-        fetch(`${API_URL}/api/supervisor/historial-facturas?email=${encodeURIComponent(userEmail)}`)
+        apiFetch(`${API_URL}/api/supervisor/historial-facturas?email=${encodeURIComponent(userEmail)}`)
             .then(r => r.ok ? r.json() : [])
             .then(setFacturas)
             .catch(() => {})

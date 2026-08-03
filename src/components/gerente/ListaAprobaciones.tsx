@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Eye, CheckCircle, XCircle, Clock, TrendingUp, ChevronRight, LayoutDashboard, ListFilter, Sparkles, ArrowUpRight, ClipboardList, Inbox, History } from 'lucide-react';
 import { DetalleAprobacion } from './DetalleAprobacion';
@@ -18,7 +19,7 @@ export function ListaAprobaciones({ userEmail, onActionSuccess }: { userEmail: s
         if (!userEmail) return;
         try {
             setCargando(true);
-            const res = await fetch(`${API_URL}/api/gerente/historial?email=${userEmail}`);
+            const res = await apiFetch(`${API_URL}/api/gerente/historial?email=${userEmail}`);
             const data = await res.json();
             const arrayData = Array.isArray(data) ? data : [];
             setSolicitudes(arrayData);
@@ -36,7 +37,7 @@ export function ListaAprobaciones({ userEmail, onActionSuccess }: { userEmail: s
             try {
                 setCargando(true);
                 // 1. Cargar info del usuario para auditoría
-                const resUser = await fetch(`${API_URL}/api/usuarios/me?email=${userEmail}`);
+                const resUser = await apiFetch(`${API_URL}/api/usuarios/me?email=${userEmail}`);
                 if (resUser.ok) {
                     const userData = await resUser.json();
                     setUsuarioActual(userData);

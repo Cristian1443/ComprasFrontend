@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ScrollText, Filter, Download, ArrowRight, Loader2, Clock,
@@ -127,7 +128,7 @@ export function LogsAuditoria() {
   const fetchLogs = useCallback(async (currentPage: number) => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/admin/logs?${buildParams(currentPage)}`);
+      const res = await apiFetch(`${API_URL}/api/admin/logs?${buildParams(currentPage)}`);
       if (res.ok) {
         const json = await res.json();
         setData(Array.isArray(json)
@@ -142,7 +143,7 @@ export function LogsAuditoria() {
   }, [buildParams]);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/admin/logs/stats`)
+    apiFetch(`${API_URL}/api/admin/logs/stats`)
       .then(r => r.ok ? r.json() : {})
       .then(setStats)
       .catch(() => {});
@@ -252,7 +253,7 @@ export function LogsAuditoria() {
           <button
             onClick={() => {
               fetchLogs(page);
-              fetch(`${API_URL}/api/admin/logs/stats`).then(r => r.ok ? r.json() : {}).then(setStats).catch(() => {});
+              apiFetch(`${API_URL}/api/admin/logs/stats`).then(r => r.ok ? r.json() : {}).then(setStats).catch(() => {});
             }}
             title="Actualizar"
             className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100 text-slate-500 hover:text-[var(--brand-secondary)] transition-colors"

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Save, Send, FileText, User, Building2, Shield, ChevronDown, ChevronUp, Lock, Plus, Trash2, Calendar, Download, Upload } from 'lucide-react';
 import { datosExistentes } from './datosSolicitudes';
@@ -416,7 +417,7 @@ export function FormularioSolicitud({
       try {
         setCargandoDetalle(true);
         const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
-        const res = await fetch(`${API_URL}/api/solicitudes/${solicitudId}`);
+        const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitudId}`);
         if (!res.ok) return;
         const det = await res.json();
         if (cancelado) return;
@@ -803,7 +804,7 @@ export function FormularioSolicitud({
     try {
       const form = new FormData();
       Array.from(files).forEach(f => form.append('archivos', f));
-      const res = await fetch(`${API_URL}/api/solicitudes/upload`, { method: 'POST', body: form });
+      const res = await apiFetch(`${API_URL}/api/solicitudes/upload`, { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'No se pudieron subir los documentos.');
       const nuevos: Anexo[] = (data.archivos || []).map((a: any) => ({
@@ -881,7 +882,7 @@ export function FormularioSolicitud({
     try {
       const payload = payloadOverride || getPayload();
       if (currentSolicitudId) {
-        const res = await fetch(`${API_URL}/api/solicitudes/${currentSolicitudId}`, {
+        const res = await apiFetch(`${API_URL}/api/solicitudes/${currentSolicitudId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -894,7 +895,7 @@ export function FormularioSolicitud({
         if (mostrarAlerta) alert('Borrador actualizado correctamente.');
         return currentSolicitudId;
       } else {
-        const res = await fetch(`${API_URL}/api/solicitudes`, {
+        const res = await apiFetch(`${API_URL}/api/solicitudes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -971,7 +972,7 @@ export function FormularioSolicitud({
       if (!idActual) throw new Error("No se pudo guardar la solicitud antes de enviar.");
 
       // 3. Enviar al Gerente
-      const resEnvio = await fetch(`${API_URL}/api/solicitudes/${idActual}/enviar`, {
+      const resEnvio = await apiFetch(`${API_URL}/api/solicitudes/${idActual}/enviar`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' }
       });

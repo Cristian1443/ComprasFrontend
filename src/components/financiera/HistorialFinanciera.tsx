@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useCallback } from 'react';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
 import { formatMilesInput } from '../../lib/formatPresupuesto';
@@ -81,7 +82,7 @@ export function HistorialFinanciera() {
     useEffect(() => {
         const fetchHistorial = async () => {
             try {
-                const res = await fetch(`${API_URL}/api/financiera/historial`);
+                const res = await apiFetch(`${API_URL}/api/financiera/historial`);
                 if (res.ok) {
                     const data = await res.json();
                     setHistorial(data);
@@ -100,7 +101,7 @@ export function HistorialFinanciera() {
         setDetalleData(null);
         setDetalleLoading(true);
         try {
-            const r = await fetch(`${API_URL}/api/solicitudes/${id}`);
+            const r = await apiFetch(`${API_URL}/api/solicitudes/${id}`);
             if (r.ok) setDetalleData(await r.json());
         } catch { /* silent */ }
         finally { setDetalleLoading(false); }
@@ -110,7 +111,7 @@ export function HistorialFinanciera() {
         if (panelData[solicitudId] && !panelData[solicitudId].loading) return;
         setPanelData(prev => ({ ...prev, [solicitudId]: { facturas: [], valor_contrato: 0, loading: true } }));
         try {
-            const r = await fetch(`${API_URL}/api/supervisor/contratos/${solicitudId}/facturas`);
+            const r = await apiFetch(`${API_URL}/api/supervisor/contratos/${solicitudId}/facturas`);
             if (r.ok) {
                 const data = await r.json();
                 setPanelData(prev => ({
@@ -705,7 +706,7 @@ function MiniFormFactura({ solicitudId, codigoContrato, onSuccess, onCancel }: M
         setSaving(true);
         setError(null);
         try {
-            const r = await fetch(`${API_URL}/api/financiera/facturas`, {
+            const r = await apiFetch(`${API_URL}/api/financiera/facturas`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

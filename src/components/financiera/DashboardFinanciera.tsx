@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
@@ -40,7 +41,7 @@ export function DashboardFinanciera({ userName, initialMetrics, isLoading }: Das
 
     const fetchMetrics = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/financiera/metrics`);
+        const res = await apiFetch(`${API_URL}/api/financiera/metrics`);
         if (res.ok) {
           const data = await res.json();
           setMetrics(data);

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Printer, Loader2, PencilLine, Lock } from 'lucide-react';
 import { getPresupuestoCertificadoDisplay, getPresupuestoDisplayText } from '../../lib/formatPresupuesto';
@@ -232,7 +233,7 @@ export function ActaSesionComite({
     if (!actaId) return;
     setGuardando(campo);
     try {
-      await fetch(`${API_URL}/api/secretaria/actas/${actaId}/textos`, {
+      await apiFetch(`${API_URL}/api/secretaria/actas/${actaId}/textos`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
@@ -251,7 +252,7 @@ export function ActaSesionComite({
     setGuardandoFirmantes(true);
     try {
       if (actaId) {
-        await fetch(`${API_URL}/api/secretaria/actas/${actaId}/firmantes`, {
+        await apiFetch(`${API_URL}/api/secretaria/actas/${actaId}/firmantes`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -275,11 +276,11 @@ export function ActaSesionComite({
         const [solicitudes, firmantes] = await Promise.all([
           Promise.all(
             ids.map(async (id) => {
-              const r = await fetch(`${API_URL}/api/solicitudes/${id}`);
+              const r = await apiFetch(`${API_URL}/api/solicitudes/${id}`);
               return r.ok ? r.json() : {};
             })
           ),
-          fetch(`${API_URL}/api/configuracion/firmantes`).then((r) =>
+          apiFetch(`${API_URL}/api/configuracion/firmantes`).then((r) =>
             r.ok ? r.json() : []
           ),
         ]);

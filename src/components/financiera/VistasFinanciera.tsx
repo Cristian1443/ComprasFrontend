@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
@@ -34,7 +35,7 @@ export function VistasFinanciera() {
   const fetchMetrics = async () => {
     setLoadingMetrics(true);
     try {
-      const res = await fetch(`${API_URL}/api/financiera/metrics`);
+      const res = await apiFetch(`${API_URL}/api/financiera/metrics`);
       if (res.ok) {
         const data = await res.json();
         setMetrics(data);

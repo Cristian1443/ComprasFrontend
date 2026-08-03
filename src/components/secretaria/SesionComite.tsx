@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ArrowLeft, ArrowRight, CheckCircle2, XCircle, PauseCircle,
@@ -77,7 +78,7 @@ export function SesionComite({
         const results = await Promise.all(
           ids.map(async (id) => {
             try {
-              const res = await fetch(`${API_URL}/api/solicitudes/${id}`);
+              const res = await apiFetch(`${API_URL}/api/solicitudes/${id}`);
               if (!res.ok) return { id };
               return await res.json();
             } catch {

@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Receipt, CheckCircle2, XCircle, Clock,
@@ -63,7 +64,7 @@ export function FacturasContrato({ solicitudId, userEmail }: FacturasContratoPro
   const cargarFacturas = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/facturas`);
+      const r = await apiFetch(`${API_BASE}/api/supervisor/contratos/${solicitudId}/facturas`);
       if (r.ok) {
         const data = await r.json();
         // API returns { facturas: [...], valor_contrato: number }
@@ -86,7 +87,7 @@ export function FacturasContrato({ solicitudId, userEmail }: FacturasContratoPro
   const certificar = async (id: string, aprobado: boolean, comentarioTexto?: string) => {
     setProcesandoId(id);
     try {
-      await fetch(`${API_BASE}/api/supervisor/facturas/${id}/certificar`, {
+      await apiFetch(`${API_BASE}/api/supervisor/facturas/${id}/certificar`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ aprobado, comentario: comentarioTexto?.trim() || null }),

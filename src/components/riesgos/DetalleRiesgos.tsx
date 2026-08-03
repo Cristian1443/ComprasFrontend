@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
     ArrowLeft, CheckCircle, ShieldAlert,
@@ -33,7 +34,7 @@ export function DetalleRiesgos({ solicitud, usuarioActual, onBack, onActionSucce
 
     const abrirPDF = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
+            const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
             if (res.ok) {
                 const data = await res.json();
                 setSolicitudParaPDF(data);
@@ -48,7 +49,7 @@ export function DetalleRiesgos({ solicitud, usuarioActual, onBack, onActionSucce
     useEffect(() => {
         const cargarDetalle = async () => {
             try {
-                const res = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
+                const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}`);
                 if (!res.ok) return;
                 const det = await res.json();
                 setSolicitudFull({ ...solicitud, ...det });
@@ -67,7 +68,7 @@ export function DetalleRiesgos({ solicitud, usuarioActual, onBack, onActionSucce
 
         setProcesando(true);
         try {
-            const res = await fetch(`${API_URL}/api/solicitudes/${solicitud.id}/riesgos`, {
+            const res = await apiFetch(`${API_URL}/api/solicitudes/${solicitud.id}/riesgos`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

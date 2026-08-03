@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   PenLine, Save, Loader2, CheckCircle2, AlertTriangle,
@@ -82,10 +83,10 @@ export function ConfiguracionFirmas() {
     setCargando(true);
     try {
       const [r1, r2, r3, r4] = await Promise.all([
-        fetch(`${API_URL}/api/configuracion/firmantes`),
-        fetch(`${API_URL}/api/configuracion/adobe-sign`),
-        fetch(`${API_URL}/api/adobe-sign/oauth/redirect-uri`),
-        fetch(`${API_URL}/api/configuracion/graph-app`),
+        apiFetch(`${API_URL}/api/configuracion/firmantes`),
+        apiFetch(`${API_URL}/api/configuracion/adobe-sign`),
+        apiFetch(`${API_URL}/api/adobe-sign/oauth/redirect-uri`),
+        apiFetch(`${API_URL}/api/configuracion/graph-app`),
       ]);
       if (r1.ok) {
         const todos = await r1.json();
@@ -127,7 +128,7 @@ export function ConfiguracionFirmas() {
     setGuardando(rol);
     setMensaje(null);
     try {
-      const r = await fetch(`${API_URL}/api/configuracion/firmantes/${rol}`, {
+      const r = await apiFetch(`${API_URL}/api/configuracion/firmantes/${rol}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre: f.nombre, email: f.email, cargo: f.cargo, activo: f.activo }),
@@ -146,7 +147,7 @@ export function ConfiguracionFirmas() {
     setGuardando('conectar');
     setMensaje(null);
     try {
-      const r = await fetch(`${API_URL}/api/adobe-sign/oauth/auth-url`);
+      const r = await apiFetch(`${API_URL}/api/adobe-sign/oauth/auth-url`);
       if (!r.ok) throw new Error('No se pudo obtener la URL de conexión. ¿Está la API corriendo?');
       const d = await r.json();
       const url = d.auth_url || d.connect_url;
@@ -174,7 +175,7 @@ export function ConfiguracionFirmas() {
       if (adobeForm.client_secret) body.client_secret = adobeForm.client_secret;
       if (adobeForm.refresh_token) body.refresh_token = adobeForm.refresh_token;
 
-      const r = await fetch(`${API_URL}/api/configuracion/adobe-sign`, {
+      const r = await apiFetch(`${API_URL}/api/configuracion/adobe-sign`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -210,7 +211,7 @@ export function ConfiguracionFirmas() {
       if (graphForm.client_id) body.client_id = graphForm.client_id;
       if (graphForm.client_secret) body.client_secret = graphForm.client_secret;
 
-      const r = await fetch(`${API_URL}/api/configuracion/graph-app`, {
+      const r = await apiFetch(`${API_URL}/api/configuracion/graph-app`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

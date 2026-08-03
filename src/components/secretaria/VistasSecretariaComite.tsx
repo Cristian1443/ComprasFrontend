@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ClipboardList, FileText, CheckCircle2, XCircle, Clock,
@@ -221,7 +222,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
   const fetchSolicitudes = async () => {
     setCargando(true);
     try {
-      const res = await fetch(`${API_URL}/api/secretaria/comite`);
+      const res = await apiFetch(`${API_URL}/api/secretaria/comite`);
       setSolicitudes(res.ok ? ((await res.json()) as SolicitudComite[]) : []);
     } catch (err) {
       console.error('Error cargando solicitudes de comité:', err);
@@ -233,7 +234,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
 
   const fetchMetrics = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/secretaria/metrics`);
+      const res = await apiFetch(`${API_URL}/api/secretaria/metrics`);
       if (res.ok) setMetrics(await res.json());
     } catch (err) {
       console.error('Error cargando métricas:', err);
@@ -255,7 +256,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
   const fetchActasHistorial = async () => {
     setCargandoHistorial(true);
     try {
-      const res = await fetch(`${API_URL}/api/secretaria/actas/historial`);
+      const res = await apiFetch(`${API_URL}/api/secretaria/actas/historial`);
       if (res.ok) {
         const apiData: ActaHistorial[] = await res.json();
         // Fusionar con actas locales que aún no están en la API
@@ -510,7 +511,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
         : decision === 'rechazada'
           ? 'rechazado'
           : 'en_revision';
-    const res = await fetch(`${API_URL}/api/solicitudes/${id}/comite`, {
+    const res = await apiFetch(`${API_URL}/api/solicitudes/${id}/comite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -551,7 +552,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
     // Persistir en base de datos y capturar el ID generado
     let actaId: string | undefined;
     try {
-      const r = await fetch(`${API_URL}/api/secretaria/actas`, {
+      const r = await apiFetch(`${API_URL}/api/secretaria/actas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

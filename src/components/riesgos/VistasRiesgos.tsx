@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { useAuthSync } from '../../lib/useAuthSync';
@@ -22,7 +23,7 @@ export function VistasRiesgos() {
 
     const fetchMetrics = async () => {
         try {
-            const res = await fetch(`${API_URL}/api/riesgos/metrics`);
+            const res = await apiFetch(`${API_URL}/api/riesgos/metrics`);
             if (res.ok) setMetrics(await res.json());
         } catch (err) {
             console.error('Error fetching riesgos metrics:', err);

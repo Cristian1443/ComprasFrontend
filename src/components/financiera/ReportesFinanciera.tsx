@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import {
     BarChart3, Download, FileText, PieChart, Activity,
@@ -40,9 +41,9 @@ export function ReportesFinanciera() {
 
     useEffect(() => {
         Promise.all([
-            fetch(`${API_URL}/api/financiera/reporte_consumo`).then(r => r.json()).catch(() => []),
-            fetch(`${API_URL}/api/financiera/metrics`).then(r => r.json()).catch(() => null),
-            fetch(`${API_URL}/api/financiera/resumen-ejecucion`).then(r => r.json()).catch(() => null),
+            apiFetch(`${API_URL}/api/financiera/reporte_consumo`).then(r => r.json()).catch(() => []),
+            apiFetch(`${API_URL}/api/financiera/metrics`).then(r => r.json()).catch(() => null),
+            apiFetch(`${API_URL}/api/financiera/resumen-ejecucion`).then(r => r.json()).catch(() => null),
         ]).then(([c, m, re]) => {
             setConsumo(c);
             setMetrics(m);
@@ -56,7 +57,7 @@ export function ReportesFinanciera() {
         setDownloading(tipo);
         try {
             if (tipo === 'ejecucion') {
-                const data = await fetch(`${API_URL}/api/financiera/resumen-ejecucion`).then(r => r.json());
+                const data = await apiFetch(`${API_URL}/api/financiera/resumen-ejecucion`).then(r => r.json());
                 const contratos = data.contratos || [];
                 const headers = ['Código', 'Objeto del contrato', 'Valor contrato (COP)', 'Total facturado (COP)', 'Saldo (COP)', '% Ejecución', 'Facturas aprobadas', 'Facturas pendientes', 'Supervisor'];
                 const rows = contratos.map((c: any) => {
@@ -77,7 +78,7 @@ export function ReportesFinanciera() {
                 });
                 downloadCSV([headers, ...rows], `Ejecucion_Presupuestal_${new Date().toISOString().slice(0, 10)}.csv`);
             } else if (tipo === 'pagos') {
-                const facturas = await fetch(`${API_URL}/api/financiera/facturas`).then(r => r.json());
+                const facturas = await apiFetch(`${API_URL}/api/financiera/facturas`).then(r => r.json());
                 const headers = ['AP', 'Código contrato', 'Objeto contrato', 'Concepto', 'Valor (COP)', 'Estado', 'Aprobado supervisor', 'Aprobado gerente', 'Fecha creación'];
                 const estadoLabel: Record<string, string> = { aprobada: 'Aprobada', pendiente: 'Pendiente', rechazada: 'Rechazada' };
                 const rows = (facturas as any[]).map(f => [
@@ -93,7 +94,7 @@ export function ReportesFinanciera() {
                 ]);
                 downloadCSV([headers, ...rows], `Maestro_Pagos_${new Date().toISOString().slice(0, 10)}.csv`);
             } else {
-                const proveedores = await fetch(`${API_URL}/api/financiera/reporte-proveedores`).then(r => r.json());
+                const proveedores = await apiFetch(`${API_URL}/api/financiera/reporte-proveedores`).then(r => r.json());
                 const headers = ['Código solicitud', 'Objeto', 'Gerencia', 'Estado', 'Proveedor', 'Valor oferta (COP)', 'Moneda', 'Criterios habilitantes', 'Valor agregado', 'Seleccionado'];
                 const rows = (proveedores as any[]).map(p => [
                     p.codigo || '',

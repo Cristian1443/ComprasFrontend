@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   Users, Search, CheckCircle2, AlertTriangle, ShieldOff,
@@ -253,7 +254,7 @@ export function ProveedoresJuridica() {
       const params = new URLSearchParams();
       if (prov.correo) params.set('email', prov.correo);
       params.set('nombre', prov.nombre);
-      const resp = await fetch(`${API_URL}/api/proveedores/formulario-ra14?${params.toString()}`);
+      const resp = await apiFetch(`${API_URL}/api/proveedores/formulario-ra14?${params.toString()}`);
       const d = await resp.json();
       if (!resp.ok) throw new Error(d.error || 'No se pudo cargar el formulario.');
       setFormularioData(d);
@@ -268,7 +269,7 @@ export function ProveedoresJuridica() {
     setCargandoContratos(true);
     setErrorContratos('');
     try {
-      const resp = await fetch(`${API_URL}/api/juridica/contratos?proveedor=${encodeURIComponent(prov.nombre)}`);
+      const resp = await apiFetch(`${API_URL}/api/juridica/contratos?proveedor=${encodeURIComponent(prov.nombre)}`);
       const d = await resp.json();
       if (!resp.ok) throw new Error((d && d.error) || 'No se pudieron cargar los contratos.');
       setContratosData(Array.isArray(d) ? d : []);
@@ -297,7 +298,7 @@ export function ProveedoresJuridica() {
   const cargar = () => {
     setLoading(true);
     setError(null);
-    fetch(`${API_URL}/api/juridica/proveedores`)
+    apiFetch(`${API_URL}/api/juridica/proveedores`)
       .then(r => {
         if (!r.ok) throw new Error();
         return r.json();

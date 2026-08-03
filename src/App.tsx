@@ -1,3 +1,4 @@
+import { apiFetch } from './lib/apiClient';
 import React, { useState, useEffect } from 'react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { InteractionStatus } from "@azure/msal-browser";
@@ -72,7 +73,7 @@ export default function App() {
       return;
     }
 
-    fetch(`${API_URL}/api/admin/permisos-pantallas?email=${encodeURIComponent(account.username)}`)
+    apiFetch(`${API_URL}/api/admin/permisos-pantallas?email=${encodeURIComponent(account.username)}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`Error ${res.status}`);
         return res.json();
@@ -88,7 +89,7 @@ export default function App() {
         }
 
         // Sin permisos explícitos: usar rol real de BD, no acceso total.
-        return fetch(`${API_URL}/api/usuarios/me?email=${encodeURIComponent(account.username)}`)
+        return apiFetch(`${API_URL}/api/usuarios/me?email=${encodeURIComponent(account.username)}`)
           .then(async (res) => {
             if (!res.ok) throw new Error(`Error ${res.status}`);
             return res.json();

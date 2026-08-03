@@ -1,3 +1,4 @@
+import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { ArrowLeft, FileText, Loader2, Save, RotateCcw, Mail, BarChart3, Lock, CheckCircle2, Download, Check, X, Star, Eye } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -73,7 +74,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
 
   useEffect(() => {
     const loadSolicitudes = async () => {
-      const res = await fetch(`${API_URL}/api/juridica/solicitudes`);
+      const res = await apiFetch(`${API_URL}/api/juridica/solicitudes`);
       const data = await res.json();
       const arr = Array.isArray(data) ? data : [];
       setSolicitudes(arr);
@@ -92,7 +93,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
     const loadDetalle = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`);
+        const res = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`);
         const data = await res.json();
         setDetalle(data);
 
@@ -195,16 +196,16 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
         
         setHayBorrador(false); // Ya no necesitamos el boton si lo cargamos solo
 
-        const rDoc = await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/documentos`);
+        const rDoc = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/documentos`);
         const dDoc = await rDoc.json();
         setDocumentosCount(Array.isArray(dDoc?.documentos) ? dDoc.documentos.length : 0);
 
-        const rConv = await fetch(`${API_URL}/api/convocatorias?solicitud_id=${selectedId}`);
+        const rConv = await apiFetch(`${API_URL}/api/convocatorias?solicitud_id=${selectedId}`);
         const dConv = await rConv.json();
         if (Array.isArray(dConv)) {
           const map: Record<string, any> = {};
           for (const c of dConv) {
-            const rDet = await fetch(`${API_URL}/api/convocatorias/${c.id}`);
+            const rDet = await apiFetch(`${API_URL}/api/convocatorias/${c.id}`);
             const dDet = await rDet.json();
             if (Array.isArray(dDet.invitaciones)) {
               dDet.invitaciones.forEach((inv: any) => {
@@ -257,7 +258,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
     let cancelado = false;
     const refrescarSupervisor = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`);
+        const res = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`);
         if (!res.ok || cancelado) return;
         const data = await res.json();
         setDetalle((prev: any) => prev ? { ...prev, evaluacion: { ...prev.evaluacion, supervisor: data?.evaluacion?.supervisor || null } } : prev);
@@ -427,7 +428,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
         habilitantes_revisados: Array.from(habilitantesRevisados)
       };
 
-      const res = await fetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`, {
+      const res = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
