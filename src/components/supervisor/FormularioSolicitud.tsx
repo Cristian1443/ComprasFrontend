@@ -945,7 +945,7 @@ export function FormularioSolicitud({
       alert("Debe indicar el plazo de ejecución (meses o días)."); return;
     }
     if (datosPlaneacion.fechaEstimadaSolicitud && datosPlaneacion.fechaEstimadaSolicitud < fechaMinimaContrato) {
-      alert(`La 'Fecha estimada en la que se requiere el contrato' debe ser ${fechaMinimaContratoDisplay} o posterior (mínimo ${DIAS_HABILES_MINIMOS_CONTRATO} días hábiles a partir de hoy).`);
+      alert(`La 'Fecha estimada en la que se requiere el contrato' debe ser igual o superior que ${fechaMinimaContratoDisplay} (mínimo ${DIAS_HABILES_MINIMOS_CONTRATO} días hábiles a partir de hoy).`);
       return;
     }
     if (!supervisionEntregables.supervisionId && !supervisionEntregables.supervision) {
@@ -1325,7 +1325,7 @@ export function FormularioSolicitud({
                             />
                             {datosPlaneacion.fechaEstimadaSolicitud && datosPlaneacion.fechaEstimadaSolicitud < fechaMinimaContrato && (
                               <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: 6 }}>
-                                La fecha debe ser {fechaMinimaContratoDisplay} o posterior (mínimo {DIAS_HABILES_MINIMOS_CONTRATO} días hábiles).
+                                La fecha debe ser igual o superior que {fechaMinimaContratoDisplay} (mínimo {DIAS_HABILES_MINIMOS_CONTRATO} días hábiles).
                               </p>
                             )}
                           </div>
