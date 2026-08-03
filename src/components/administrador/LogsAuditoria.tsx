@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   ScrollText, Filter, Download, ArrowRight, Loader2, Clock,
   ShieldAlert, Monitor, Search, ChevronLeft, ChevronRight,
-  ShieldCheck, Database, Settings, Key, Globe, Activity
+  ShieldCheck, Database, Settings, Key, Globe, Activity, X, Copy, Check
 } from 'lucide-react';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
@@ -110,6 +110,8 @@ export function LogsAuditoria() {
   const [data, setData] = useState<LogsResponse>({ logs: [], total: 0, limit: PAGE_SIZE, offset: 0 });
   const [stats, setStats] = useState<StatsMap>({});
   const [loading, setLoading] = useState(true);
+  const [logDetalle, setLogDetalle] = useState<Log | null>(null);
+  const [copiado, setCopiado] = useState(false);
 
   const buildParams = useCallback((currentPage: number) => {
     const params = new URLSearchParams({
@@ -159,6 +161,14 @@ export function LogsAuditoria() {
   useEffect(() => {
     fetchLogs(page);
   }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cerrar el modal de detalle con Escape
+  useEffect(() => {
+    if (!logDetalle) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setLogDetalle(null); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [logDetalle]);
 
   const totalPages = Math.ceil(data.total / PAGE_SIZE);
 
@@ -404,7 +414,11 @@ export function LogsAuditoria() {
                 const TipoIcon = tipo.Icon;
 
                 return (
-                  <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={log.id}
+                    onClick={() => setLogDetalle(log)}
+                    className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                  >
                     <td className="px-5 py-4 whitespace-nowrap">
                       <p className="text-sm font-black text-slate-800 font-gabarito">
                         {fecha.toLocaleDateString('es-CO')}
@@ -508,6 +522,125 @@ export function LogsAuditoria() {
           </div>
         )}
       </div>
+
+      {/* Modal de detalle — abre al hacer clic en cualquier fila */}
+      {logDetalle && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4"
+          onClick={() => { setLogDetalle(null); setCopiado(false); }}
+        >
+          <div
+            className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            {(() => {
+              const tipo = tipoLogConfig(logDetalle.tipo_log);
+              const acc = accionConfig(logDetalle.accion);
+              const fecha = new Date(logDetalle.creado_en);
+              const TipoIcon = tipo.Icon;
+              const campos: { label: string; value: string | null }[] = [
+                { label: 'Módulo', value: logDetalle.modulo || null },
+                { label: 'Tabla', value: logDetalle.tabla || null },
+                { label: 'Campo', value: logDetalle.campo || null },
+                { label: 'Registro', value: logDetalle.registro_id || null },
+              ];
+              return (
+                <>
+                  <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-100">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${tipo.bg} ${tipo.text} ${tipo.border}`}>
+                          <TipoIcon size={9} /> {tipo.label}
+                        </span>
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${acc.cls}`}>
+                          {acc.label}
+                        </span>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                          logDetalle.resultado === 'fallido'
+                            ? 'bg-rose-50 text-rose-600 border-rose-200'
+                            : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                        }`}>
+                          {logDetalle.resultado || 'exitoso'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-bold flex items-center gap-1">
+                        <Clock size={11} />
+                        {fecha.toLocaleDateString('es-CO')} · {fecha.toLocaleTimeString('es-CO')}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setLogDetalle(null); setCopiado(false); }}
+                      className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors flex-shrink-0"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-5">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Responsable</p>
+                      <p className="text-sm font-bold text-slate-800">{logDetalle.usuario_nombre || 'Sistema'}</p>
+                      <p className="text-xs text-slate-400">
+                        {logDetalle.usuario_email || '—'}{logDetalle.rol_usuario ? ` · ${logDetalle.rol_usuario}` : ''}
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descripción completa</p>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(logDetalle.descripcion || '');
+                            setCopiado(true);
+                            setTimeout(() => setCopiado(false), 1500);
+                          }}
+                          className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-[var(--brand-secondary)] transition-colors"
+                        >
+                          {copiado ? <Check size={11} /> : <Copy size={11} />}
+                          {copiado ? 'Copiado' : 'Copiar'}
+                        </button>
+                      </div>
+                      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-2xl p-4">
+                        {logDetalle.descripcion || '—'}
+                      </p>
+                    </div>
+
+                    {(logDetalle.valor_anterior || logDetalle.valor_nuevo) && (
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">De → A</p>
+                        <div className="flex items-start gap-3 bg-slate-50 rounded-2xl p-4">
+                          <p className="text-sm text-slate-400 line-through break-all flex-1">
+                            {logDetalle.valor_anterior || '—'}
+                          </p>
+                          <ArrowRight size={14} className="text-slate-300 flex-shrink-0 mt-0.5" />
+                          <p className="text-sm font-bold text-[var(--brand-secondary)] break-all flex-1">
+                            {logDetalle.valor_nuevo || '—'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {campos.filter(c => c.value).map(c => (
+                        <div key={c.label}>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{c.label}</p>
+                          <p className="text-xs font-mono text-slate-600 break-all">{c.value}</p>
+                        </div>
+                      ))}
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">IP de origen</p>
+                        <p className="text-xs font-mono text-slate-600 flex items-center gap-1">
+                          <Monitor size={11} /> {logDetalle.ip_address || '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
