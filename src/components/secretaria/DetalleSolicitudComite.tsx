@@ -183,7 +183,8 @@ export function FichaComite({
     ? getPresupuestoCertificadoDisplay(solicitud)
     : getPresupuestoDisplayText(solicitud);
   const formaPago = getFormaPagoTexto(solicitud.forma_pago) || 'No especificado';
-  const riesgos: string = solicitud.riesgos || '';
+  // Solo aplica cuando el caso realmente pasa por el rol Riesgos (riesgos jurídicos = sí).
+  const riesgos: string = solicitud.tiene_riesgos_juridicos === true ? (solicitud.riesgos || '') : '';
   const conceptoJuridico: string = solicitud.concepto_juridico || '';
   const garantias: string = solicitud.garantias || '';
   const riesgosJuridicos: string = solicitud.tiene_riesgos_juridicos === true ? (solicitud.riesgos_juridicos || '') : '';
@@ -349,12 +350,13 @@ export function FichaComite({
               <p style={fc.contractRow}><span style={fc.cLabel}>Supervisor Contrato:</span> {supervisorContrato}</p>
               <p style={fc.contractRow}><span style={fc.cLabel}>Rubro presupuestal:</span> {rubroPresupuestal}</p>
             </div>
-            <div style={fc.garantiasArea}>
-              <p style={fc.contractRow}>
-                <span style={fc.cLabel}>Riesgos principales:</span>{' '}
-                {riesgos || ph('[Riesgo 1: probabilidad / impacto / mitigación. Riesgo 2: ...]')}
-              </p>
-            </div>
+            {riesgos && (
+              <div style={fc.garantiasArea}>
+                <p style={fc.contractRow}>
+                  <span style={fc.cLabel}>Riesgos principales:</span> {riesgos}
+                </p>
+              </div>
+            )}
           </div>
           <div style={fc.lowerRight}>
             <p style={fc.modalidadTitle}>Modalidad de<br />contratación</p>
