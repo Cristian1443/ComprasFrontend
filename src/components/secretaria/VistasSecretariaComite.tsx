@@ -65,6 +65,8 @@ interface ActaHistorial extends ActaSnapshot {
   firmanteDirectoraCargo?: string;
   firmanteSecretariaNombre?: string;
   firmanteSecretariaCargo?: string;
+  /** Fecha en la que quedó firmada electrónicamente en Adobe Sign (null = pendiente) */
+  cerradaEn?: string | null;
 }
 
 type Fase = 'config' | 'seleccion' | 'sesion' | 'acta';
@@ -140,6 +142,13 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
   const [actasHistorial, setActasHistorial] = useState<ActaHistorial[]>([]);
   const [actaHistorialVisualizando, setActaHistorialVisualizando] = useState<ActaHistorial | null>(null);
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
+
+  // Acta ya cerrada de decisiones pero aún sin firmar en Adobe Sign: mientras
+  // exista, no se puede iniciar una sesión de comité nueva.
+  const actaPendienteFirma = useMemo(
+    () => actasHistorial.find((a) => a.actaId && !a.cerradaEn) || null,
+    [actasHistorial]
+  );
 
   // Carga de usuarios AD
   useEffect(() => {
@@ -606,6 +615,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
         firmanteDirectoraCargoInicial={actaHistorialVisualizando.firmanteDirectoraCargo}
         firmanteSecretariaNombreInicial={actaHistorialVisualizando.firmanteSecretariaNombre}
         firmanteSecretariaCargoInicial={actaHistorialVisualizando.firmanteSecretariaCargo}
+        cerradaEnInicial={actaHistorialVisualizando.cerradaEn}
         soloLectura
         onBack={() => setActaHistorialVisualizando(null)}
       />
@@ -640,8 +650,40 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
         decisionesPorId={actaSnapshot.decisiones}
         solicitudPrincipalId={actaSnapshot.ids[0]}
         actaId={actaSnapshot.actaId}
+        cerradaEnInicial={actaSnapshot.actaId ? (actasHistorial.find((a) => a.actaId === actaSnapshot.actaId)?.cerradaEn ?? null) : null}
         onBack={volverDeActa}
       />
+    );
+  }
+
+  // Hay un acta de decisiones ya cerradas pero sin firmar en Adobe Sign:
+  // no se puede iniciar una sesión de comité nueva hasta completarla.
+  if (actaPendienteFirma) {
+    return (
+      <div style={{ maxWidth: 640, margin: '80px auto', padding: '0 24px', textAlign: 'center' }}>
+        <div style={{
+          background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 20,
+          padding: '32px 28px', color: '#92400E',
+        }}>
+          <p style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: 8 }}>
+            ⚠ Hay un acta pendiente de firma electrónica
+          </p>
+          <p style={{ fontSize: '0.9rem', marginBottom: 20, lineHeight: 1.5 }}>
+            El acta {actaPendienteFirma.actaNumero || 'de la sesión anterior'} ya tiene las decisiones cerradas,
+            pero no puede considerarse finalizada hasta que la Directora y la Secretaria del Comité completen
+            la firma en Adobe Sign. No es posible iniciar una nueva sesión de comité hasta entonces.
+          </p>
+          <button
+            onClick={() => { setActaSnapshot(actaPendienteFirma); setFase('acta'); }}
+            style={{
+              background: '#E84922', color: '#fff', border: 'none', borderRadius: 12,
+              padding: '12px 24px', fontWeight: 800, cursor: 'pointer',
+            }}
+          >
+            Ir al acta pendiente
+          </button>
+        </div>
+      </div>
     );
   }
 

@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 import { SeccionPresupuestoLectura } from '../shared/SeccionPresupuestoLectura';
 import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
-import { BloqueFirma } from '../shared/BloqueFirma';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
 import { DetallePlaneacionContractualParte1, DetallePlaneacionContractualParte2 } from '../shared/DetallePlaneacionContractual';
 import { FormatoPlaneacionImprimible } from './FormatoPlaneacionImprimible';
@@ -686,19 +685,6 @@ export function DetalleSolicitudComite({ solicitudId, onBack, soloLectura = fals
                     <SectionHeader title="VIII. CONCLUSIONES POR PARTE DEL COMITÉ DE CONTRATACIONES." />
                     <DataRow label="8.1 Conclusiones del Comité" value={solicitud.conclusiones_comite} last />
                   </div>
-                )}
-
-                {resultadoComite && (
-                  <BloqueFirma
-                    solicitudId={solicitud.id}
-                    etapa="comite"
-                    descripcion="Para aprobar la decisión del comité, el acta debe ser firmada electrónicamente por la Directora y la Secretaria del Comité."
-                    payloadIniciar={{
-                      actaNumero: solicitud.codigo,
-                      fechaSesion: new Date().toISOString(),
-                      decision: resultadoComite,
-                    }}
-                  />
                 )}
 
                 <InstanciasAprobacion solicitud={solicitud} precedidoPorConclusiones={!esDirecta && !!solicitud.conclusiones_comite} />

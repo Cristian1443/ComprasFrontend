@@ -51,6 +51,8 @@ interface ActaSesionComiteProps {
   firmanteDirectoraCargoInicial?: string;
   firmanteSecretariaNombreInicial?: string;
   firmanteSecretariaCargoInicial?: string;
+  /** Fecha en la que el acta quedó firmada electrónicamente (null = pendiente) */
+  cerradaEnInicial?: string | null;
   /** Si true, oculta los botones de edición (vista de historial) */
   soloLectura?: boolean;
   onBack: () => void;
@@ -198,6 +200,7 @@ export function ActaSesionComite({
   firmanteDirectoraCargoInicial = '',
   firmanteSecretariaNombreInicial = '',
   firmanteSecretariaCargoInicial = '',
+  cerradaEnInicial = null,
   soloLectura = false,
   onBack,
 }: ActaSesionComiteProps) {
@@ -211,20 +214,9 @@ export function ActaSesionComite({
   const [desarrolloCerrado, setDesarrolloCerrado] = useState(desarrolloCerradoInicial);
   const [conclusionCerrada, setConclusionCerrada] = useState(conclusionCerradaInicial);
   const [guardando, setGuardando] = useState<'desarrollo' | 'conclusion' | null>(null);
+  const [cerradaEn, setCerradaEn] = useState<string | null>(cerradaEnInicial);
   const desarrolloRef = useRef<HTMLTextAreaElement>(null);
   const conclusionRef = useRef<HTMLTextAreaElement>(null);
-
-  /* ── Firmantes propios de esta acta (editables, no dependen de un único valor global) ── */
-  const [firmanteDirectora, setFirmanteDirectora] = useState({
-    nombre: firmanteDirectoraNombreInicial,
-    cargo: firmanteDirectoraCargoInicial,
-  });
-  const [firmanteSecretaria, setFirmanteSecretaria] = useState({
-    nombre: firmanteSecretariaNombreInicial,
-    cargo: firmanteSecretariaCargoInicial,
-  });
-  const [editandoFirmantes, setEditandoFirmantes] = useState(false);
-  const [guardandoFirmantes, setGuardandoFirmantes] = useState(false);
 
   const guardarTexto = async (
     campo: 'desarrollo' | 'conclusion',
@@ -246,26 +238,6 @@ export function ActaSesionComite({
       else setConclusionCerrada(true);
     } catch { /* no-op */ }
     setGuardando(null);
-  };
-
-  const guardarFirmantes = async () => {
-    setGuardandoFirmantes(true);
-    try {
-      if (actaId) {
-        await apiFetch(`${API_URL}/api/secretaria/actas/${actaId}/firmantes`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            firmante_directora_nombre: firmanteDirectora.nombre,
-            firmante_directora_cargo: firmanteDirectora.cargo,
-            firmante_secretaria_nombre: firmanteSecretaria.nombre,
-            firmante_secretaria_cargo: firmanteSecretaria.cargo,
-          }),
-        });
-      }
-      setEditandoFirmantes(false);
-    } catch { /* no-op */ }
-    setGuardandoFirmantes(false);
   };
 
   useEffect(() => {
@@ -300,24 +272,6 @@ export function ActaSesionComite({
     return () => { mounted = false; };
   }, [ids]);
 
-  /* Si esta acta no tiene firmantes propios guardados aún, se usa el valor
-     global configurado como punto de partida (editable antes de firmar). */
-  useEffect(() => {
-    if (firmantesApi.length === 0) return;
-    const directoraGlobal = firmantesApi.find((f) => f.rol_firma === 'directora_comite');
-    const secretariaGlobal = firmantesApi.find((f) => f.rol_firma === 'secretaria_comite');
-    setFirmanteDirectora((prev) =>
-      prev.nombre || !directoraGlobal
-        ? prev
-        : { nombre: directoraGlobal.nombre, cargo: directoraGlobal.cargo }
-    );
-    setFirmanteSecretaria((prev) =>
-      prev.nombre || !secretariaGlobal
-        ? prev
-        : { nombre: secretariaGlobal.nombre, cargo: secretariaGlobal.cargo }
-    );
-  }, [firmantesApi]);
-
   /* ── Fecha y hora ── */
   const fechaSesion = fechaSesionISO ? new Date(fechaSesionISO) : new Date();
   const fechaLarga = fechaSesion.toLocaleDateString('es-CO', {
@@ -342,14 +296,16 @@ export function ActaSesionComite({
   /* ── Firmantes: Directora y Secretaria de este comité en particular.
      Se editan por acta porque las personas en esos cargos pueden cambiar
      de una sesión a otra (ver botón "Editar firmantes" más abajo). ── */
+  const directoraGlobal = firmantesApi.find((f) => f.rol_firma === 'directora_comite');
+  const secretariaGlobal = firmantesApi.find((f) => f.rol_firma === 'secretaria_comite');
   const firmantes: { nombre: string; cargo: string }[] = [
     {
-      nombre: firmanteDirectora.nombre || '___________________________',
-      cargo: firmanteDirectora.cargo || 'Directora de Comité',
+      nombre: firmanteDirectoraNombreInicial || directoraGlobal?.nombre || '___________________________',
+      cargo: firmanteDirectoraCargoInicial || directoraGlobal?.cargo || 'Directora de Comité',
     },
     {
-      nombre: firmanteSecretaria.nombre || '___________________________',
-      cargo: firmanteSecretaria.cargo || 'Secretaria de Comité',
+      nombre: firmanteSecretariaNombreInicial || secretariaGlobal?.nombre || '___________________________',
+      cargo: firmanteSecretariaCargoInicial || secretariaGlobal?.cargo || 'Secretaria de Comité',
     },
   ];
 
@@ -424,6 +380,21 @@ export function ActaSesionComite({
       </div>
 
       {/* ══ FIRMA ELECTRÓNICA (oculto al imprimir) ══ */}
+      <div
+        data-print="hide"
+        style={{
+          margin: '0 auto 16px', maxWidth: 820, padding: '12px 18px', borderRadius: 12,
+          fontSize: '0.85rem', fontWeight: 700,
+          ...(cerradaEn
+            ? { background: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0' }
+            : { background: '#FFFBEB', color: '#92400E', border: '1px solid #FDE68A' }),
+        }}
+      >
+        {cerradaEn
+          ? `✅ Acta cerrada — firmada electrónicamente el ${new Date(cerradaEn).toLocaleString('es-CO')}.`
+          : '⚠ Acta pendiente de firma electrónica — no se considera cerrada hasta que la Directora y la Secretaria del Comité completen la firma en Adobe Sign.'}
+      </div>
+
       {solicitudPrincipalId && (
         <div data-print="hide" style={sx.firmaWrap}>
           <BloqueFirma
@@ -431,6 +402,7 @@ export function ActaSesionComite({
             etapa="comite"
             descripcion="El acta de comité debe ser firmada electrónicamente por la Directora y la Secretaria del Comité de Contratación."
             payloadIniciar={{
+              actaId,
               actaNumero,
               fechaSesion: fechaSesionISO ?? new Date().toISOString(),
               participantes,
@@ -440,6 +412,7 @@ export function ActaSesionComite({
                 decision: decisionesPorId[id]?.decision ?? 'aprobada',
               })),
             }}
+            onFirmaCompleta={() => setCerradaEn(new Date().toISOString())}
           />
         </div>
       )}
@@ -701,64 +674,16 @@ export function ActaSesionComite({
             En constancia firman:
           </p>
 
-          {editandoFirmantes ? (
-            <div data-print="hide" style={sx.firmantesEditWrap}>
-              {[
-                { label: 'Directora del Comité', valor: firmanteDirectora, set: setFirmanteDirectora },
-                { label: 'Secretaria del Comité', valor: firmanteSecretaria, set: setFirmanteSecretaria },
-              ].map((f, i) => (
-                <div key={i} style={sx.firmanteEditFila}>
-                  <p style={sx.firmanteEditLabel}>{f.label}</p>
-                  <input
-                    type="text"
-                    placeholder="Nombre de quien firma"
-                    value={f.valor.nombre}
-                    onChange={(e) => f.set((prev) => ({ ...prev, nombre: e.target.value }))}
-                    style={sx.firmanteInput}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Cargo"
-                    value={f.valor.cargo}
-                    onChange={(e) => f.set((prev) => ({ ...prev, cargo: e.target.value }))}
-                    style={sx.firmanteInput}
-                  />
-                </div>
-              ))}
-              <button
-                onClick={guardarFirmantes}
-                style={sx.btnGuardar}
-                disabled={guardandoFirmantes}
-              >
-                {guardandoFirmantes
-                  ? <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> Guardando...</>
-                  : 'Guardar firmantes'}
-              </button>
-            </div>
-          ) : (
-            <>
-              <div style={{ ...sx.sigGrid, gridTemplateColumns: 'repeat(2, 1fr)' }}>
-                {firmantes.map((f, i) => (
-                  <div key={i} style={sx.sigBloque}>
-                    <div style={sx.sigEspacio} />
-                    <div style={sx.sigLinea} />
-                    <p style={sx.sigNombre}>{f.nombre}</p>
-                    <p style={sx.sigCargo}>{f.cargo}</p>
-                  </div>
-                ))}
+          <div style={{ ...sx.sigGrid, gridTemplateColumns: 'repeat(2, 1fr)' }}>
+            {firmantes.map((f, i) => (
+              <div key={i} style={sx.sigBloque}>
+                <div style={sx.sigEspacio} />
+                <div style={sx.sigLinea} />
+                <p style={sx.sigNombre}>{f.nombre}</p>
+                <p style={sx.sigCargo}>{f.cargo}</p>
               </div>
-              {!soloLectura && (
-                <button
-                  data-print="hide"
-                  onClick={() => setEditandoFirmantes(true)}
-                  style={sx.btnEditarTexto}
-                >
-                  <PencilLine size={13} />
-                  Editar firmantes
-                </button>
-              )}
-            </>
-          )}
+            ))}
+          </div>
 
           {/* Footer de pantalla */}
           <div data-print="hide" style={{ marginTop: 32 }}>
