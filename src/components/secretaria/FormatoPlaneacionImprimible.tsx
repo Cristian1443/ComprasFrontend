@@ -256,6 +256,12 @@ export function FormatoPlaneacionImprimible({ solicitud, onClose }: Props) {
               <FR label="1.1 Objeto a contratar:" value={solicitud.objeto} />
               <FR label="1.2 Justificación y Descripción:" value={solicitud.justificacion} />
               <FR label="1.3 Especificaciones técnicas:" value={solicitud.descripcion_necesidad_detalle} />
+              <FR label="1.4 Criterios habilitantes:" value={
+                Array.isArray(solicitud.criterios_habilitantes_planeacion) && solicitud.criterios_habilitantes_planeacion.length > 0
+                  ? solicitud.criterios_habilitantes_planeacion.map((c: any, i: number) => `${i + 1}. ${c.descripcion}`).join('\n')
+                  : null
+              } />
+              <FR label="1.5 Experiencia Acreditada Exigida:" value={solicitud.experiencia_acreditada_exigida} />
             </tbody>
           </table>
 

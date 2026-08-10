@@ -190,6 +190,24 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
           label="1.2 Especificaciones técnicas:"
           hint="Describa de forma clara y concisa las especificaciones técnicas del bien o servicio a contratar."
           value={s?.descripcion_necesidad_detalle}
+        />
+        <DataRow
+          label="1.3 Criterios habilitantes:"
+          hint="Criterios habilitantes exigidos a los proponentes para esta contratación."
+          value={
+            Array.isArray(s?.criterios_habilitantes_planeacion) && s.criterios_habilitantes_planeacion.length > 0
+              ? (
+                <ol style={{ margin: 0, paddingLeft: 18 }}>
+                  {s.criterios_habilitantes_planeacion.map((c: any, i: number) => <li key={i}>{c.descripcion}</li>)}
+                </ol>
+              )
+              : null
+          }
+        />
+        <DataRow
+          label="1.4 Experiencia Acreditada Exigida:"
+          hint="Experiencia acreditada exigida al proponente/contratista para esta contratación."
+          value={s?.experiencia_acreditada_exigida}
           last
         />
       </div>
@@ -318,8 +336,12 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
                 <div style={{ display: 'flex', borderRight: '1px solid #d1d5db' }}>
                   <div style={PDF_LABEL}>Valor promedio:</div>
                   <div style={PDF_CELL}>
-                    <p style={PDF_HINT}>Registre el promedio de los valores obtenidos en la investigación de mercado, o el valor más alto si se quiere asegurar cobertura presupuestal.</p>
-                    <div style={VALUE_TEXT}>{s?.analisis_valor_promedio ? `$ ${s.analisis_valor_promedio}` : EMPTY}</div>
+                    <p style={PDF_HINT}>Promedio calculado a partir de los valores de cotización de los proponentes, uno por cada moneda registrada.</p>
+                    <div style={VALUE_TEXT}>
+                      {s?.analisis_valor_promedio
+                        ? (/^(COP|USD|EUR)\b/.test(String(s.analisis_valor_promedio)) ? s.analisis_valor_promedio : `$ ${s.analisis_valor_promedio}`)
+                        : EMPTY}
+                    </div>
                   </div>
                 </div>
                 <div style={{ display: 'flex' }}>

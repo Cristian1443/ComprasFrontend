@@ -261,6 +261,7 @@ interface Proponente {
   valorAgregado: string;
   observaciones: string;
   valorCotizacion: string;
+  moneda: string;
   plazoMeses: string;
   plazoDias: string;
 }
@@ -464,6 +465,7 @@ export function FormularioSolicitud({
           valorMonedaCOP: det.valor_moneda_cop_texto || (det.valor_moneda_cop != null ? String(det.valor_moneda_cop) : prev.valorMonedaCOP),
           valorMonedaUSD: det.valor_moneda_usd_texto || (det.valor_moneda_usd != null ? String(det.valor_moneda_usd) : prev.valorMonedaUSD),
           valorMonedaEUR: det.valor_moneda_eur_texto || (det.valor_moneda_eur != null ? String(det.valor_moneda_eur) : prev.valorMonedaEUR),
+          experienciaAcreditadaExigida: det.experiencia_acreditada_exigida || prev.experienciaAcreditadaExigida,
         }));
 
         setSupervisionEntregables(prev => ({
@@ -477,6 +479,7 @@ export function FormularioSolicitud({
         }));
         if (det.obligaciones_especificas?.length) setObligaciones(det.obligaciones_especificas);
         if (det.entregables_detalle?.length) setEntregablesDetalle(det.entregables_detalle);
+        if (det.criterios_habilitantes_planeacion?.length) setCriteriosHabilitantes(det.criterios_habilitantes_planeacion);
 
         setAnalisisMercado(prev => ({
           serviciosOfertados:  det.analisis_servicios_ofertados   || prev.serviciosOfertados,
@@ -521,6 +524,7 @@ export function FormularioSolicitud({
               valorAgregado: p.valor_agregado || '',
               observaciones: p.observaciones || '',
               valorCotizacion: p.valor_cotizacion != null ? String(p.valor_cotizacion) : '',
+              moneda: p.moneda || 'COP',
               plazoMeses: p.plazo_meses != null ? String(p.plazo_meses) : '',
               plazoDias: p.plazo_dias != null ? String(p.plazo_dias) : '',
             }))
@@ -573,6 +577,7 @@ export function FormularioSolicitud({
   const [datosPlaneacion, setDatosPlaneacion] = useState({
     descripcionNecesidad: datosIniciales.descripcionNecesidad || '',
     descripcionNecesidadDetalle: datosIniciales.descripcionNecesidadDetalle || '',
+    experienciaAcreditadaExigida: datosIniciales.experienciaAcreditadaExigida || '',
     tituloContrato: datosIniciales.tituloContrato || '',
     objeto: datosIniciales.objeto || '',
     valorEstimado: datosIniciales.valorEstimado || '',
@@ -682,6 +687,24 @@ export function FormularioSolicitud({
   const esTDR = modalidadNormalizada === 'tdr';
   const esInvitacionOTdr = esInvitacion || esTDR;
 
+  // No se puede promediar cotizaciones en distintas monedas como si fueran una sola
+  // (no hay tasa de cambio disponible en el sistema): se calcula un promedio
+  // independiente por cada moneda presente en la tabla de Invitados.
+  const MONEDA_ORDEN = ['COP', 'USD', 'EUR'];
+  const calcularPromediosPorMoneda = (lista: Proponente[]): { moneda: string; promedio: number }[] => {
+    const grupos: Record<string, number[]> = {};
+    lista.forEach(p => {
+      const v = parseValorMoneda(p.valorCotizacion);
+      if (v > 0) {
+        const m = (p.moneda || 'COP').toUpperCase();
+        (grupos[m] = grupos[m] || []).push(v);
+      }
+    });
+    return MONEDA_ORDEN
+      .filter(m => grupos[m]?.length)
+      .map(m => ({ moneda: m, promedio: Math.round(grupos[m].reduce((a, b) => a + b, 0) / grupos[m].length) }));
+  };
+
   // Fecha mínima permitida para "Fecha estimada en la que se requiere el contrato":
   // al menos 3 días hábiles a partir de hoy (no se permite el mismo día).
   const fechaMinimaContrato = formatFechaISOLocal(sumarDiasHabiles(new Date(), DIAS_HABILES_MINIMOS_CONTRATO));
@@ -692,7 +715,7 @@ export function FormularioSolicitud({
   const proponenteVacio = (): Proponente => ({
     nombreProveedor: '', correo: '', datosContacto: '', requisitosTecnicos: '',
     experiencia: '', criteriosHabilitantes: '', valorImpuestos: '', valorAgregado: '', observaciones: '',
-    valorCotizacion: '', plazoMeses: '', plazoDias: ''
+    valorCotizacion: '', moneda: 'COP', plazoMeses: '', plazoDias: ''
   });
 
   const [proponentes, setProponentes] = useState<Proponente[]>(
@@ -731,6 +754,11 @@ export function FormularioSolicitud({
       ? (datosIniciales as any).obligaciones_especificas
       : [{ descripcion: '' }]
   );
+  const [criteriosHabilitantes, setCriteriosHabilitantes] = useState<{ descripcion: string }[]>(
+    (datosIniciales as any).criterios_habilitantes_planeacion?.length
+      ? (datosIniciales as any).criterios_habilitantes_planeacion
+      : [{ descripcion: '' }]
+  );
   const [entregablesDetalle, setEntregablesDetalle] = useState<{ descripcion: string; porcentaje: string; sinPorcentaje: boolean }[]>(
     (datosIniciales as any).entregables_detalle?.length
       ? (datosIniciales as any).entregables_detalle
@@ -745,6 +773,50 @@ export function FormularioSolicitud({
     plazoPromedioDias:  (datosIniciales as any).analisis_plazo_promedio_dias  || '',
     presupuestoOficial: (datosIniciales as any).analisis_presupuesto_oficial  || '',
   });
+
+  // El Valor Promedio se calcula automáticamente como el promedio de los valores
+  // de cotización registrados en la tabla de Invitados (Invitación / TDR),
+  // agrupado por moneda: no se mezclan cotizaciones en pesos, dólares y euros
+  // en un solo promedio.
+  useEffect(() => {
+    if (!esInvitacionOTdr) return;
+    const promedios = calcularPromediosPorMoneda(proponentes);
+    const texto = promedios.map(({ moneda, promedio }) => `${moneda} ${promedio.toLocaleString('es-CO')}`).join('   ·   ');
+    setAnalisisMercado(prev => (prev.valorPromedio === texto ? prev : { ...prev, valorPromedio: texto }));
+  }, [proponentes, esInvitacionOTdr]);
+
+  // La Moneda de pago (y su(s) valor(es)) de la Sección IV se sincronizan
+  // automáticamente con las monedas y promedios detectados en el Estudio de
+  // Mercado (Sección III): si hay una sola moneda entre las cotizaciones, se usa
+  // esa; si hay varias, se marca "Moneda Combinada" y se completa un valor por
+  // cada una. Solo aplica a Invitación / TDR (Directa no tiene este cruce).
+  useEffect(() => {
+    if (!esInvitacionOTdr) return;
+    const promedios = calcularPromediosPorMoneda(proponentes);
+    if (promedios.length === 0) return;
+    const monedasPresentes = promedios.map(p => p.moneda);
+    const nuevaMoneda = monedasPresentes.length > 1 ? 'COMBINADA' : monedasPresentes[0];
+    const valorCOP = promedios.find(p => p.moneda === 'COP')?.promedio;
+    const valorUSD = promedios.find(p => p.moneda === 'USD')?.promedio;
+    const valorEUR = promedios.find(p => p.moneda === 'EUR')?.promedio;
+    setDatosPlaneacion(prev => {
+      const next = {
+        ...prev,
+        moneda: nuevaMoneda,
+        monedasSeleccionadas: monedasPresentes,
+        valorMonedaCOP: valorCOP !== undefined ? valorCOP.toLocaleString('es-CO') : '',
+        valorMonedaUSD: valorUSD !== undefined ? valorUSD.toLocaleString('es-CO') : '',
+        valorMonedaEUR: valorEUR !== undefined ? valorEUR.toLocaleString('es-CO') : '',
+      };
+      const sinCambios = prev.moneda === next.moneda
+        && prev.valorMonedaCOP === next.valorMonedaCOP
+        && prev.valorMonedaUSD === next.valorMonedaUSD
+        && prev.valorMonedaEUR === next.valorMonedaEUR
+        && prev.monedasSeleccionadas.length === next.monedasSeleccionadas.length
+        && prev.monedasSeleccionadas.every((m: string) => next.monedasSeleccionadas.includes(m));
+      return sinCambios ? prev : next;
+    });
+  }, [proponentes, esInvitacionOTdr]);
 
   // Sección VII — Anexos (dinámicos)
   const [anexosDocs, setAnexosDocs] = useState<Anexo[]>(
@@ -829,6 +901,8 @@ export function FormularioSolicitud({
     email: userEmail,
     justificacion: datosPlaneacion.descripcionNecesidad,
     descripcion_necesidad_detalle: datosPlaneacion.descripcionNecesidadDetalle,
+    experiencia_acreditada_exigida: datosPlaneacion.experienciaAcreditadaExigida,
+    criterios_habilitantes_planeacion: criteriosHabilitantes.filter(c => c.descripcion.trim()),
     titulo_contrato: datosPlaneacion.tituloContrato,
     objeto: datosPlaneacion.objeto,
     lugar_ejecucion: datosPlaneacion.lugarEjecucion,
@@ -940,6 +1014,8 @@ export function FormularioSolicitud({
     if (!datosPlaneacion.tituloContrato) { alert("El campo 'Título del contrato' es obligatorio."); return; }
     if (!datosPlaneacion.objeto) { alert("El campo 'Objeto de la contratación' es obligatorio."); return; }
     if (!datosPlaneacion.descripcionNecesidad) { alert("El campo 'Justificación y descripción de la necesidad' es obligatorio."); return; }
+    if (criteriosHabilitantes.filter(c => c.descripcion.trim()).length === 0) { alert("Debe agregar al menos un criterio habilitante."); return; }
+    if (!datosPlaneacion.experienciaAcreditadaExigida) { alert("El campo 'Experiencia Acreditada Exigida' es obligatorio."); return; }
     if (!datosPlaneacion.lugarEjecucion) { alert("El campo 'Lugar de ejecución' es obligatorio."); return; }
     if (!datosPlaneacion.plazoEjecucionMeses && !datosPlaneacion.plazoEjecucionDias) {
       alert("Debe indicar el plazo de ejecución (meses o días)."); return;
@@ -1373,7 +1449,7 @@ export function FormularioSolicitud({
                       </div>
 
                       {/* ── 1.2 Especificaciones técnicas ── */}
-                      <div style={{ display: 'flex' }}>
+                      <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
                         <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.2 Especificaciones técnicas:</div>
                         <div style={pdfCell}>
                           <p style={pdfHint}>Describa de forma clara y concisa las especificaciones técnicas del bien o servicio a contratar.</p>
@@ -1382,6 +1458,58 @@ export function FormularioSolicitud({
                             onChange={e => setDatosPlaneacion({ ...datosPlaneacion, descripcionNecesidadDetalle: e.target.value })}
                             rows={4} style={textareaStyle} required
                             placeholder="Describa las especificaciones técnicas de esta contratación..."
+                            onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                            onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                          />
+                        </div>
+                      </div>
+
+                      {/* ── 1.3 Criterios habilitantes ── */}
+                      <div style={{ display: 'flex', borderBottom: '1px solid #d1d5db' }}>
+                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.3 Criterios habilitantes:</div>
+                        <div style={pdfCell}>
+                          <p style={pdfHint}>Liste los criterios habilitantes exigidos a los proponentes para esta contratación.</p>
+                          {criteriosHabilitantes.map((c, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start' }}>
+                              <span style={{ minWidth: 22, fontWeight: 700, paddingTop: 9, color: '#6B7280', fontSize: '0.82rem', textAlign: 'right' }}>{i + 1}.</span>
+                              <textarea
+                                value={c.descripcion}
+                                onChange={e => {
+                                  const next = [...criteriosHabilitantes];
+                                  next[i] = { descripcion: e.target.value };
+                                  setCriteriosHabilitantes(next);
+                                }}
+                                rows={2}
+                                style={{ ...textareaStyle, flex: 1, margin: 0 }}
+                                placeholder={`Criterio habilitante ${i + 1}...`}
+                                onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                                onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                              />
+                              {criteriosHabilitantes.length > 1 && (
+                                <button type="button"
+                                  onClick={() => setCriteriosHabilitantes(criteriosHabilitantes.filter((_, idx) => idx !== i))}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: '1.1rem', paddingTop: 6, lineHeight: 1 }}
+                                >✕</button>
+                              )}
+                            </div>
+                          ))}
+                          <button type="button"
+                            onClick={() => setCriteriosHabilitantes([...criteriosHabilitantes, { descripcion: '' }])}
+                            style={{ marginTop: 4, fontSize: '0.82rem', color: 'var(--brand-secondary)', background: 'none', border: '1px dashed var(--brand-secondary)', borderRadius: 6, padding: '4px 14px', cursor: 'pointer', fontFamily: 'Gabarito, sans-serif' }}
+                          >+ Agregar criterio habilitante</button>
+                        </div>
+                      </div>
+
+                      {/* ── 1.4 Experiencia Acreditada Exigida ── */}
+                      <div style={{ display: 'flex' }}>
+                        <div style={{ ...pdfLabel, alignItems: 'flex-start', paddingTop: 14 }}>1.4 Experiencia Acreditada Exigida:</div>
+                        <div style={pdfCell}>
+                          <p style={pdfHint}>Describa la experiencia acreditada exigida al proponente/contratista para esta contratación.</p>
+                          <textarea
+                            value={datosPlaneacion.experienciaAcreditadaExigida}
+                            onChange={e => setDatosPlaneacion({ ...datosPlaneacion, experienciaAcreditadaExigida: e.target.value })}
+                            rows={4} style={textareaStyle} required
+                            placeholder="Describa la experiencia acreditada exigida..."
                             onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                             onBlur={e => e.target.style.borderColor = '#D1D5DB'}
                           />
@@ -1482,10 +1610,10 @@ export function FormularioSolicitud({
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', fontFamily: 'Gabarito, sans-serif', tableLayout: 'fixed' }}>
                             <colgroup>
                               <col style={{ width: '4%' }} />
-                              <col style={{ width: '27%' }} />
-                              <col style={{ width: '27%' }} />
-                              <col style={{ width: '22%' }} />
-                              <col style={{ width: '20%' }} />
+                              <col style={{ width: '28%' }} />
+                              <col style={{ width: '28%' }} />
+                              <col style={{ width: '24%' }} />
+                              <col style={{ width: '16%' }} />
                             </colgroup>
                             <thead>
                               <tr>
@@ -1498,7 +1626,7 @@ export function FormularioSolicitud({
                                 <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Nombre del proveedor</th>
                                 <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Datos de contacto</th>
                                 <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Valor de cotización</th>
-                                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>Plazo</th>
+                                <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'center', fontWeight: 700 }}>Moneda</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1526,24 +1654,15 @@ export function FormularioSolicitud({
                                     </div>
                                   </td>
                                   <td style={{ border: '1px solid #e5e7eb', padding: '2px 4px', verticalAlign: 'middle' }}>
-                                    <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                      <input type="number" value={p.plazoMeses}
-                                        onChange={e => handleProponenteChange(i, 'plazoMeses', e.target.value)}
-                                        placeholder="0" min="0"
-                                        style={{ width: '36%', padding: '5px 4px', border: '1px solid transparent', borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.72rem', outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box' as const, textAlign: 'center' }}
-                                        onFocus={e => { e.target.style.borderColor = 'var(--brand-primary)'; e.target.style.backgroundColor = '#fff'; }}
-                                        onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.backgroundColor = 'transparent'; }}
-                                      />
-                                      <span style={{ fontSize: '0.65rem', color: '#9CA3AF', flexShrink: 0 }}>m</span>
-                                      <input type="number" value={p.plazoDias}
-                                        onChange={e => handleProponenteChange(i, 'plazoDias', e.target.value)}
-                                        placeholder="0" min="0"
-                                        style={{ width: '36%', padding: '5px 4px', border: '1px solid transparent', borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.72rem', outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box' as const, textAlign: 'center' }}
-                                        onFocus={e => { e.target.style.borderColor = 'var(--brand-primary)'; e.target.style.backgroundColor = '#fff'; }}
-                                        onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.backgroundColor = 'transparent'; }}
-                                      />
-                                      <span style={{ fontSize: '0.65rem', color: '#9CA3AF', flexShrink: 0 }}>d</span>
-                                    </div>
+                                    <select value={p.moneda} onChange={e => handleProponenteChange(i, 'moneda', e.target.value)}
+                                      style={{ width: '100%', padding: '5px 4px', border: '1px solid transparent', borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.72rem', outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box' as const }}
+                                      onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                                      onBlur={e => e.target.style.borderColor = 'transparent'}
+                                    >
+                                      <option value="COP">COP</option>
+                                      <option value="USD">USD</option>
+                                      <option value="EUR">EUR</option>
+                                    </select>
                                   </td>
                                 </tr>
                               ))}
@@ -1585,68 +1704,34 @@ export function FormularioSolicitud({
                             </div>
                           </div>
 
-                          {/* Valor promedio | Plazo promedio */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #e5e7eb' }}>
-                            <div style={{ borderRight: '1px solid #e5e7eb' }}>
-                              <div style={{ backgroundColor: '#fafafa', padding: '8px 14px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1F2937', fontFamily: 'Gabarito, sans-serif' }}>VALOR PROMEDIO</span>
-                                <InfoTip hint="Registre el promedio de los valores obtenidos en la investigación de mercado, o el valor más alto si se quiere asegurar cobertura presupuestal." />
-                              </div>
-                              <div style={{ padding: '10px 14px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 6, overflow: 'hidden' }}>
-                                  <span style={{ padding: '8px 10px', backgroundColor: '#f9fafb', borderRight: '1px solid #D1D5DB', fontSize: '0.875rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', fontWeight: 600 }}>$</span>
-                                  <input type="text" inputMode="decimal" value={analisisMercado.valorPromedio}
-                                    onChange={e => setAnalisisMercado({ ...analisisMercado, valorPromedio: soloNumeros(e.target.value) })}
-                                    placeholder="0"
-                                    style={{ flex: 1, padding: '8px 12px', border: 'none', outline: 'none', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', backgroundColor: '#fff' }}
-                                  />
-                                </div>
-                                <p style={{ fontSize: '0.72rem', color: '#9CA3AF', marginTop: 4, fontFamily: 'Gabarito, sans-serif' }}>Promedio de los valores obtenidos en el estudio de mercado.</p>
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ backgroundColor: '#fafafa', padding: '8px 14px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1F2937', fontFamily: 'Gabarito, sans-serif' }}>PLAZO PROMEDIO</span>
-                                <InfoTip hint="Registre el promedio de los plazos de la satisfacción de la necesidad obtenidos en la investigación de mercado." />
-                              </div>
-                              <div style={{ padding: '10px 14px' }}>
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                  <input type="number" value={analisisMercado.plazoPromedioMeses}
-                                    onChange={e => setAnalisisMercado({ ...analisisMercado, plazoPromedioMeses: e.target.value })}
-                                    placeholder="0" min="0" step="1"
-                                    style={{ flex: 1, padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: 6, fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', outline: 'none', backgroundColor: '#fff' }}
-                                    onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                    onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                                  />
-                                  <span style={{ fontSize: '0.8rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', whiteSpace: 'nowrap' }}>meses</span>
-                                  <input type="number" value={analisisMercado.plazoPromedioDias}
-                                    onChange={e => setAnalisisMercado({ ...analisisMercado, plazoPromedioDias: e.target.value })}
-                                    placeholder="0" min="0" step="1"
-                                    style={{ flex: 1, padding: '8px 12px', border: '1px solid #D1D5DB', borderRadius: 6, fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', outline: 'none', backgroundColor: '#fff' }}
-                                    onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                    onBlur={e => e.target.style.borderColor = '#D1D5DB'}
-                                  />
-                                  <span style={{ fontSize: '0.8rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', whiteSpace: 'nowrap' }}>días</span>
-                                </div>
-                                <p style={{ fontSize: '0.72rem', color: '#9CA3AF', marginTop: 4, fontFamily: 'Gabarito, sans-serif' }}>Promedio de los plazos obtenidos en la investigación.</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Presupuesto oficial */}
+                          {/* Valor promedio */}
                           <div>
-                            <div style={{ backgroundColor: '#fafafa', padding: '8px 14px', borderBottom: '1px solid #e5e7eb' }}>
-                              <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1F2937', fontFamily: 'Gabarito, sans-serif' }}>PRESUPUESTO OFICIAL</span>
+                            <div style={{ backgroundColor: '#fafafa', padding: '8px 14px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1F2937', fontFamily: 'Gabarito, sans-serif' }}>VALOR PROMEDIO</span>
+                              <InfoTip hint="Se calcula automáticamente a partir de los valores de cotización de la tabla de Invitados. Si hay cotizaciones en distintas monedas, se calcula un promedio independiente por cada una (no se convierten entre sí)." />
                             </div>
                             <div style={{ padding: '10px 14px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #D1D5DB', borderRadius: 6, overflow: 'hidden' }}>
-                                <span style={{ padding: '8px 10px', backgroundColor: '#f9fafb', borderRight: '1px solid #D1D5DB', fontSize: '0.875rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', fontWeight: 600 }}>$</span>
-                                <input type="text" inputMode="decimal" value={analisisMercado.presupuestoOficial}
-                                  onChange={e => setAnalisisMercado({ ...analisisMercado, presupuestoOficial: soloNumeros(e.target.value) })}
-                                  placeholder="0"
-                                  style={{ flex: 1, padding: '8px 12px', border: 'none', outline: 'none', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', backgroundColor: '#fff' }}
-                                />
-                              </div>
+                              {(() => {
+                                const promedios = calcularPromediosPorMoneda(proponentes);
+                                if (promedios.length === 0) {
+                                  return (
+                                    <div style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6, backgroundColor: '#f9fafb', fontSize: '0.8rem', color: '#9CA3AF', fontFamily: 'Gabarito, sans-serif' }}>
+                                      Aún no hay valores de cotización registrados.
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {promedios.map(({ moneda, promedio }) => (
+                                      <div key={moneda} style={{ display: 'flex', alignItems: 'center', border: '1px solid #e5e7eb', borderRadius: 6, overflow: 'hidden', backgroundColor: '#f9fafb' }}>
+                                        <span style={{ padding: '8px 10px', backgroundColor: '#f3f4f6', borderRight: '1px solid #e5e7eb', fontSize: '0.78rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', fontWeight: 700, minWidth: 44, textAlign: 'center' as const }}>{moneda}</span>
+                                        <span style={{ flex: 1, padding: '8px 12px', fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#374151' }}>{promedio.toLocaleString('es-CO')}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                              <p style={{ fontSize: '0.72rem', color: '#9CA3AF', marginTop: 6, fontFamily: 'Gabarito, sans-serif' }}>Calculado automáticamente; si hay varias monedas se muestra un promedio por cada una.</p>
                             </div>
                           </div>
                         </div>
@@ -1657,18 +1742,13 @@ export function FormularioSolicitud({
                     <div style={{ overflow: 'hidden' }}>
                       {(() => {
                         const columnasProponente: { field: keyof Proponente; label: string; width: string; multilinea: boolean; numerico?: boolean }[] = [
-                          { field: 'nombreProveedor',       label: 'Nombre del proveedor',                    width: '18%', multilinea: false },
-                          { field: 'datosContacto',         label: 'Datos de contacto',                       width: '18%', multilinea: true  },
-                          { field: 'requisitosTecnicos',    label: 'Requisitos técnicos',                     width: '14%', multilinea: true  },
-                          { field: 'experiencia',           label: 'Experiencia',                             width: '14%', multilinea: true  },
-                          { field: 'criteriosHabilitantes', label: 'Criterios habilitantes',                  width: '14%', multilinea: true  },
-                          { field: 'valorImpuestos',        label: 'Valor + Impuestos',                       width: '12%', multilinea: false, numerico: true },
-                          { field: 'observaciones',         label: 'Anexo / Observaciones (Valor agregado)',  width: '14%', multilinea: true  },
+                          { field: 'nombreProveedor',       label: 'Nombre del proveedor',                    width: '45%', multilinea: false },
+                          { field: 'datosContacto',         label: 'Datos de contacto',                       width: '45%', multilinea: true  },
                         ];
                         return (
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', fontFamily: 'Gabarito, sans-serif', tableLayout: 'fixed' }}>
                             <colgroup>
-                              <col style={{ width: '6%' }} />
+                              <col style={{ width: '10%' }} />
                               {columnasProponente.map(c => <col key={c.field} style={{ width: c.width }} />)}
                             </colgroup>
                             <thead>
@@ -1890,10 +1970,13 @@ export function FormularioSolicitud({
                           )}
 
                           <div style={{ marginTop: 20 }}>
-                            <FieldLabel label="Moneda de pago" hint="Seleccione el tipo de moneda para el contrato o si es combinada." />
+                            <FieldLabel label="Moneda de pago" hint={esInvitacionOTdr
+                              ? "Se detecta automáticamente a partir de las monedas registradas en el Estudio de Mercado (Sección III)."
+                              : "Seleccione el tipo de moneda para el contrato o si es combinada."} />
                             <select value={datosPlaneacion.moneda}
                               onChange={e => setDatosPlaneacion({ ...datosPlaneacion, moneda: e.target.value })}
-                              style={selectStyle}
+                              style={esInvitacionOTdr ? { ...selectStyle, backgroundColor: '#f9fafb', color: '#374151', cursor: 'default' } : selectStyle}
+                              disabled={esInvitacionOTdr}
                               onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                               onBlur={e => e.target.style.borderColor = '#D1D5DB'}
                             >
@@ -1903,7 +1986,7 @@ export function FormularioSolicitud({
                               <option value="COMBINADA">Moneda Combinada (Múltiples divisas)</option>
                             </select>
 
-                            {datosPlaneacion.moneda === 'COMBINADA' && (
+                            {datosPlaneacion.moneda === 'COMBINADA' && !esInvitacionOTdr && (
                               <div style={{ marginTop: 12, padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px border-gray-200' }}>
                                 <p style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: 8 }}>
                                   Seleccione las monedas a combinar:
@@ -1932,13 +2015,20 @@ export function FormularioSolicitud({
                               </div>
                             )}
 
+                            {datosPlaneacion.moneda === 'COMBINADA' && esInvitacionOTdr && (
+                              <p style={{ marginTop: 8, fontSize: '0.78rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif' }}>
+                                Monedas combinadas detectadas: {datosPlaneacion.monedasSeleccionadas.join(', ')}
+                              </p>
+                            )}
+
                             {(datosPlaneacion.moneda === 'USD' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('USD'))) && (
                               <div style={{ marginTop: 16 }}>
                                 <FieldLabel label="Valor en Dólares (USD)" />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaUSD}
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: soloNumeros(e.target.value) })}
-                                  style={inputStyle} placeholder="0.00"
+                                  readOnly={esInvitacionOTdr}
+                                  style={esInvitacionOTdr ? { ...inputStyle, backgroundColor: '#f9fafb', color: '#374151', cursor: 'default' } : inputStyle} placeholder="0.00"
                                 />
                               </div>
                             )}
@@ -1949,7 +2039,8 @@ export function FormularioSolicitud({
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaCOP}
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: soloNumeros(e.target.value) })}
-                                  style={inputStyle} placeholder="0.00"
+                                  readOnly={esInvitacionOTdr}
+                                  style={esInvitacionOTdr ? { ...inputStyle, backgroundColor: '#f9fafb', color: '#374151', cursor: 'default' } : inputStyle} placeholder="0.00"
                                 />
                               </div>
                             )}
@@ -1960,7 +2051,8 @@ export function FormularioSolicitud({
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaEUR}
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: soloNumeros(e.target.value) })}
-                                  style={inputStyle} placeholder="0.00"
+                                  readOnly={esInvitacionOTdr}
+                                  style={esInvitacionOTdr ? { ...inputStyle, backgroundColor: '#f9fafb', color: '#374151', cursor: 'default' } : inputStyle} placeholder="0.00"
                                 />
                               </div>
                             )}
