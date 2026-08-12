@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download } from 'lucide-react';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
+import { formatearGarantiasLegible } from '../../lib/garantias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -287,16 +288,16 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', fontFamily: 'Gabarito, sans-serif', tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: '4%' }} /><col style={{ width: '27%' }} />
-                  <col style={{ width: '27%' }} /><col style={{ width: '22%' }} /><col style={{ width: '20%' }} />
+                  <col style={{ width: '5%' }} /><col style={{ width: '32%' }} />
+                  <col style={{ width: '32%' }} /><col style={{ width: '31%' }} />
                 </colgroup>
                 <thead>
                   <tr>
-                    <th colSpan={5} style={{ border: '1px solid #d1d5db', padding: '7px 10px', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#374151', backgroundColor: '#fff' }}>INVITADOS</th>
+                    <th colSpan={4} style={{ border: '1px solid #d1d5db', padding: '7px 10px', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#374151', backgroundColor: '#fff' }}>INVITADOS</th>
                   </tr>
                   <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
                     <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 4px', color: '#fff', textAlign: 'center' }}>No.</th>
-                    {['Nombre del proveedor', 'Datos de contacto', 'Valor de cotización', 'Plazo'].map(h => (
+                    {['Nombre del proveedor', 'Datos de contacto', 'Valor de cotización'].map(h => (
                       <th key={h} style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>{h}</th>
                     ))}
                   </tr>
@@ -304,17 +305,12 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
                 <tbody>
                   {(proponentes.length > 0 ? proponentes : [{}, {}, {}]).map((p: any, i: number) => {
                     const c = (v: string) => v || EMPTY_DASH;
-                    const plazoTxt = [
-                      p.plazo_meses || p.plazoMeses ? `${p.plazo_meses || p.plazoMeses}m` : '',
-                      p.plazo_dias || p.plazoDias ? `${p.plazo_dias || p.plazoDias}d` : '',
-                    ].filter(Boolean).join(' ');
                     return (
                       <tr key={p.id || i} style={{ backgroundColor: '#fff' }}>
                         <td style={{ border: '1px solid #e5e7eb', padding: '6px', textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
                         <td style={{ border: '1px solid #e5e7eb', padding: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.nombre_proveedor || p.nombreProveedor)}</td>
                         <td style={{ border: '1px solid #e5e7eb', padding: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.datos_contacto || p.datosContacto)}</td>
                         <td style={{ border: '1px solid #e5e7eb', padding: '8px' }}>{p.valor_cotizacion || p.valorCotizacion ? `$ ${p.valor_cotizacion || p.valorCotizacion}` : EMPTY_DASH}</td>
-                        <td style={{ border: '1px solid #e5e7eb', padding: '8px' }}>{plazoTxt || EMPTY_DASH}</td>
                       </tr>
                     );
                   })}
@@ -332,32 +328,14 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
                 hint="Definir si el oferente presta la totalidad de servicios solicitados y si encontró algún valor agregado en el estudio de mercado."
                 value={s?.analisis_servicios_ofertados}
               />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #d1d5db' }}>
-                <div style={{ display: 'flex', borderRight: '1px solid #d1d5db' }}>
-                  <div style={PDF_LABEL}>Valor promedio:</div>
-                  <div style={PDF_CELL}>
-                    <p style={PDF_HINT}>Promedio calculado a partir de los valores de cotización de los proponentes, uno por cada moneda registrada.</p>
-                    <div style={VALUE_TEXT}>
-                      {s?.analisis_valor_promedio
-                        ? (/^(COP|USD|EUR)\b/.test(String(s.analisis_valor_promedio)) ? s.analisis_valor_promedio : `$ ${s.analisis_valor_promedio}`)
-                        : EMPTY}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex' }}>
-                  <div style={PDF_LABEL}>Plazo promedio:</div>
-                  <div style={PDF_CELL}>
-                    <p style={PDF_HINT}>Registre el promedio de los plazos de la satisfacción de la necesidad obtenidos en la investigación de mercado.</p>
-                    <div style={VALUE_TEXT}>
-                      {[
-                        s?.analisis_plazo_promedio_meses ? `${s.analisis_plazo_promedio_meses} mes(es)` : '',
-                        s?.analisis_plazo_promedio_dias ? `${s.analisis_plazo_promedio_dias} día(s)` : '',
-                      ].filter(Boolean).join(' y ') || EMPTY}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <DataRow label="Presupuesto oficial:" value={s?.analisis_presupuesto_oficial ? `$ ${s.analisis_presupuesto_oficial}` : ''} last />
+              <DataRow
+                label="Valor promedio:"
+                hint="Promedio calculado a partir de los valores de cotización de los proponentes, uno por cada moneda registrada."
+                value={s?.analisis_valor_promedio
+                  ? (/^(COP|USD|EUR)\b/.test(String(s.analisis_valor_promedio)) ? s.analisis_valor_promedio : `$ ${s.analisis_valor_promedio}`)
+                  : ''}
+                last
+              />
             </div>
           </>
         )}
@@ -512,7 +490,7 @@ function SeccionConceptoJuridicoLectura({ solicitud: s }: { solicitud: any }) {
   return (
     <>
       <DataRow label={`${n1} Concepto jurídico:`} value={s?.concepto_juridico} />
-      <DataRow label={`${n2} Garantías:`} value={s?.garantias} />
+      <DataRow label={`${n2} Garantías:`} value={formatearGarantiasLegible(s?.garantias)} />
       <DataRow
         label={`${n3} ¿Tiene riesgos jurídicos?:`}
         value={s?.tiene_riesgos_juridicos === true ? 'Sí' : s?.tiene_riesgos_juridicos === false ? 'No' : undefined}

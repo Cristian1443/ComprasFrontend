@@ -8,25 +8,11 @@ import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
-type ExperienciaCert = { contratante: string; contratista: string; objeto: string; valor: string; fecha_inicio: string; fecha_fin: string; plazo_total: string; observaciones: string; cumple: string };
-type EquipoMiembro = { nombre: string; titulo: string; posgrado: string; contratante: string; fecha_inicio: string; fecha_fin: string; plazo_total: string; observaciones: string; cumple: string };
-
-type Score = { 
-  propuesta_economica: number; 
-  experiencia_adicional: number; 
-  experiencia_trabajo: number;
-  otros_criterios_puntos: number;
+type Score = {
   checklist?: Record<string, string>;
-  // Detalle habilitantes
-  habilitante_detalle?: {
-    experiencia: { requisito: string; certificaciones: ExperienciaCert[] };
-    equipo: { 
-      director: { requisito: string; miembros: EquipoMiembro[] };
-      otros: { id: string; titulo_perfil: string; requisito: string; miembros: EquipoMiembro[] }[];
-    };
-    otros_criterios: { requisito: string; filas: any[] };
-  }
 };
+
+type CriterioPuntaje = { id: string; label: string; max: number };
 
 interface CalificacionProponentesProps {
   solicitudId?: string | null;
@@ -58,16 +44,10 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
   const [calificacionGuardada, setCalificacionGuardada] = useState(false);
   const [respuestasProponentes, setRespuestasProponentes] = useState<Record<string, any>>({});
   const [vistaConsolidada, setVistaConsolidada] = useState(true);
-  const [configPuntajes, setConfigPuntajes] = useState<Record<string, { enabled: boolean; max: number; label: string }>>({
-    propuesta_economica: { enabled: true, max: 100, label: 'Propuesta Económica' },
-    experiencia_adicional: { enabled: false, max: 0, label: 'Experiencia Adicional / Visional' },
-    experiencia_trabajo: { enabled: false, max: 0, label: 'Experiencia de Trabajo Adicional' },
-    otros_criterios_puntos: { enabled: false, max: 0, label: 'Otros Criterios' }
-  });
   const [proponentesEditados, setProponentesEditados] = useState<Record<string, any>>({});
-  const [habilitantesRevisados, setHabilitantesRevisados] = useState<Set<number>>(new Set());
   const [isAutosaving, setIsAutosaving] = useState(false);
   const [calificacionFinalizada, setCalificacionFinalizada] = useState(false);
+  const [proponenteAbiertoDetalle, setProponenteAbiertoDetalle] = useState<number | null>(null);
   const [generandoPdf, setGenerandoPdf] = useState(false);
   const calificacionRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -102,21 +82,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
         const list = Array.isArray(data?.proponentes) ? data.proponentes : [];
         list.forEach((p: any) => {
           const existing = (Array.isArray(ev.calificaciones) ? ev.calificaciones : []).find((c: any) => Number(c?.numero) === Number(p.numero));
-          initial[String(p.numero)] = {
-            propuesta_economica: Number(existing?.propuesta_economica || existing?.requisitos_habilitantes || 0),
-            experiencia_adicional: Number(existing?.experiencia_adicional || existing?.prueba_tecnica || 0),
-            experiencia_trabajo: Number(existing?.experiencia_trabajo || 0),
-            otros_criterios_puntos: Number(existing?.otros_criterios_puntos || existing?.experiencia || 0),
-            checklist: existing?.checklist || {},
-            habilitante_detalle: existing?.habilitante_detalle || {
-              experiencia: { requisito: '', certificaciones: [{ contratante: '', contratista: '', objeto: '', valor: '', fecha_inicio: '', fecha_fin: '', plazo_total: '', observaciones: '', cumple: 'SI' }] },
-              equipo: { 
-                director: { requisito: '', miembros: [{ nombre: '', titulo: '', posgrado: '', contratante: '', fecha_inicio: '', fecha_fin: '', plazo_total: '', observaciones: '', cumple: 'SI' }] },
-                otros: []
-              },
-              otros_criterios: { requisito: '', filas: [] }
-            }
-          };
+          initial[String(p.numero)] = { checklist: existing?.checklist || {} };
         });
         setCalificaciones(initial);
 
@@ -137,19 +103,6 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
           };
         });
         setProponentesEditados(initialProps);
-        if (ev.config_puntajes) {
-          setConfigPuntajes(ev.config_puntajes);
-        } else if (ev.calificaciones?.[0]) {
-           const hasExp = ev.calificaciones.some((c:any) => c.experiencia_adicional > 0);
-           const hasTrab = ev.calificaciones.some((c:any) => c.experiencia_trabajo > 0);
-           const hasOtr = ev.calificaciones.some((c:any) => c.otros_criterios_puntos > 0);
-           setConfigPuntajes({
-             propuesta_economica: { enabled: true, max: 70, label: 'Propuesta Económica' },
-             experiencia_adicional: { enabled: hasExp, max: 10, label: 'Experiencia Adicional / Visional' },
-             experiencia_trabajo: { enabled: hasTrab, max: 10, label: 'Experiencia de Trabajo Adicional' },
-             otros_criterios_puntos: { enabled: hasOtr, max: 10, label: 'Otros Criterios' }
-           });
-        }
         setCalificaciones(initial);
         setEvaluacionConsolidada(String(ev.evaluacion_consolidada || ''));
         setCcRecomendado(String(ev.cc_recomendado || ''));
@@ -166,15 +119,12 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
         setFirmaDirectorNombre(String(ev?.firmas?.director?.nombre || ''));
         setCalificacionGuardada(Array.isArray(ev?.calificaciones) && ev.calificaciones.length > 0);
         setCalificacionFinalizada(Boolean(ev?.finalizada));
-        setHabilitantesRevisados(new Set(Array.isArray(ev?.habilitantes_revisados) ? ev.habilitantes_revisados.map(Number) : []));
 
         const currentData = JSON.stringify({
           calificaciones: initial,
-          configPuntajes: ev.config_puntajes || configPuntajes,
           evaluacionConsolidada: String(ev.evaluacion_consolidada || ''),
           ccRecomendado: String(ev.cc_recomendado || ''),
           proponentesEditados: initialProps,
-          habilitantesRevisados: Array.isArray(ev?.habilitantes_revisados) ? ev.habilitantes_revisados.map(Number) : []
         });
         lastSavedRef.current = currentData;
 
@@ -184,7 +134,6 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
           try {
             const draft = JSON.parse(saved);
             setCalificaciones(draft.calificaciones);
-            setConfigPuntajes(draft.configPuntajes);
             setEvaluacionConsolidada(draft.evaluacionConsolidada);
             setCcRecomendado(draft.ccRecomendado);
             if (draft.proponentesEditados) setProponentesEditados(draft.proponentesEditados);
@@ -231,11 +180,9 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
 
     const current = {
       calificaciones,
-      configPuntajes,
       evaluacionConsolidada,
       ccRecomendado,
       proponentesEditados,
-      habilitantesRevisados: Array.from(habilitantesRevisados)
     };
     const draftStr = JSON.stringify(current);
 
@@ -249,7 +196,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [calificaciones, configPuntajes, evaluacionConsolidada, ccRecomendado, proponentesEditados, habilitantesRevisados, selectedId, calificacionFinalizada]);
+  }, [calificaciones, evaluacionConsolidada, ccRecomendado, proponentesEditados, selectedId, calificacionFinalizada]);
 
   // La calificación del supervisor se guarda en paralelo, de forma independiente.
   // Se refresca periódicamente para reflejar su avance sin pisar lo que Jurídica está editando.
@@ -274,11 +221,9 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
       if (!saved) return;
       const draft = JSON.parse(saved);
       setCalificaciones(draft.calificaciones);
-      setConfigPuntajes(draft.configPuntajes);
       setEvaluacionConsolidada(draft.evaluacionConsolidada);
       setCcRecomendado(draft.ccRecomendado);
       if (draft.proponentesEditados) setProponentesEditados(draft.proponentesEditados);
-      if (Array.isArray(draft.habilitantesRevisados)) setHabilitantesRevisados(new Set(draft.habilitantesRevisados.map(Number)));
       setHayBorrador(false);
       toast.success('Borrador restaurado correctamente.');
     } catch (e) {
@@ -296,39 +241,6 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
   // no debe ocupar una columna en el formato.
   const proponentesVista = proponentes.filter((p: any) => p.respondida);
 
-  const handleScoreChange = (numero: number, key: string, value: number) => {
-    const safe = Math.max(0, Math.min(100, Number(value || 0)));
-    setCalificaciones(prev => ({
-      ...prev,
-      [String(numero)]: { 
-        ...(prev[String(numero)] || { propuesta_economica: 0, experiencia_adicional: 0, experiencia_trabajo: 0, otros_criterios_puntos: 0 }), 
-        [key]: safe 
-      }
-    }));
-  };
-
-  const handlePropChange = (numero: number, field: string, value: string) => {
-    setProponentesEditados(prev => ({
-      ...prev,
-      [String(numero)]: {
-        ...(prev[String(numero)] || {}),
-        [field]: value
-      }
-    }));
-  };
-
-  const total = (numero: number) => {
-    const s = calificaciones[String(numero)] || { propuesta_economica: 0, experiencia_adicional: 0, experiencia_trabajo: 0, otros_criterios_puntos: 0 };
-    let sum = 0;
-    Object.entries(configPuntajes).forEach(([key, config]) => {
-      if (config.enabled) {
-        const grade = (s as any)[key] || 0;
-        sum += (grade * config.max) / 100;
-      }
-    });
-    return Number(sum.toFixed(2));
-  };
-
   // Calificación del supervisor (en paralelo) — solo lectura, informativa para Jurídica.
   const supervisorEval = detalle?.evaluacion?.supervisor || null;
   const supervisorTotal = (numero: number): number | null => {
@@ -336,15 +248,28 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
       .find((c: any) => Number(c?.numero) === Number(numero));
     return c ? Number(c.total || 0) : null;
   };
+  // Criterios reales que usó el Supervisor (incluye cualquier criterio adicional que haya agregado) —
+  // compatible con el formato anterior de config_puntajes (objeto con enabled/max/label).
+  const supervisorCriterios: CriterioPuntaje[] = (() => {
+    const cfg = supervisorEval?.config_puntajes;
+    if (Array.isArray(cfg) && cfg.length) return cfg;
+    if (cfg && typeof cfg === 'object') {
+      return Object.entries(cfg).filter(([, v]: any) => v?.enabled).map(([key, v]: any) => ({ id: key, label: v.label, max: Number(v.max) || 0 }));
+    }
+    return [];
+  })();
+  // Puntajes por criterio de una calificación del Supervisor — compatible con el formato anterior
+  // (campos fijos propuesta_economica/experiencia_adicional/...) para evaluaciones ya guardadas.
+  const puntajesSupervisorDe = (c: any): Record<string, number> => {
+    if (c?.puntajes && Object.keys(c.puntajes).length) return c.puntajes;
+    const map: Record<string, number> = {};
+    ['propuesta_economica', 'experiencia_adicional', 'experiencia_trabajo', 'otros_criterios_puntos'].forEach(k => {
+      if (c?.[k]) map[k] = Number(c[k]);
+    });
+    return map;
+  };
 
-  // Ganador: solo entre proponentes que respondieron y tienen puntaje > 0
   const proponentesQueRespondieron = proponentesVista.filter((p: any) => p.respondida);
-  const ganadorNumero: number | null = proponentesQueRespondieron.length > 0
-    ? proponentesQueRespondieron.reduce((best: any, p: any) =>
-        total(p.numero) > total(best.numero) ? p : best,
-        proponentesQueRespondieron[0]
-      ).numero
-    : null;
 
   // Discrepancia: Jurídica y el Supervisor recomiendan proponentes distintos.
   // La decisión final la toma Jurídica (es quien finaliza y genera el Acta de Adjudicación),
@@ -352,44 +277,31 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
   const supervisorRecomendadoNumero = supervisorEval?.proponente_recomendado_numero != null
     ? Number(supervisorEval.proponente_recomendado_numero)
     : null;
+
+  // Quien califica es el Supervisor — Jurídica solo elige (o confirma) al ganador entre quienes
+  // respondieron, por defecto el mismo que recomendó el Supervisor, salvo que Jurídica elija otro
+  // (por ejemplo, si ese proponente no cumple los requisitos legales/experiencia/académicos).
+  const ganadorNumero: number | null = proponenteRecomendadoNumero
+    ?? (supervisorRecomendadoNumero != null && proponentesQueRespondieron.some((p: any) => p.numero === supervisorRecomendadoNumero)
+      ? supervisorRecomendadoNumero
+      : (proponentesQueRespondieron[0]?.numero ?? null));
+
   const hayDiscrepancia = ganadorNumero != null && supervisorRecomendadoNumero != null
     && ganadorNumero !== supervisorRecomendadoNumero;
 
-  // Es obligatorio abrir el detalle de requisitos habilitantes de cada proponente
-  // que respondió antes de poder cerrar (finalizar) la calificación.
-  const proponentesPendientesRevision = proponentesQueRespondieron.filter(
-    (p: any) => !habilitantesRevisados.has(Number(p.numero))
-  );
-
-  const totalPesoActual = Object.values(configPuntajes).reduce((acc, c) => acc + (c.enabled ? c.max : 0), 0);
-  const pesoCompleto = totalPesoActual === 100;
-  const habilitantesCompletos = proponentesPendientesRevision.length === 0;
   const justificacionPendiente = hayDiscrepancia && !evaluacionConsolidada.trim();
 
   const guardar = async (silencioso = false, finalizar = false) => {
     if (!selectedId || !esModalidadCalificable) return;
     if (calificacionFinalizada) return;
 
-    const totalPuntaje = Object.values(configPuntajes).reduce((acc, c) => acc + (c.enabled ? c.max : 0), 0);
-
     if (finalizar) {
-      if (proponentesPendientesRevision.length > 0) {
-        toast.error(`Debe revisar el detalle de requisitos habilitantes de todos los proponentes antes de finalizar. Falta revisar: ${proponentesPendientesRevision.map((p: any) => `Proponente ${p.numero}`).join(', ')}.`);
-        return;
-      }
-      if (totalPuntaje !== 100) {
-        toast.error(`Para finalizar, la suma de pesos debe ser exactamente 100%. Actualmente es ${totalPuntaje}%.`);
-        return;
-      }
       if (hayDiscrepancia && !evaluacionConsolidada.trim()) {
         toast.error(`Jurídica recomienda al Proponente ${ganadorNumero} y el Supervisor recomienda al Proponente ${supervisorRecomendadoNumero}. Antes de finalizar debe justificar por escrito en "Evaluación consolidada / Justificación" por qué se decide por uno u otro.`);
         return;
       }
       const ok = window.confirm('¿Está seguro de FINALIZAR la calificación? El documento quedará bloqueado y no podrá modificarse.');
       if (!ok) return;
-    } else if (!silencioso && totalPuntaje !== 100) {
-      const proceed = window.confirm(`La suma de los pesos de calificación es ${totalPuntaje}% (debe ser 100% para finalizar). ¿Desea guardar como BORRADOR para continuar luego?`);
-      if (!proceed) return;
     }
 
     const winner = ganadorNumero;
@@ -399,13 +311,9 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
       if (silencioso) setIsAutosaving(true);
       else setSaving(true);
       const payload = {
-        config_puntajes: configPuntajes,
         calificaciones: proponentesVista.map((p: any) => ({
           numero: p.numero,
-          ...(calificaciones[String(p.numero)] || { propuesta_economica: 0, experiencia_adicional: 0, experiencia_trabajo: 0, otros_criterios_puntos: 0 }),
           checklist: calificaciones[String(p.numero)]?.checklist || {},
-          habilitante_detalle: calificaciones[String(p.numero)]?.habilitante_detalle,
-          total: total(p.numero)
         })),
         evaluacion_consolidada: evaluacionConsolidada,
         proponente_recomendado_numero: winner,
@@ -425,7 +333,6 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
         },
         email: userEmail,
         finalizada: finalizar,
-        habilitantes_revisados: Array.from(habilitantesRevisados)
       };
 
       const res = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/calificacion`, {
@@ -451,7 +358,6 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
 
       const savedData = JSON.stringify({
         calificaciones,
-        configPuntajes,
         evaluacionConsolidada,
         ccRecomendado,
         proponentesEditados
@@ -553,7 +459,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
 
   const handleChecklistChange = (numero: number, field: string, value: string) => {
     setCalificaciones(prev => {
-      const current = prev[String(numero)] || { propuesta_economica: 0, experiencia_adicional: 0, experiencia_trabajo: 0, otros_criterios_puntos: 0, checklist: {} };
+      const current = prev[String(numero)] || { checklist: {} };
       return {
         ...prev,
         [String(numero)]: {
@@ -571,31 +477,37 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
   // de qué se está calificando cuando hay varios proponentes.
   const stickyCol: React.CSSProperties = { position: 'sticky', left: 0, zIndex: 2, boxShadow: '2px 0 4px -2px rgba(0,0,0,0.15)' };
 
-  const requisitosLegales = [
-    { key: 'carta_presentacion', label: 'Carta de presentación de la propuesta' },
-    { key: 'camara_comercio', label: 'Certificado de constitución, existencia y representación legal' },
-    { key: 'titulo', label: 'Titulo profesional' },
-    { key: 'rut', label: 'Certificado de registro único tributario' },
+  // Documentos que el proponente debe cargar según el checklist oficial RA1-4 —
+  // el mismo checklist que se le exige en el formulario público (ver RespuestaProponente.tsx / server.js).
+  const requisitosLegalesBase = [
+    { key: 'rut', label: 'RUT' },
+    { key: 'cedula_rl', label: 'Cédula (persona natural / representante legal)' },
+    { key: 'camara_comercio', label: 'Certificado de existencia y representación legal (Cámara de comercio)', soloEmpresa: true },
+    { key: 'redam', label: 'REDAM (Registro de Deudores Alimentarios Morosos)' },
     { key: 'antecedentes_fiscales', label: 'Antecedentes fiscales' },
     { key: 'antecedentes_disciplinarios', label: 'Antecedentes disciplinarios' },
-    { key: 'copia_cedula', label: 'Copia de documento de identificación' },
-    { key: 'seguridad_social', label: 'Aportes a seguridad social y parafiscales' }
+    { key: 'antecedentes_judiciales', label: 'Antecedentes judiciales' },
   ];
-
-  const updateHabilitante = (numero: number, updater: (old: any) => any) => {
-    setCalificaciones(prev => {
-      const cur = prev[String(numero)] || { requisitos_habilitantes: 0, prueba_tecnica: 0, experiencia: 0, habilitante_detalle: {} };
-      return {
-        ...prev,
-        [String(numero)]: {
-          ...cur,
-          habilitante_detalle: updater(cur.habilitante_detalle || {})
-        }
-      };
-    });
+  const requisitosLegalesServiciosProfesionales = [
+    { key: 'hoja_vida', label: 'Hoja de vida' },
+    { key: 'titulo_profesional', label: 'Título profesional' },
+    { key: 'certificaciones_laborales', label: 'Certificaciones laborales' },
+  ];
+  // Documentos que aplican a un proponente puntual, según si es persona natural/empresa
+  // y si la convocatoria es de "Prestación de servicios profesionales".
+  const requisitosLegalesPara = (p: any) => {
+    let docs = requisitosLegalesBase.filter(d => !d.soloEmpresa || p?.tipo_persona === 'empresa');
+    if (p?.tipo_objeto === 'servicios_profesionales') docs = [...docs, ...requisitosLegalesServiciosProfesionales];
+    return docs;
   };
-
-  const [proponenteAbiertoDetalle, setProponenteAbiertoDetalle] = useState<number | null>(null);
+  // Unión de los documentos aplicables a CUALQUIER proponente visible — define las filas de la tabla.
+  const requisitosLegalesUnion: { key: string; label: string }[] = [];
+  const clavesVistas = new Set<string>();
+  proponentesVista.forEach((p: any) => {
+    requisitosLegalesPara(p).forEach(d => {
+      if (!clavesVistas.has(d.key)) { clavesVistas.add(d.key); requisitosLegalesUnion.push(d); }
+    });
+  });
 
   return (
     <div className="ux-page p-4 lg:p-8" style={{ paddingBottom: '4rem' }}>
@@ -658,22 +570,15 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                   </button>
                   <button
                     onClick={() => guardar(false, true)}
-                    disabled={saving || !habilitantesCompletos || justificacionPendiente}
-                    title={!habilitantesCompletos
-                      ? `Debe revisar el detalle de requisitos habilitantes de: ${proponentesPendientesRevision.map((p: any) => `Proponente ${p.numero}`).join(', ')}`
-                      : justificacionPendiente
-                        ? 'Debe justificar en "Evaluación consolidada" la discrepancia con el Supervisor antes de finalizar'
-                        : undefined}
+                    disabled={saving || justificacionPendiente}
+                    title={justificacionPendiente
+                      ? 'Debe justificar en "Evaluación consolidada" la discrepancia con el Supervisor antes de finalizar'
+                      : undefined}
                     className="flex items-center gap-2 px-4 py-2 rounded font-bold text-white text-sm disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:brightness-110 transition-all"
                     style={{ backgroundColor: '#1d4ed8' }}
                   >
                     <CheckCircle2 size={16} /> Guardar y Finalizar
-                    {!habilitantesCompletos && (
-                      <span className="text-[10px] font-normal bg-white/20 px-1.5 py-0.5 rounded">
-                        Falta revisar {proponentesPendientesRevision.length}
-                      </span>
-                    )}
-                    {habilitantesCompletos && justificacionPendiente && (
+                    {justificacionPendiente && (
                       <span className="text-[10px] font-normal bg-white/20 px-1.5 py-0.5 rounded">
                         Falta justificar discrepancia
                       </span>
@@ -689,11 +594,8 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
         {esModalidadCalificable && detalle?.invitaciones_enviadas && !calificacionFinalizada && (
           <div className="flex items-center gap-3 flex-wrap px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-xs font-semibold mb-2">
             <span className="text-gray-500 uppercase tracking-wide text-[10px]">Estado de la calificación:</span>
-            <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${pesoCompleto ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-              {pesoCompleto ? <Check size={13} /> : '⚠'} Pesos configurados: {totalPesoActual}/100
-            </span>
-            <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${habilitantesCompletos ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-              {habilitantesCompletos ? <Check size={13} /> : '⚠'} Habilitantes revisados: {proponentesQueRespondieron.length - proponentesPendientesRevision.length}/{proponentesQueRespondieron.length}
+            <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${supervisorEval ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+              {supervisorEval ? <Check size={13} /> : '⚠'} {supervisorEval?.finalizada ? 'Supervisor finalizó su calificación' : supervisorEval ? 'Supervisor calificó (borrador)' : 'Supervisor aún no ha calificado'}
             </span>
             {hayDiscrepancia && (
               <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full ${!justificacionPendiente ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
@@ -728,7 +630,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
             </div>
 
             {/* INFORMACIÓN GENERAL DE LA SOLICITUD */}
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-8 bg-gray-50 p-6 rounded-lg border border-gray-200" style={{ fontFamily: 'Gabarito, sans-serif' }}>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-6 bg-gray-50 p-6 rounded-lg border border-gray-200" style={{ fontFamily: 'Gabarito, sans-serif' }}>
               <div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">CÓDIGO DE SOLICITUD / PROYECTO</p>
                 <p className="text-lg font-bold text-gray-900">{detalle?.solicitud?.codigo}</p>
@@ -736,6 +638,10 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
               <div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">MODALIDAD DE CONTRATACIÓN</p>
                 <p className="text-lg font-bold text-gray-900">{detalle?.solicitud?.modalidad?.toUpperCase()}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">TÍTULO DEL CONTRATO</p>
+                <p className="text-xl font-black text-gray-900">{detalle?.solicitud?.titulo_contrato || detalle?.solicitud?.objeto}</p>
               </div>
               <div className="col-span-2">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">OBJETO DE LA CONTRATACIÓN</p>
@@ -760,7 +666,7 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                       <th style={{ ...thCell, ...stickyCol, background: '#334155', color: '#fff', width: 350, textAlign: 'left', paddingLeft: 16, zIndex: 3 }}>CRITERIO / REQUISITO</th>
                       {proponentesVista.map((p: any) => (
                         <th key={p.numero} style={{ ...thCell, background: '#F04B23', color: '#fff', padding: '10px 6px' }}>
-                          <div className="flex flex-col items-center gap-1.5">
+                          <div className="flex flex-col items-center gap-1">
                             <span className="text-sm font-black">PROPONENTE {p.numero}</span>
                             <span className="text-[11px] leading-tight font-medium opacity-90 uppercase line-clamp-2" title={p.nombre_proveedor}>
                               {p.nombre_proveedor}
@@ -768,128 +674,74 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                             <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${p.respondida ? 'bg-green-600' : 'bg-red-500'}`}>
                               {p.respondida ? <Check size={11} /> : <X size={11} />} {p.respondida ? 'RESPONDIÓ' : 'NO RESPONDIÓ'}
                             </span>
+                            <div className="text-[10px] font-normal opacity-90 leading-tight mt-0.5 space-y-0.5">
+                              {p.email && <div className="truncate" title={p.email}>{p.email}</div>}
+                              <div className="flex items-center justify-center gap-2">
+                                {p.cedula_nit && <span>{p.cedula_nit}</span>}
+                                {p.telefono && <span>· {p.telefono}</span>}
+                              </div>
+                            </div>
                           </div>
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {/* SECCIÓN: INVESTIGACIÓN DE MERCADO */}
-                    <tr>
-                      <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#f1f5f9', fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, borderTop: '2px solid #334155' }}>
-                        I. INFORMACIÓN DEL PROPONENTE (SUMINISTRADA POR SOLICITANTE)
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500, verticalAlign: 'top' }}>Datos de contacto</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, padding: 0, verticalAlign: 'top' }}>
-                          <textarea
-                            value={proponentesEditados[String(p.numero)]?.datos_contacto || ''}
-                            onChange={(e) => handlePropChange(p.numero, 'datos_contacto', e.target.value)}
-                            className="w-full h-full p-2 border-none outline-none focus:bg-blue-50 text-xs resize-none"
-                            style={{ backgroundColor: 'transparent', minHeight: '60px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Requisitos técnicos propuestos</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
-                          <textarea 
-                            value={proponentesEditados[String(p.numero)]?.requisitos_tecnicos || ''}
-                            onChange={(e) => handlePropChange(p.numero, 'requisitos_tecnicos', e.target.value)}
-                            className="w-full h-full p-2 border-none outline-none focus:bg-blue-50 text-[11px] resize-none"
-                            style={{ backgroundColor: 'transparent', minHeight: '60px' }}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Experiencia acreditada</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
-                          <input 
-                            type="text"
-                            value={proponentesEditados[String(p.numero)]?.experiencia || ''}
-                            onChange={(e) => handlePropChange(p.numero, 'experiencia', e.target.value)}
-                            className="w-full h-full p-2 border-none outline-none focus:bg-blue-50 text-[11px]"
-                            style={{ backgroundColor: 'transparent' }}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Criterios habilitantes (Sugeridos)</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
-                          <input 
-                            type="text"
-                            value={proponentesEditados[String(p.numero)]?.criterios_habilitantes || ''}
-                            onChange={(e) => handlePropChange(p.numero, 'criterios_habilitantes', e.target.value)}
-                            className="w-full h-full p-2 border-none outline-none focus:bg-blue-50 text-[11px]"
-                            style={{ backgroundColor: 'transparent' }}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Valor de la propuesta + Impuestos</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
-                          <div className="flex items-center">
-                            <input 
-                              type="text"
-                              value={proponentesEditados[String(p.numero)]?.valor_con_impuestos || ''}
-                              onChange={(e) => handlePropChange(p.numero, 'valor_con_impuestos', e.target.value)}
-                              className="flex-1 p-2 border-none outline-none focus:bg-blue-50 text-xs font-bold text-emerald-700"
-                              style={{ backgroundColor: 'transparent' }}
-                            />
-                            <span className="pr-2 text-[10px] text-gray-400 font-bold">{p.moneda || 'COP'}</span>
-                          </div>
-                        </td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Valor agregado</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
-                          <textarea 
-                            value={proponentesEditados[String(p.numero)]?.valor_agregado || ''}
-                            onChange={(e) => handlePropChange(p.numero, 'valor_agregado', e.target.value)}
-                            className="w-full h-full p-2 border-none outline-none focus:bg-blue-50 text-[11px] resize-none"
-                            style={{ backgroundColor: 'transparent', minHeight: '40px' }}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>Anexos / Observaciones</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, padding: 0 }}>
-                          <div className="flex flex-col h-full">
-                            <textarea 
-                              value={proponentesEditados[String(p.numero)]?.observaciones || ''}
-                              onChange={(e) => handlePropChange(p.numero, 'observaciones', e.target.value)}
-                              placeholder="Observaciones de investigación..."
-                              className="w-full p-2 border-none outline-none focus:bg-blue-50 text-[11px] resize-none italic"
-                              style={{ backgroundColor: 'transparent', minHeight: '50px' }}
-                            />
-                            {p.respuesta_proponente && (
-                              <div className="p-2 border-t border-gray-100 bg-blue-50/30 text-blue-600 font-medium text-[10px]" title="Respuesta de invitación">
-                                {p.respuesta_proponente}
+                    {/* SECCIÓN 0: REQUISITOS DE LA CONTRATACIÓN — el mismo estándar para TODOS los proponentes,
+                        por eso ocupa el ancho completo en vez de repetirse por columna. */}
+                    {(detalle?.solicitud?.descripcion_necesidad_detalle
+                      || detalle?.solicitud?.experiencia_acreditada_exigida
+                      || detalle?.solicitud?.presupuesto_aprobado
+                      || (detalle?.solicitud?.criterios_habilitantes_planeacion?.length > 0)) && (
+                      <>
+                        <tr>
+                          <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#78350F', color: '#fff', fontWeight: 'bold', textAlign: 'left', paddingLeft: 16 }}>
+                            0. REQUISITOS DE LA CONTRATACIÓN (definidos en Planeación — aplican a todos los proponentes)
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#FFFBEB', padding: '14px 16px', textAlign: 'left', verticalAlign: 'top' }}>
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              <div>
+                                <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">Especificaciones técnicas</p>
+                                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                                  {detalle?.solicitud?.descripcion_necesidad_detalle || <em className="text-gray-400">No definidas</em>}
+                                </p>
                               </div>
-                            )}
-                          </div>
-                        </td>
-                      ))}
-                    </tr>
+                              <div>
+                                <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">Criterios habilitantes</p>
+                                {detalle?.solicitud?.criterios_habilitantes_planeacion?.length > 0 ? (
+                                  <ul className="text-sm text-gray-800 list-disc list-inside space-y-0.5">
+                                    {detalle.solicitud.criterios_habilitantes_planeacion.map((c: any, i: number) => (
+                                      <li key={i}>{c.descripcion}</li>
+                                    ))}
+                                  </ul>
+                                ) : <p className="text-sm text-gray-400 italic">No definidos</p>}
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">Experiencia acreditada exigida</p>
+                                <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                                  {detalle?.solicitud?.experiencia_acreditada_exigida || <em className="text-gray-400">No definida</em>}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">Valor aprobado</p>
+                                <p className="text-sm font-bold text-emerald-700">
+                                  {detalle?.solicitud?.presupuesto_aprobado
+                                    ? `${new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(Number(detalle.solicitud.presupuesto_aprobado))} ${detalle?.solicitud?.moneda || 'COP'}`
+                                    : <em className="text-gray-400 font-normal">No definido</em>}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </>
+                    )}
 
                     {/* SECCIÓN: VERIFICACIÓN DOCUMENTAL */}
                     <tr>
                       <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#f1f5f9', fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, borderTop: '2px solid #334155' }}>
-                        II. VERIFICACIÓN DOCUMENTAL (ÁREA JURÍDICA)
+                        I. REQUERIMIENTOS HABILITANTES LEGALES
                       </td>
                     </tr>
                     <tr>
@@ -915,25 +767,41 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                       })}
                     </tr>
 
-                    {requisitosLegales.map(r => (
+                    {requisitosLegalesUnion.map(r => (
                       <tr key={r.key}>
                         <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16 }}>{r.label}</td>
                         {proponentesVista.map((p: any) => {
+                          const aplica = requisitosLegalesPara(p).some(d => d.key === r.key);
+                          if (!aplica) {
+                            return <td key={p.numero} style={{ ...tdCell, color: '#94a3b8', fontStyle: 'italic', fontSize: 11 }}>No aplica</td>;
+                          }
+                          const doc = (p.documentos_proveedor || []).find((d: any) => d.tipo === r.key);
                           const chk = calificaciones[String(p.numero)]?.checklist || {};
+                          const valorDefault = doc ? 'SI' : 'NO';
+                          const valor = chk[r.key] || valorDefault;
                           return (
-                            <td key={p.numero} style={tdCell}>
-                              <select 
-                                value={chk[r.key] || 'SI'} 
-                                onChange={e => handleChecklistChange(p.numero, r.key, e.target.value)} 
-                                style={{ 
-                                  width: '100%', border: 'none', outline: 'none', 
-                                  background: (chk[r.key] || 'SI') === 'NO' ? '#FEE2E2' : 'transparent',
-                                  textAlign: 'center', fontWeight: (chk[r.key] || 'SI') === 'NO' ? 'bold' : 'normal',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <option>SI</option><option>NO</option><option>N/A</option>
-                              </select>
+                            <td key={p.numero} style={{ ...tdCell, padding: '6px 4px' }}>
+                              <div className="flex flex-col items-center gap-1">
+                                {doc ? (
+                                  <a href={`${API_URL}${doc.url}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-blue-600 hover:text-blue-800 underline text-[10px]">
+                                    <FileText size={11} /> Ver documento
+                                  </a>
+                                ) : (
+                                  <span className="text-red-500 italic text-[10px] font-medium">Sin adjuntar</span>
+                                )}
+                                <select
+                                  value={valor}
+                                  onChange={e => handleChecklistChange(p.numero, r.key, e.target.value)}
+                                  style={{
+                                    width: '100%', border: 'none', outline: 'none',
+                                    background: valor === 'NO' ? '#FEE2E2' : 'transparent',
+                                    textAlign: 'center', fontWeight: valor === 'NO' ? 'bold' : 'normal',
+                                    cursor: 'pointer', fontSize: 12
+                                  }}
+                                >
+                                  <option>SI</option><option>NO</option><option>N/A</option>
+                                </select>
+                              </div>
                             </td>
                           );
                         })}
@@ -943,141 +811,125 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     <tr>
                       <td style={{ ...tdCell, ...stickyCol, background: '#fff', fontWeight: 'bold', textAlign: 'left', paddingLeft: 16 }}>
                         ¿CUMPLE REQUISITOS HABILITANTES?
-                        <p style={{ fontWeight: 400, fontSize: 10, color: '#6B7280', marginTop: 2 }}>
-                          Debe revisar el detalle de cada proponente para poder finalizar
-                        </p>
                       </td>
                       {proponentesVista.map((p: any) => {
                         const chk = calificaciones[String(p.numero)]?.checklist || {};
-                        const cumple = requisitosLegales.every(r => (chk[r.key] || 'SI') !== 'NO') ? 'SI' : 'NO';
-                        const revisado = habilitantesRevisados.has(Number(p.numero));
+                        const cumple = requisitosLegalesPara(p).every(r => {
+                          const doc = (p.documentos_proveedor || []).find((d: any) => d.tipo === r.key);
+                          return (chk[r.key] || (doc ? 'SI' : 'NO')) !== 'NO';
+                        }) ? 'SI' : 'NO';
                         return (
                           <td
                             key={p.numero}
-                            style={{ ...tdCell, background: cumple === 'SI' ? '#86EFAC' : '#FCA5A5', fontWeight: 'bold', fontSize: 14, padding: '10px 8px' }}
+                            style={{ ...tdCell, background: cumple === 'SI' ? '#86EFAC' : '#FCA5A5', fontWeight: 'bold', fontSize: 14 }}
                           >
-                            <div className="flex flex-col items-center gap-1.5">
-                              <span className="flex items-center gap-1">
-                                {cumple === 'SI' ? <Check size={15} className="text-emerald-800" /> : <X size={15} className="text-red-800" />}
-                                {cumple}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setProponenteAbiertoDetalle(p.numero);
-                                  if (p.respondida) {
-                                    setHabilitantesRevisados(prev => new Set(prev).add(Number(p.numero)));
-                                  }
-                                }}
-                                className="flex items-center gap-1 text-[11px] font-semibold bg-white/70 hover:bg-white border border-black/10 rounded-full px-2.5 py-1 shadow-sm transition-colors"
-                                style={{ color: '#1e293b' }}
-                              >
-                                <Eye size={12} /> Ver detalle
-                              </button>
-                              {p.respondida && (
-                                <span className={`flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 ${revisado ? 'bg-emerald-800/10 text-emerald-900' : 'bg-red-800/10 text-red-900'}`}>
-                                  {revisado ? <><Check size={10} /> REVISADO</> : <>⚠ PENDIENTE</>}
-                                </span>
+                            <span className="flex items-center justify-center gap-1">
+                              {cumple === 'SI' ? <Check size={15} className="text-emerald-800" /> : <X size={15} className="text-red-800" />}
+                              {cumple}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+
+                    {/* SECCIÓN: EXPERIENCIA Y ACADÉMICOS — diligenciados por el Supervisor, Jurídica solo revisa y decide si cumple */}
+                    <tr>
+                      <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#f1f5f9', fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, borderTop: '2px solid #334155' }}>
+                        II. REQUERIMIENTOS HABILITANTES DE EXPERIENCIA (diligenciado por el Supervisor)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>¿Cumple experiencia exigida?</td>
+                      {proponentesVista.map((p: any) => {
+                        const detSup = supervisorEval?.calificaciones?.find((c: any) => Number(c?.numero) === Number(p.numero))?.habilitante_detalle;
+                        const nCerts = detSup?.experiencia?.certificaciones?.length || 0;
+                        const chk = calificaciones[String(p.numero)]?.checklist || {};
+                        const valor = chk['_experiencia'] || 'SI';
+                        return (
+                          <td key={p.numero} style={{ ...tdCell, padding: '6px 4px' }}>
+                            <div className="flex flex-col items-center gap-1">
+                              {nCerts > 0 ? (
+                                <button type="button" onClick={() => setProponenteAbiertoDetalle(p.numero)} className="text-blue-600 hover:text-blue-800 underline text-[10px] font-semibold">
+                                  Ver {nCerts} certificación{nCerts > 1 ? 'es' : ''}
+                                </button>
+                              ) : (
+                                <span className="text-red-500 italic text-[10px] font-medium">Sin registrar</span>
                               )}
+                              <select
+                                value={valor}
+                                onChange={e => handleChecklistChange(p.numero, '_experiencia', e.target.value)}
+                                style={{ width: '100%', border: 'none', outline: 'none', background: valor === 'NO' ? '#FEE2E2' : 'transparent', textAlign: 'center', fontWeight: valor === 'NO' ? 'bold' : 'normal', cursor: 'pointer', fontSize: 12 }}
+                              >
+                                <option>SI</option><option>NO</option><option>N/A</option>
+                              </select>
                             </div>
                           </td>
                         );
                       })}
                     </tr>
 
-                    {/* SECCIÓN: CONFIGURACIÓN DE PESOS */}
                     <tr>
-                      <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#fef2f2', borderTop: '2px solid #ef4444' }}>
-                        <div className="flex items-center justify-between px-4 py-2">
-                           <div className="text-left">
-                              <span className="font-bold text-red-700 text-sm">III. CONFIGURACIÓN Y CALIFICACIÓN DE PUNTAJES</span>
-                              <p className="text-[10px] text-red-500">Habilite los criterios y asigne el peso (La suma debe ser 100)</p>
-                           </div>
-                           <div className={`px-3 py-1 rounded text-white font-bold text-xs ${Object.values(configPuntajes).reduce((a,b)=>a+(b.enabled?b.max:0),0) === 100 ? 'bg-green-600' : 'bg-red-600'}`}>
-                             TOTAL PESO: {Object.values(configPuntajes).reduce((a,b)=>a+(b.enabled?b.max:0),0)} / 100
-                           </div>
-                        </div>
+                      <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#f1f5f9', fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, borderTop: '2px solid #334155' }}>
+                        III. REQUERIMIENTOS HABILITANTES ACADÉMICOS (diligenciado por el Supervisor)
                       </td>
                     </tr>
-
-                    {Object.entries(configPuntajes).map(([key, config]) => (
-                      <tr key={key}>
-                        <td style={{ ...tdCell, ...stickyCol, textAlign: 'left', paddingLeft: 16, background: config.enabled ? '#fff' : '#f9fafb' }}>
-                          <div className="flex items-center gap-3">
-                            <input 
-                              type="checkbox" 
-                              checked={config.enabled} 
-                              onChange={e => setConfigPuntajes(prev => ({ ...prev, [key]: { ...prev[key], enabled: e.target.checked } }))} 
-                            />
-                            <span className={config.enabled ? 'font-medium' : 'text-gray-400 line-through'}>{config.label}</span>
-                            {config.enabled && (
-                              <div className="ml-auto flex items-center gap-1">
-                                <span className="text-[10px] text-gray-500 font-bold uppercase">PESO:</span>
-                                <input
-                                  type="number"
-                                  value={config.max}
-                                  onChange={e => setConfigPuntajes(prev => ({ ...prev, [key]: { ...prev[key], max: Number(e.target.value) } }))}
-                                  onFocus={e => e.target.select()}
-                                  className="w-16 border rounded text-center text-sm font-bold bg-yellow-50 focus:bg-white outline-none"
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        {proponentesVista.map((p: any) => (
-                          <td key={p.numero} style={{ ...tdCell, background: !p.respondida ? '#fafafa' : config.enabled ? '#fff' : '#f1f5f9' }}>
-                            {!p.respondida ? (
-                              <span className="text-gray-300 text-[10px] italic">Sin respuesta</span>
-                            ) : config.enabled ? (
-                              <div className="flex flex-col items-center">
-                                <input
-                                  type="number" min={0} max={100}
-                                  value={(calificaciones[String(p.numero)] as any)?.[key] || 0}
-                                  onChange={e => handleScoreChange(p.numero, key, Number(e.target.value))}
-                                  onFocus={e => e.target.select()}
-                                  style={{ width: '100%', textAlign: 'center', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '2px', fontWeight: 'bold' }}
-                                />
-                                <span className="text-[9px] text-blue-600 font-bold mt-1">
-                                  {(((calificaciones[String(p.numero)] as any)?.[key] || 0) * config.max / 100).toFixed(1)} pts
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-300 text-[10px]">---</span>
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-
                     <tr>
-                      <td style={{ ...tdCell, ...stickyCol, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, background: '#334155', color: '#fff' }}>TOTAL PUNTAJE OBTENIDO</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, background: p.respondida ? '#F04B23' : '#E5E7EB', color: p.respondida ? '#fff' : '#9CA3AF', fontWeight: 'bold', fontSize: p.respondida ? 16 : 12 }}>
-                          {p.respondida ? total(p.numero) : 'N/A'}
-                        </td>
-                      ))}
-                    </tr>
-
-                    {/* FILA GANADOR — automático por mayor puntaje, solo entre quienes respondieron */}
-                    <tr>
-                      <td style={{ ...tdCell, ...stickyCol, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, background: '#f0fdf4', color: '#065f46', fontSize: 12 }}>
-                        PROPONENTE RECOMENDADO
-                        <p style={{ fontWeight: 400, fontSize: 10, color: '#6B7280', marginTop: 2 }}>Mayor puntaje obtenido</p>
-                      </td>
+                      <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16, fontWeight: 500 }}>¿Cumple requisitos académicos?</td>
                       {proponentesVista.map((p: any) => {
-                        const esGanador = ganadorNumero === p.numero && total(p.numero) > 0;
+                        const detSup = supervisorEval?.calificaciones?.find((c: any) => Number(c?.numero) === Number(p.numero))?.habilitante_detalle;
+                        const tieneAcademico = p.tipo_persona === 'empresa'
+                          ? ((detSup?.academico?.equipo?.director?.miembros?.length || 0) > 0 || detSup?.academico?.equipo?.otros?.some((o: any) => o.miembros?.length > 0))
+                          : Boolean(detSup?.academico?.personaNatural?.titulo);
+                        const chk = calificaciones[String(p.numero)]?.checklist || {};
+                        const valor = chk['_academico'] || 'SI';
                         return (
-                          <td
-                            key={p.numero}
-                            style={{ ...tdCell, background: esGanador ? '#86EFAC' : !p.respondida ? '#fafafa' : '#fff', fontWeight: 'bold', color: esGanador ? '#065f46' : '#D1D5DB', fontSize: 14 }}
-                          >
-                            {!p.respondida ? <span className="text-[10px] italic text-gray-300">No elegible</span> : esGanador ? <span className="flex items-center justify-center gap-1"><Star size={14} className="fill-emerald-700 text-emerald-700" /> GANADOR</span> : '—'}
+                          <td key={p.numero} style={{ ...tdCell, padding: '6px 4px' }}>
+                            <div className="flex flex-col items-center gap-1">
+                              {tieneAcademico ? (
+                                <button type="button" onClick={() => setProponenteAbiertoDetalle(p.numero)} className="text-blue-600 hover:text-blue-800 underline text-[10px] font-semibold">
+                                  Ver detalle
+                                </button>
+                              ) : (
+                                <span className="text-red-500 italic text-[10px] font-medium">Sin registrar</span>
+                              )}
+                              <select
+                                value={valor}
+                                onChange={e => handleChecklistChange(p.numero, '_academico', e.target.value)}
+                                style={{ width: '100%', border: 'none', outline: 'none', background: valor === 'NO' ? '#FEE2E2' : 'transparent', textAlign: 'center', fontWeight: valor === 'NO' ? 'bold' : 'normal', cursor: 'pointer', fontSize: 12 }}
+                              >
+                                <option>SI</option><option>NO</option><option>N/A</option>
+                              </select>
+                            </div>
                           </td>
                         );
                       })}
                     </tr>
 
-                    {/* CALIFICACIÓN DEL SUPERVISOR — informativa, en paralelo a la de Jurídica */}
+                    {/* PROPONENTE GANADOR — lo elige Jurídica; por defecto el mismo que recomendó
+                        el Supervisor (único que califica con puntajes), salvo que Jurídica elija
+                        otro por no cumplir los requisitos legales/experiencia/académicos revisados arriba. */}
+                    <tr>
+                      <td style={{ ...tdCell, ...stickyCol, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16, background: '#f0fdf4', color: '#065f46', fontSize: 12 }}>
+                        PROPONENTE GANADOR
+                        <p style={{ fontWeight: 400, fontSize: 10, color: '#6B7280', marginTop: 2 }}>Haga clic para elegir — por defecto el recomendado por el Supervisor</p>
+                      </td>
+                      {proponentesVista.map((p: any) => {
+                        const esGanador = ganadorNumero === p.numero;
+                        return (
+                          <td
+                            key={p.numero}
+                            onClick={() => p.respondida && setProponenteRecomendadoNumero(p.numero)}
+                            style={{ ...tdCell, background: esGanador ? '#86EFAC' : !p.respondida ? '#fafafa' : '#fff', fontWeight: 'bold', color: esGanador ? '#065f46' : '#D1D5DB', fontSize: 14, cursor: p.respondida ? 'pointer' : 'default' }}
+                          >
+                            {!p.respondida ? <span className="text-[10px] italic text-gray-300">No elegible</span> : esGanador ? <span className="flex items-center justify-center gap-1"><Star size={14} className="fill-emerald-700 text-emerald-700" /> GANADOR</span> : <span className="text-[11px] font-normal underline">Elegir</span>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+
+                    {/* CALIFICACIÓN DEL SUPERVISOR — informativa, en paralelo a la de Jurídica.
+                        Muestra el detalle real de los criterios que usó el Supervisor (incluye
+                        cualquier criterio adicional que haya agregado), no solo el total. */}
                     <tr>
                       <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#eff6ff', borderTop: '2px solid #2f6fa3' }}>
                         <div className="flex items-center justify-between px-4 py-2">
@@ -1088,6 +940,23 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                         </div>
                       </td>
                     </tr>
+                    {supervisorCriterios.map((cfg) => (
+                      <tr key={cfg.id}>
+                        <td style={{ ...tdCell, ...stickyCol, background: '#fff', textAlign: 'left', paddingLeft: 16 }}>
+                          {cfg.label || 'Sin nombre'} <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 400 }}>(Peso {cfg.max}%)</span>
+                        </td>
+                        {proponentesVista.map((p: any) => {
+                          const c = supervisorEval?.calificaciones?.find((c: any) => Number(c?.numero) === Number(p.numero));
+                          const puntaje = puntajesSupervisorDe(c)[cfg.id] || 0;
+                          return (
+                            <td key={p.numero} style={{ ...tdCell, background: '#eff6ff' }}>
+                              <div style={{ fontWeight: 'bold', color: '#2f6fa3' }}>{puntaje}</div>
+                              <div style={{ fontSize: 9, color: '#6B7280' }}>{(puntaje * cfg.max / 100).toFixed(1)} pts</div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
                     <tr>
                       <td style={{ ...tdCell, ...stickyCol, background: '#fff', fontWeight: 'bold', textAlign: 'left', paddingLeft: 16 }}>PUNTAJE DEL SUPERVISOR</td>
                       {proponentesVista.map((p: any) => {
@@ -1119,55 +988,70 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
 
             </>) : (
               /* VISTA INDIVIDUAL (Simplificada para mantener coherencia) */
-              proponentesVista.map((p: any) => {
+              <>
+              {(detalle?.solicitud?.descripcion_necesidad_detalle
+                || detalle?.solicitud?.experiencia_acreditada_exigida
+                || detalle?.solicitud?.presupuesto_aprobado
+                || (detalle?.solicitud?.criterios_habilitantes_planeacion?.length > 0)) && (
+                <div className="mb-8 bg-amber-50 p-6 rounded-lg border border-amber-200" style={{ fontFamily: 'Gabarito, sans-serif' }}>
+                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3">Requisitos de la contratación (definidos en Planeación — aplican a todos los proponentes)</p>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Especificaciones técnicas</p>
+                      <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                        {detalle?.solicitud?.descripcion_necesidad_detalle || <em className="text-gray-400">No definidas</em>}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Criterios habilitantes</p>
+                      {detalle?.solicitud?.criterios_habilitantes_planeacion?.length > 0 ? (
+                        <ul className="text-sm text-gray-800 list-disc list-inside space-y-0.5">
+                          {detalle.solicitud.criterios_habilitantes_planeacion.map((c: any, i: number) => (
+                            <li key={i}>{c.descripcion}</li>
+                          ))}
+                        </ul>
+                      ) : <p className="text-sm text-gray-400 italic">No definidos</p>}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Experiencia acreditada exigida</p>
+                      <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                        {detalle?.solicitud?.experiencia_acreditada_exigida || <em className="text-gray-400">No definida</em>}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Valor aprobado</p>
+                      <p className="text-sm font-bold text-emerald-700">
+                        {detalle?.solicitud?.presupuesto_aprobado
+                          ? `${new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(Number(detalle.solicitud.presupuesto_aprobado))} ${detalle?.solicitud?.moneda || 'COP'}`
+                          : <em className="text-gray-400 font-normal">No definido</em>}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {proponentesVista.map((p: any) => {
                 const chk = calificaciones[String(p.numero)]?.checklist || {};
-                const cumple = requisitosLegales.every(r => (chk[r.key] || 'SI') !== 'NO') ? 'SI' : 'NO';
-                const resp = respuestasProponentes[p.email || p.datos_contacto];
-                
+                const requisitosDelProponente = requisitosLegalesPara(p);
+                const cumple = requisitosDelProponente.every(r => {
+                  const doc = (p.documentos_proveedor || []).find((d: any) => d.tipo === r.key);
+                  return (chk[r.key] || (doc ? 'SI' : 'NO')) !== 'NO';
+                }) ? 'SI' : 'NO';
+
                 return (
                   <div key={p.numero} className="mb-12 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-                    <div className="bg-slate-800 text-white px-4 py-2 font-bold flex justify-between items-center">
-                      <span>PROPONENTE {p.numero}: {p.nombre_proveedor?.toUpperCase()}</span>
-                      <span className={`px-3 py-1 rounded-full text-xs ${cumple === 'SI' ? 'bg-green-500' : 'bg-red-500'}`}>
+                    <div className="bg-slate-800 text-white px-4 py-3 flex justify-between items-center">
+                      <div>
+                        <div className="font-bold">PROPONENTE {p.numero}: {p.nombre_proveedor?.toUpperCase()}</div>
+                        <div className="text-[11px] text-gray-300 mt-0.5">
+                          {[p.email, p.cedula_nit, p.telefono].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs flex-shrink-0 ${cumple === 'SI' ? 'bg-green-500' : 'bg-red-500'}`}>
                         {cumple === 'SI' ? 'CUMPLE HABILITANTES' : 'NO CUMPLE'}
                       </span>
                     </div>
-                    
+
                     <div className="p-6 space-y-6">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-6 text-sm">
-                         <div>
-                            <p className="font-bold text-gray-500 mb-1 uppercase text-[10px]">DATOS DE CONTACTO</p>
-                            <p className="p-2 bg-gray-50 rounded border" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{p.datos_contacto || '---'}</p>
-                         </div>
-                         <div>
-                            <p className="font-bold text-gray-500 mb-1 uppercase text-[10px]">VALOR DE LA PROPUESTA</p>
-                            <p className="p-2 bg-green-50 text-green-700 font-bold rounded border">{p.valor_con_impuestos || '---'} {p.moneda || 'COP'}</p>
-                         </div>
-                         <div>
-                            <p className="font-bold text-gray-500 mb-1 uppercase text-[10px]">VALOR AGREGADO</p>
-                            <p className="p-2 bg-gray-50 rounded border">{p.valor_agregado || '---'}</p>
-                         </div>
-                         <div className="col-span-2 md:col-span-1">
-                            <p className="font-bold text-gray-500 mb-1 uppercase text-[10px]">REQUISITOS TÉCNICOS</p>
-                            <p className="p-2 bg-gray-50 rounded border min-h-[40px]">{p.requisitos_tecnicos || '---'}</p>
-                         </div>
-                         <div>
-                            <p className="font-bold text-gray-500 mb-1 uppercase text-[10px]">EXPERIENCIA ACREDITADA</p>
-                            <p className="p-2 bg-gray-50 rounded border">{p.experiencia || '---'}</p>
-                         </div>
-                         <div>
-                            <p className="font-bold text-gray-500 mb-1 uppercase text-[10px]">CRITERIOS HABILITANTES</p>
-                            <p className="p-2 bg-gray-50 rounded border">{p.criterios_habilitantes || '---'}</p>
-                         </div>
-                      </div>
-
-                      {p.respuesta_proponente && (
-                        <div className="bg-blue-50 p-4 rounded border border-blue-100">
-                          <p className="font-bold text-blue-700 mb-1 uppercase text-[10px]">RESPUESTA TEXTUAL DEL PROPONENTE</p>
-                          <p className="text-blue-800 whitespace-pre-line">{p.respuesta_proponente}</p>
-                        </div>
-                      )}
-
                       <div>
                         <p className="font-bold text-gray-500 mb-2">VERIFICACIÓN LEGAL</p>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1179,42 +1063,38 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                             </tr>
                           </thead>
                           <tbody>
-                            {requisitosLegales.map(r => (
-                              <tr key={r.key}>
-                                <td style={{ ...tdCell, textAlign: 'left' }}>{r.label}</td>
-                                <td style={tdCell}>
-                                  <select value={chk[r.key] || 'SI'} onChange={e => handleChecklistChange(p.numero, r.key, e.target.value)} className="w-full text-center outline-none border rounded">
-                                    <option>SI</option><option>NO</option><option>N/A</option>
-                                  </select>
-                                </td>
-                                <td style={tdCell}>
-                                   {/* Intento de mapeo inteligente del archivo si existe por nombre o similar */}
-                                   <span className="text-gray-400 italic text-[10px]">Ver en documentos consolidados</span>
-                                </td>
-                              </tr>
-                            ))}
+                            {requisitosDelProponente.map(r => {
+                              const doc = (p.documentos_proveedor || []).find((d: any) => d.tipo === r.key);
+                              const valor = chk[r.key] || (doc ? 'SI' : 'NO');
+                              return (
+                                <tr key={r.key}>
+                                  <td style={{ ...tdCell, textAlign: 'left' }}>{r.label}</td>
+                                  <td style={tdCell}>
+                                    <select value={valor} onChange={e => handleChecklistChange(p.numero, r.key, e.target.value)} className="w-full text-center outline-none border rounded">
+                                      <option>SI</option><option>NO</option><option>N/A</option>
+                                    </select>
+                                  </td>
+                                  <td style={tdCell}>
+                                    {doc ? (
+                                      <a href={`${API_URL}${doc.url}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-1 text-blue-600 hover:text-blue-800 underline text-[11px]">
+                                        <FileText size={12} /> Ver documento
+                                      </a>
+                                    ) : (
+                                      <span className="text-red-400 italic text-[10px] font-medium">Sin adjuntar</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {Object.entries(configPuntajes).filter(([, cfg]) => cfg.enabled).map(([key, cfg]) => (
-                          <div key={key}>
-                            <p className="font-bold text-gray-500 mb-1 uppercase text-[10px]">{cfg.label} (Peso {cfg.max})</p>
-                            <input 
-                              type="number" min={0} max={100} 
-                              value={(calificaciones[String(p.numero)] as any)?.[key] || 0} 
-                              onChange={e => handleScoreChange(p.numero, key, Number(e.target.value))} 
-                              className="w-full p-2 border rounded font-bold text-center focus:border-red-500 outline-none" 
-                            />
-                            <p className="text-[9px] text-blue-600 font-bold text-center mt-1">{(((calificaciones[String(p.numero)] as any)?.[key] || 0) * cfg.max / 100).toFixed(1)} pts</p>
-                          </div>
-                        ))}
-                      </div>
                     </div>
                   </div>
                 );
-              })
+              })}
+              </>
             )}
 
             {hayDiscrepancia && (
@@ -1279,6 +1159,10 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                       <td style={{ ...tdP, width: '28%' }}>{String(detalle?.solicitud?.modalidad || '').toUpperCase()}</td>
                     </tr>
                     <tr>
+                      <td style={{ ...tdP, fontWeight: 'bold', background: '#f1f5f9' }}>TÍTULO DEL CONTRATO</td>
+                      <td colSpan={3} style={{ ...tdP, textAlign: 'left', fontWeight: 'bold' }}>{detalle?.solicitud?.titulo_contrato || detalle?.solicitud?.objeto}</td>
+                    </tr>
+                    <tr>
                       <td style={{ ...tdP, fontWeight: 'bold', background: '#f1f5f9' }}>OBJETO</td>
                       <td colSpan={3} style={{ ...tdP, textAlign: 'left' }}>{detalle?.solicitud?.objeto}</td>
                     </tr>
@@ -1288,6 +1172,34 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                       <td style={{ ...tdP, fontWeight: 'bold', background: '#f1f5f9' }}>SUPERVISOR RECOMENDADO</td>
                       <td style={tdP}>{detalle?.solicitud?.solicitante_nombre}</td>
                     </tr>
+                    {(detalle?.solicitud?.descripcion_necesidad_detalle || detalle?.solicitud?.experiencia_acreditada_exigida || detalle?.solicitud?.presupuesto_aprobado || detalle?.solicitud?.criterios_habilitantes_planeacion?.length > 0) && (
+                      <>
+                        <tr>
+                          <td style={{ ...tdP, fontWeight: 'bold', background: '#f1f5f9' }}>ESPECIFICACIONES TÉCNICAS</td>
+                          <td colSpan={3} style={{ ...tdP, textAlign: 'left' }}>{detalle?.solicitud?.descripcion_necesidad_detalle || '—'}</td>
+                        </tr>
+                        <tr>
+                          <td style={{ ...tdP, fontWeight: 'bold', background: '#f1f5f9' }}>CRITERIOS HABILITANTES</td>
+                          <td colSpan={3} style={{ ...tdP, textAlign: 'left' }}>
+                            {detalle?.solicitud?.criterios_habilitantes_planeacion?.length > 0
+                              ? detalle.solicitud.criterios_habilitantes_planeacion.map((c: any) => c.descripcion).join(' · ')
+                              : '—'}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ ...tdP, fontWeight: 'bold', background: '#f1f5f9' }}>EXPERIENCIA ACREDITADA EXIGIDA</td>
+                          <td colSpan={3} style={{ ...tdP, textAlign: 'left' }}>{detalle?.solicitud?.experiencia_acreditada_exigida || '—'}</td>
+                        </tr>
+                        <tr>
+                          <td style={{ ...tdP, fontWeight: 'bold', background: '#f1f5f9' }}>VALOR APROBADO</td>
+                          <td colSpan={3} style={{ ...tdP, textAlign: 'left', fontWeight: 'bold', color: '#065f46' }}>
+                            {detalle?.solicitud?.presupuesto_aprobado
+                              ? `${new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(Number(detalle.solicitud.presupuesto_aprobado))} ${detalle?.solicitud?.moneda || 'COP'}`
+                              : '—'}
+                          </td>
+                        </tr>
+                      </>
+                    )}
                   </tbody>
                 </table>
 
@@ -1300,6 +1212,8 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                         <th key={p.numero} style={{ ...thP, background: '#F04B23', color: '#fff' }}>
                           <div>PROPONENTE {p.numero}</div>
                           <div style={{ fontWeight: 400, fontSize: 9, marginTop: 2 }}>{p.nombre_proveedor}</div>
+                          <div style={{ fontWeight: 400, fontSize: 8, marginTop: 1 }}>{p.email}</div>
+                          <div style={{ fontWeight: 400, fontSize: 8 }}>{[p.cedula_nit, p.telefono].filter(Boolean).join(' · ')}</div>
                           <div style={{ marginTop: 3 }}>
                             <span style={{ fontSize: 8, background: p.respondida ? '#16a34a' : '#dc2626', color: '#fff', padding: '1px 6px', borderRadius: 4 }}>
                               {p.respondida ? '✓ RESPONDIÓ' : '✗ NO RESPONDIÓ'}
@@ -1313,46 +1227,19 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     {/* SECCIÓN I */}
                     <tr>
                       <td colSpan={proponentesVista.length + 1} style={{ ...tdP, background: '#f1f5f9', fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, borderTop: '2px solid #334155' }}>
-                        I. INFORMACIÓN DEL PROPONENTE (SUMINISTRADA POR SOLICITANTE)
+                        I. REQUERIMIENTOS HABILITANTES LEGALES
                       </td>
                     </tr>
-                    {[
-                      { label: 'Datos de contacto', field: 'datos_contacto' },
-                      { label: 'Requisitos técnicos propuestos', field: 'requisitos_tecnicos' },
-                      { label: 'Experiencia acreditada', field: 'experiencia' },
-                      { label: 'Criterios habilitantes (Sugeridos)', field: 'criterios_habilitantes' },
-                      { label: 'Valor agregado', field: 'valor_agregado' },
-                      { label: 'Anexos / Observaciones', field: 'observaciones' },
-                    ].map(({ label, field }) => (
-                      <tr key={field}>
-                        <td style={{ ...tdP, textAlign: 'left', paddingLeft: 14 }}>{label}</td>
-                        {proponentesVista.map((p: any) => (
-                          <td key={p.numero} style={{ ...tdP, textAlign: 'left', fontSize: 9, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                            {proponentesEditados[String(p.numero)]?.[field] || '—'}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                    <tr>
-                      <td style={{ ...tdP, textAlign: 'left', paddingLeft: 14 }}>Valor de la propuesta + Impuestos</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdP, fontSize: 9, fontWeight: 'bold', color: '#065f46' }}>
-                          {proponentesEditados[String(p.numero)]?.valor_con_impuestos || '—'} {p.moneda || 'COP'}
-                        </td>
-                      ))}
-                    </tr>
-
-                    {/* SECCIÓN II */}
-                    <tr>
-                      <td colSpan={proponentesVista.length + 1} style={{ ...tdP, background: '#f1f5f9', fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, borderTop: '2px solid #334155' }}>
-                        II. VERIFICACIÓN DOCUMENTAL (ÁREA JURÍDICA)
-                      </td>
-                    </tr>
-                    {requisitosLegales.map((r: any) => (
+                    {requisitosLegalesUnion.map((r: any) => (
                       <tr key={r.key}>
                         <td style={{ ...tdP, textAlign: 'left', paddingLeft: 14, fontSize: 9 }}>{r.label}</td>
                         {proponentesVista.map((p: any) => {
-                          const val = calificaciones[String(p.numero)]?.checklist?.[r.key] || 'SI';
+                          const aplica = requisitosLegalesPara(p).some(d => d.key === r.key);
+                          if (!aplica) {
+                            return <td key={p.numero} style={{ ...tdP, color: '#9CA3AF', fontStyle: 'italic', fontSize: 9 }}>No aplica</td>;
+                          }
+                          const doc = (p.documentos_proveedor || []).find((d: any) => d.tipo === r.key);
+                          const val = calificaciones[String(p.numero)]?.checklist?.[r.key] || (doc ? 'SI' : 'NO');
                           return (
                             <td key={p.numero} style={{ ...tdP, background: val === 'NO' ? '#FEE2E2' : val === 'N/A' ? '#F3F4F6' : 'transparent' }}>
                               <span style={badgeStyle(val)}>{val}</span>
@@ -1367,7 +1254,10 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                       </td>
                       {proponentesVista.map((p: any) => {
                         const chk = calificaciones[String(p.numero)]?.checklist || {};
-                        const cumple = requisitosLegales.every((r: any) => (chk[r.key] || 'SI') !== 'NO') ? 'SI' : 'NO';
+                        const cumple = requisitosLegalesPara(p).every((r: any) => {
+                          const doc = (p.documentos_proveedor || []).find((d: any) => d.tipo === r.key);
+                          return (chk[r.key] || (doc ? 'SI' : 'NO')) !== 'NO';
+                        }) ? 'SI' : 'NO';
                         return (
                           <td key={p.numero} style={{ ...tdP, background: cumple === 'SI' ? '#86EFAC' : '#FCA5A5', fontWeight: 'bold', fontSize: 14, color: cumple === 'SI' ? '#065f46' : '#991b1b' }}>
                             {cumple}
@@ -1376,41 +1266,81 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                       })}
                     </tr>
 
-                    {/* SECCIÓN III */}
+                    {/* SECCIÓN II */}
                     <tr>
-                      <td colSpan={proponentesVista.length + 1} style={{ ...tdP, background: '#fef2f2', fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, borderTop: '2px solid #ef4444', fontSize: 11 }}>
-                        III. CONFIGURACIÓN Y CALIFICACIÓN DE PUNTAJES
+                      <td colSpan={proponentesVista.length + 1} style={{ ...tdP, background: '#f1f5f9', fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, borderTop: '2px solid #334155' }}>
+                        II. REQUERIMIENTOS HABILITANTES DE EXPERIENCIA (Supervisor)
                       </td>
                     </tr>
-                    {Object.entries(configPuntajes).filter(([, cfg]) => cfg.enabled).map(([key, cfg]) => (
-                      <tr key={key}>
+                    <tr>
+                      <td style={{ ...tdP, textAlign: 'left', paddingLeft: 14, fontSize: 9 }}>¿Cumple experiencia exigida?</td>
+                      {proponentesVista.map((p: any) => {
+                        const val = calificaciones[String(p.numero)]?.checklist?.['_experiencia'] || 'SI';
+                        return (
+                          <td key={p.numero} style={{ ...tdP, background: val === 'NO' ? '#FEE2E2' : val === 'N/A' ? '#F3F4F6' : 'transparent' }}>
+                            <span style={badgeStyle(val)}>{val}</span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+
+                    {/* SECCIÓN III */}
+                    <tr>
+                      <td colSpan={proponentesVista.length + 1} style={{ ...tdP, background: '#f1f5f9', fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, borderTop: '2px solid #334155' }}>
+                        III. REQUERIMIENTOS HABILITANTES ACADÉMICOS (Supervisor)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ ...tdP, textAlign: 'left', paddingLeft: 14, fontSize: 9 }}>¿Cumple requisitos académicos?</td>
+                      {proponentesVista.map((p: any) => {
+                        const val = calificaciones[String(p.numero)]?.checklist?.['_academico'] || 'SI';
+                        return (
+                          <td key={p.numero} style={{ ...tdP, background: val === 'NO' ? '#FEE2E2' : val === 'N/A' ? '#F3F4F6' : 'transparent' }}>
+                            <span style={badgeStyle(val)}>{val}</span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+
+                    {/* SECCIÓN IV — calificación del Supervisor (único que puntúa) */}
+                    <tr>
+                      <td colSpan={proponentesVista.length + 1} style={{ ...tdP, background: '#eff6ff', fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, borderTop: '2px solid #2f6fa3', fontSize: 11 }}>
+                        IV. CALIFICACIÓN DEL SUPERVISOR (informativa, en paralelo)
+                      </td>
+                    </tr>
+                    {supervisorCriterios.map((cfg) => (
+                      <tr key={cfg.id}>
                         <td style={{ ...tdP, textAlign: 'left', paddingLeft: 14 }}>
-                          {cfg.label} <span style={{ fontSize: 9, color: '#6B7280' }}>(Peso: {cfg.max}%)</span>
+                          {cfg.label || 'Sin nombre'} <span style={{ fontSize: 9, color: '#6B7280' }}>(Peso: {cfg.max}%)</span>
                         </td>
                         {proponentesVista.map((p: any) => {
-                          const grade = (calificaciones[String(p.numero)] as any)?.[key] || 0;
+                          const c = supervisorEval?.calificaciones?.find((c: any) => Number(c?.numero) === Number(p.numero));
+                          const grade = puntajesSupervisorDe(c)[cfg.id] || 0;
                           const pts = (grade * cfg.max / 100).toFixed(1);
                           return (
                             <td key={p.numero} style={tdP}>
-                              <div style={{ fontWeight: 'bold' }}>{grade}</div>
-                              <div style={{ fontSize: 9, color: '#2563eb' }}>{pts} pts</div>
+                              <div style={{ fontWeight: 'bold', color: '#2f6fa3' }}>{grade}</div>
+                              <div style={{ fontSize: 9, color: '#6B7280' }}>{pts} pts</div>
                             </td>
                           );
                         })}
                       </tr>
                     ))}
                     <tr>
-                      <td style={{ ...tdP, fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, background: '#334155', color: '#fff' }}>TOTAL PUNTAJE OBTENIDO</td>
-                      {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdP, background: '#F04B23', color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
-                          {total(p.numero)}
-                        </td>
-                      ))}
+                      <td style={{ ...tdP, fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, background: '#334155', color: '#fff' }}>PUNTAJE DEL SUPERVISOR</td>
+                      {proponentesVista.map((p: any) => {
+                        const st = supervisorTotal(p.numero);
+                        return (
+                          <td key={p.numero} style={{ ...tdP, background: '#2f6fa3', color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
+                            {st != null ? st : 'N/A'}
+                          </td>
+                        );
+                      })}
                     </tr>
                     <tr>
-                      <td style={{ ...tdP, fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, background: '#f0fdf4', color: '#065f46' }}>PROPONENTE RECOMENDADO</td>
+                      <td style={{ ...tdP, fontWeight: 'bold', textAlign: 'left', paddingLeft: 14, background: '#f0fdf4', color: '#065f46' }}>PROPONENTE GANADOR</td>
                       {proponentesVista.map((p: any) => {
-                        const esGanador = ganadorNumero === p.numero && total(p.numero) > 0;
+                        const esGanador = ganadorNumero === p.numero;
                         return (
                           <td key={p.numero} style={{ ...tdP, background: esGanador ? '#86EFAC' : '#fff', fontWeight: 'bold', color: esGanador ? '#065f46' : '#D1D5DB', fontSize: 14 }}>
                             {esGanador ? '★ GANADOR' : '—'}
@@ -1420,154 +1350,6 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
                     </tr>
                   </tbody>
                 </table>
-
-                {/* DETALLE HABILITANTES INLINE POR PROPONENTE */}
-                {proponentesVista.map((p: any) => {
-                  const det_h = calificaciones[String(p.numero)]?.habilitante_detalle;
-                  if (!det_h) return null;
-                  const thH: React.CSSProperties = { ...thP, fontSize: 9, padding: '4px 6px' };
-                  const tdH: React.CSSProperties = { ...tdP, fontSize: 9, padding: '4px 6px' };
-                  const hasCerts = (det_h.experiencia?.certificaciones?.length || 0) > 0;
-                  const hasDir = (det_h.equipo?.director?.miembros?.length || 0) > 0;
-                  const hasOtros = det_h.equipo?.otros?.some((o: any) => o.miembros?.length > 0);
-                  const hasOC = det_h.otros_criterios?.filas?.length > 0;
-                  if (!hasCerts && !hasDir && !hasOtros && !hasOC) return null;
-
-                  return (
-                    <div key={p.numero} style={{ marginBottom: 28, pageBreakInside: 'avoid' }}>
-                      <div style={{ background: '#334155', color: '#fff', padding: '8px 14px', fontWeight: 'bold', fontSize: 12, marginBottom: 10 }}>
-                        VERIFICACIÓN HABILITANTE DETALLADA — PROPONENTE {p.numero}: {p.nombre_proveedor?.toUpperCase()}
-                      </div>
-
-                      {/* Experiencia */}
-                      {hasCerts && (
-                        <div style={{ marginBottom: 14 }}>
-                          <div style={{ background: '#F04B23', color: '#fff', padding: '6px 12px', fontWeight: 'bold', fontSize: 10, marginBottom: 0 }}>
-                            EXPERIENCIA DEL PROPONENTE
-                            {det_h.experiencia.requisito && <div style={{ fontWeight: 400, fontSize: 9, marginTop: 2 }}>{det_h.experiencia.requisito}</div>}
-                          </div>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr>
-                                {['ID','CONTRATANTE','CONTRATISTA','OBJETO','VALOR','F. INICIO','F. FIN','PLAZO','OBSERVACIONES','CUMPLE'].map(h => (
-                                  <th key={h} style={thH}>{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {det_h.experiencia.certificaciones.map((c: any, i: number) => (
-                                <tr key={i}>
-                                  <td style={tdH}>CERT. {i+1}</td>
-                                  <td style={{ ...tdH, textAlign: 'left' }}>{c.contratante || '—'}</td>
-                                  <td style={{ ...tdH, textAlign: 'left' }}>{c.contratista || '—'}</td>
-                                  <td style={{ ...tdH, textAlign: 'left', maxWidth: 160, wordBreak: 'break-word' }}>{c.objeto || '—'}</td>
-                                  <td style={tdH}>{c.valor || '—'}</td>
-                                  <td style={tdH}>{c.fecha_inicio || '—'}</td>
-                                  <td style={tdH}>{c.fecha_fin || '—'}</td>
-                                  <td style={tdH}>{c.plazo_total || '—'}</td>
-                                  <td style={{ ...tdH, textAlign: 'left' }}>{c.observaciones || '—'}</td>
-                                  <td style={{ ...tdH, fontWeight: 'bold', background: c.cumple === 'SI' ? '#86EFAC' : c.cumple === 'NO' ? '#FCA5A5' : '#E5E7EB' }}>{c.cumple || 'SI'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      {/* Director */}
-                      {hasDir && (
-                        <div style={{ marginBottom: 14 }}>
-                          <div style={{ background: '#F04B23', color: '#fff', padding: '6px 12px', fontWeight: 'bold', fontSize: 10 }}>
-                            DIRECTOR DEL PROYECTO
-                            {det_h.equipo.director.requisito && <div style={{ fontWeight: 400, fontSize: 9, marginTop: 2 }}>{det_h.equipo.director.requisito}</div>}
-                          </div>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr>
-                                {['NOMBRE','TÍTULO','POSGRADO','CONTRATANTE','F. INICIO','F. FIN','PLAZO','OBSERVACIONES','CUMPLE'].map(h => (
-                                  <th key={h} style={thH}>{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {det_h.equipo.director.miembros.map((m: any, i: number) => (
-                                <tr key={i}>
-                                  <td style={{ ...tdH, textAlign: 'left' }}>{m.nombre || '—'}</td>
-                                  <td style={tdH}>{m.titulo || '—'}</td>
-                                  <td style={tdH}>{m.posgrado || '—'}</td>
-                                  <td style={tdH}>{m.contratante || '—'}</td>
-                                  <td style={tdH}>{m.fecha_inicio || '—'}</td>
-                                  <td style={tdH}>{m.fecha_fin || '—'}</td>
-                                  <td style={tdH}>{m.plazo_total || '—'}</td>
-                                  <td style={{ ...tdH, textAlign: 'left' }}>{m.observaciones || '—'}</td>
-                                  <td style={{ ...tdH, fontWeight: 'bold', background: m.cumple === 'SI' ? '#86EFAC' : m.cumple === 'NO' ? '#FCA5A5' : '#E5E7EB' }}>{m.cumple || 'SI'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      {/* Otros perfiles de equipo */}
-                      {det_h.equipo?.otros?.map((prof: any, pi: number) => (
-                        (prof.miembros?.length > 0) && (
-                          <div key={prof.id || pi} style={{ marginBottom: 14 }}>
-                            <div style={{ background: '#F04B23', color: '#fff', padding: '6px 12px', fontWeight: 'bold', fontSize: 10 }}>
-                              PROFESIONAL {pi+1}: {prof.titulo_perfil}
-                              {prof.requisito && <div style={{ fontWeight: 400, fontSize: 9, marginTop: 2 }}>{prof.requisito}</div>}
-                            </div>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                              <thead>
-                                <tr>
-                                  {['NOMBRE','TÍTULO','POSGRADO','CONTRATANTE','F. INICIO','F. FIN','PLAZO','OBSERVACIONES','CUMPLE'].map(h => (
-                                    <th key={h} style={thH}>{h}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {prof.miembros.map((m: any, i: number) => (
-                                  <tr key={i}>
-                                    <td style={{ ...tdH, textAlign: 'left' }}>{m.nombre || '—'}</td>
-                                    <td style={tdH}>{m.titulo || '—'}</td>
-                                    <td style={tdH}>{m.posgrado || '—'}</td>
-                                    <td style={tdH}>{m.contratante || '—'}</td>
-                                    <td style={tdH}>{m.fecha_inicio || '—'}</td>
-                                    <td style={tdH}>{m.fecha_fin || '—'}</td>
-                                    <td style={tdH}>{m.plazo_total || '—'}</td>
-                                    <td style={{ ...tdH, textAlign: 'left' }}>{m.observaciones || '—'}</td>
-                                    <td style={{ ...tdH, fontWeight: 'bold', background: m.cumple === 'SI' ? '#86EFAC' : m.cumple === 'NO' ? '#FCA5A5' : '#E5E7EB' }}>{m.cumple || 'SI'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )
-                      ))}
-
-                      {/* Otros criterios */}
-                      {hasOC && (
-                        <div style={{ marginBottom: 14 }}>
-                          <div style={{ background: '#F04B23', color: '#fff', padding: '6px 12px', fontWeight: 'bold', fontSize: 10 }}>
-                            OTROS CRITERIOS
-                            {det_h.otros_criterios.requisito && <div style={{ fontWeight: 400, fontSize: 9, marginTop: 2 }}>{det_h.otros_criterios.requisito}</div>}
-                          </div>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <tbody>
-                              {det_h.otros_criterios.filas.map((f: any, i: number) => (
-                                <tr key={i} style={{ background: '#f8fafc' }}>
-                                  <td style={{ ...tdH, textAlign: 'left', width: '75%' }}>{f.detalle || '—'}</td>
-                                  <td style={{ ...tdH, fontWeight: 'bold', background: f.cumple === 'SI' ? '#86EFAC' : f.cumple === 'NO' ? '#FCA5A5' : '#E5E7EB' }}>
-                                    {f.cumple || 'SI'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
 
                 {/* PIE DE PÁGINA */}
                 <div style={{ marginTop: 20, borderTop: '1px solid #E5E7EB', paddingTop: 8, fontSize: 8, color: '#9CA3AF', textAlign: 'center' }}>
@@ -1579,391 +1361,117 @@ export function CalificacionProponentes({ solicitudId, onBack, onOpenDocumentos,
         </div>
         {/* ===== FIN TEMPLATE PDF ===== */}
 
-        {/* MODAL DETALLE HABILITANTES (IMAGEN EXCEL) */}
-        {proponenteAbiertoDetalle && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg w-full max-w-6xl max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-                <h2 className="text-xl font-bold text-gray-800">Verificación Habilitante Detallada - Proponente {proponenteAbiertoDetalle}</h2>
-                <button onClick={() => setProponenteAbiertoDetalle(null)} className="text-gray-500 hover:text-black">Cerrar</button>
-              </div>
-              <div className="p-6 space-y-12">
-                {(() => {
-                  const pNum = proponenteAbiertoDetalle;
-                  const det = calificaciones[String(pNum)]?.habilitante_detalle || {
-                    experiencia: { requisito: '', certificaciones: [] },
-                    equipo: { director: { requisito: '', miembros: [] }, otros: [] },
-                    otros_criterios: { requisito: '', filas: [] }
-                  };
+        {/* MODAL: EXPERIENCIA Y ACADÉMICOS — solo lectura, lo diligencia el Supervisor */}
+        {proponenteAbiertoDetalle && (() => {
+          const pNum = proponenteAbiertoDetalle;
+          const p = proponentesVista.find((pp: any) => pp.numero === pNum);
+          const det = supervisorEval?.calificaciones?.find((c: any) => Number(c?.numero) === Number(pNum))?.habilitante_detalle;
+          const esEmpresa = p?.tipo_persona === 'empresa';
+          const thMini: React.CSSProperties = { border: '1px solid #9CA3AF', padding: '4px 6px', fontSize: 9, fontWeight: 700, textAlign: 'center', background: '#f8fafc' };
+          const tdMini: React.CSSProperties = { border: '1px solid #9CA3AF', padding: '4px 6px', fontSize: 10, textAlign: 'center' };
+          return (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg w-full max-w-4xl max-h-[85vh] overflow-y-auto shadow-2xl">
+                <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                  <h2 className="text-lg font-bold text-gray-800">Experiencia y académicos — Proponente {pNum} <span className="text-xs font-normal text-gray-400">(diligenciado por el Supervisor)</span></h2>
+                  <button onClick={() => setProponenteAbiertoDetalle(null)} className="text-gray-500 hover:text-black">Cerrar</button>
+                </div>
+                <div className="p-6 space-y-6">
+                  {!det && <p className="text-sm text-gray-400 italic">El Supervisor aún no ha registrado experiencia ni académicos para este proponente.</p>}
 
-                  const thMini: React.CSSProperties = { ...thCell, background: '#f8fafc', fontSize: 10, padding: '4px' };
-                  const tdMini: React.CSSProperties = { ...tdCell, padding: '4px', fontSize: 10 };
-
-                  return (
-                    <div style={{ fontFamily: 'Arial, sans-serif' }}>
-                      {/* EXPERIENCIA DEL PROPONENTE */}
-                      <div className="mb-8">
-                        <div style={{ ...orangeBar, background: '#F04B23', textAlign: 'left', padding: '10px 15px', fontWeight: 'bold' }}>
-                          EXPERIENCIA DEL PROPONENTE
-                          <input 
-                            placeholder="Describir el requisito de experiencia habilitante solicitado en el TDR..." 
-                            className="block w-full mt-1 bg-white/20 text-white placeholder:text-white/60 p-1 border-none outline-none font-normal text-xs"
-                            value={det.experiencia.requisito}
-                            onChange={e => updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, requisito: e.target.value } }))}
-                          />
-                        </div>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr>
-                              <th style={thMini}>ID</th>
-                              <th style={thMini}>CONTRATANTE</th>
-                              <th style={thMini}>CONTRATISTA</th>
-                              <th style={thMini}>OBJETO</th>
-                              <th style={thMini}>VALOR</th>
-                              <th style={thMini}>FECHA INICIO</th>
-                              <th style={thMini}>FECHA FIN</th>
-                              <th style={thMini}>PLAZO TOTAL</th>
-                              <th style={thMini}>OBSERVACIONES</th>
-                              <th style={thMini}>CUMPLE</th>
-                              <th style={{ ...thMini, width: 40 }}></th>
+                  {det?.experiencia?.certificaciones?.length > 0 && (
+                    <div>
+                      <p className="font-bold text-gray-500 mb-2 text-xs uppercase">Experiencia del proponente</p>
+                      {det.experiencia.requisito && <p className="text-xs text-gray-500 italic mb-2">{det.experiencia.requisito}</p>}
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>{['Contratante', 'Objeto', 'Valor', 'Plazo', 'Cumple'].map(h => <th key={h} style={thMini}>{h}</th>)}</tr>
+                        </thead>
+                        <tbody>
+                          {det.experiencia.certificaciones.map((c: any, i: number) => (
+                            <tr key={i}>
+                              <td style={{ ...tdMini, textAlign: 'left' }}>{c.contratante || '—'}</td>
+                              <td style={{ ...tdMini, textAlign: 'left' }}>{c.objeto || '—'}</td>
+                              <td style={tdMini}>{c.valor || '—'}</td>
+                              <td style={tdMini}>{c.plazo_total || '—'}</td>
+                              <td style={{ ...tdMini, fontWeight: 'bold' }}>{c.cumple || 'SI'}</td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {det.experiencia.certificaciones.map((c, i) => (
-                              <tr key={i}>
-                                <td style={tdMini}>CERTIFICACIÓN {i+1}</td>
-                                <td style={tdMini}><input className="w-full border-none outline-none" value={c.contratante} onChange={e => {
-                                  const list = [...det.experiencia.certificaciones];
-                                  list[i].contratante = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                }} /></td>
-                                <td style={tdMini}><input className="w-full border-none outline-none" value={c.contratista} onChange={e => {
-                                  const list = [...det.experiencia.certificaciones];
-                                  list[i].contratista = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                }} /></td>
-                                <td style={tdMini}><input className="w-full border-none outline-none" value={c.objeto} onChange={e => {
-                                  const list = [...det.experiencia.certificaciones];
-                                  list[i].objeto = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                }} /></td>
-                                <td style={tdMini}><input className="w-full border-none outline-none" value={c.valor} onChange={e => {
-                                  const list = [...det.experiencia.certificaciones];
-                                  list[i].valor = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                }} /></td>
-                                <td style={tdMini}><input type="date" className="w-full border-none outline-none" value={c.fecha_inicio} onChange={e => {
-                                  const list = [...det.experiencia.certificaciones];
-                                  list[i].fecha_inicio = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                }} /></td>
-                                <td style={tdMini}><input type="date" className="w-full border-none outline-none" value={c.fecha_fin} onChange={e => {
-                                  const list = [...det.experiencia.certificaciones];
-                                  list[i].fecha_fin = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                }} /></td>
-                                <td style={tdMini}><input className="w-full border-none outline-none" value={c.plazo_total} onChange={e => {
-                                  const list = [...det.experiencia.certificaciones];
-                                  list[i].plazo_total = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                }} /></td>
-                                <td style={tdMini}><input className="w-full border-none outline-none" value={c.observaciones} onChange={e => {
-                                  const list = [...det.experiencia.certificaciones];
-                                  list[i].observaciones = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                }} /></td>
-                                <td style={tdMini}>
-                                  <select className="border-none outline-none font-bold" value={c.cumple} onChange={e => {
-                                    const list = [...det.experiencia.certificaciones];
-                                    list[i].cumple = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                  }}>
-                                    <option>SI</option><option>NO</option><option>N/A</option>
-                                  </select>
-                                </td>
-                                <td style={tdMini}>
-                                  <button onClick={() => {
-                                    const list = det.experiencia.certificaciones.filter((_, idx) => idx !== i);
-                                    updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                                  }} className="text-red-500 font-bold">X</button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <button 
-                          onClick={() => {
-                            const list = [...det.experiencia.certificaciones, { contratante: '', contratista: '', objeto: '', valor: '', fecha_inicio: '', fecha_fin: '', plazo_total: '', observaciones: '', cumple: 'SI' }];
-                            updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: list } }));
-                          }}
-                          className="mt-2 text-xs text-blue-600 font-bold underline"
-                        >
-                          + Agregar Certificación
-                        </button>
-                      </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
-                      {/* EQUIPO DE TRABAJO */}
-                      <div className="mb-8">
-                        <div style={{ background: '#F04B23', color: '#fff', textAlign: 'center', fontWeight: 'bold', padding: '8px', fontSize: 14 }}>
-                          EQUIPO DE TRABAJO
-                        </div>
-                        
-                        {/* DIRECTOR */}
-                        <div className="mt-4">
-                          <div style={{ ...orangeBar, background: '#F04B23', textAlign: 'left', padding: '6px 15px', fontSize: 11 }}>
-                            DIRECTOR DEL PROYECTO
-                            <input 
-                              placeholder="Describir el requisito de experiencia habilitante solicitado en el TDR..." 
-                              className="block w-full mt-1 bg-white/20 text-white placeholder:text-white/60 p-1 border-none outline-none font-normal text-[10px]"
-                              value={det.equipo.director.requisito}
-                              onChange={e => updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, requisito: e.target.value } } }))}
-                            />
-                          </div>
+                  {esEmpresa ? (
+                    <>
+                      {det?.academico?.equipo?.director?.miembros?.length > 0 && (
+                        <div>
+                          <p className="font-bold text-gray-500 mb-2 text-xs uppercase">Director del proyecto</p>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
-                              <tr>
-                                <th style={thMini}>NOMBRE DEL PROFESIONAL PRESENTADO</th>
-                                <th style={thMini}>TÍTULO</th>
-                                <th style={thMini}>POSGRADO</th>
-                                <th style={thMini}>CONTRATANTE</th>
-                                <th style={thMini}>FECHA INICIO</th>
-                                <th style={thMini}>FECHA FIN</th>
-                                <th style={thMini}>PLAZO TOTAL</th>
-                                <th style={thMini}>OBSERVACIONES</th>
-                                <th style={thMini}>CUMPLE</th>
-                              </tr>
+                              <tr>{['Nombre', 'Título', 'Posgrado', 'Cumple'].map(h => <th key={h} style={thMini}>{h}</th>)}</tr>
                             </thead>
                             <tbody>
-                              {det.equipo.director.miembros.map((m, i) => (
+                              {det.academico.equipo.director.miembros.map((m: any, i: number) => (
                                 <tr key={i}>
-                                  <td style={tdMini}><input className="w-full border-none outline-none" value={m.nombre} onChange={e => {
-                                    const list = [...det.equipo.director.miembros];
-                                    list[i].nombre = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                  }} /></td>
-                                  <td style={tdMini}><input className="w-full border-none outline-none" value={m.titulo} onChange={e => {
-                                    const list = [...det.equipo.director.miembros];
-                                    list[i].titulo = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                  }} /></td>
-                                  <td style={tdMini}><input className="w-full border-none outline-none" value={m.posgrado} onChange={e => {
-                                    const list = [...det.equipo.director.miembros];
-                                    list[i].posgrado = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                  }} /></td>
-                                  <td style={tdMini}><input className="w-full border-none outline-none" value={m.contratante} onChange={e => {
-                                    const list = [...det.equipo.director.miembros];
-                                    list[i].contratante = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                  }} /></td>
-                                  <td style={tdMini}><input type="date" className="w-full border-none outline-none" value={m.fecha_inicio} onChange={e => {
-                                    const list = [...det.equipo.director.miembros];
-                                    list[i].fecha_inicio = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                  }} /></td>
-                                  <td style={tdMini}><input type="date" className="w-full border-none outline-none" value={m.fecha_fin} onChange={e => {
-                                    const list = [...det.equipo.director.miembros];
-                                    list[i].fecha_fin = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                  }} /></td>
-                                  <td style={tdMini}><input className="w-full border-none outline-none" value={m.plazo_total} onChange={e => {
-                                    const list = [...det.equipo.director.miembros];
-                                    list[i].plazo_total = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                  }} /></td>
-                                  <td style={tdMini}><input className="w-full border-none outline-none" value={m.observaciones} onChange={e => {
-                                    const list = [...det.equipo.director.miembros];
-                                    list[i].observaciones = e.target.value;
-                                    updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                  }} /></td>
-                                  <td style={tdMini}>
-                                    <select className="border-none outline-none font-bold" value={m.cumple} onChange={e => {
-                                      const list = [...det.equipo.director.miembros];
-                                      list[i].cumple = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, director: { ...old.equipo.director, miembros: list } } }));
-                                    }}>
-                                      <option>SI</option><option>NO</option><option>N/A</option>
-                                    </select>
-                                  </td>
+                                  <td style={{ ...tdMini, textAlign: 'left' }}>{m.nombre || '—'}</td>
+                                  <td style={tdMini}>{m.titulo || '—'}</td>
+                                  <td style={tdMini}>{m.posgrado || '—'}</td>
+                                  <td style={{ ...tdMini, fontWeight: 'bold' }}>{m.cumple || 'SI'}</td>
                                 </tr>
                               ))}
                             </tbody>
                           </table>
                         </div>
-
-                        {/* PROFESIONALES ADICIONALES */}
-                        {det.equipo.otros.map((prof, pi) => (
-                          <div className="mt-6" key={prof.id}>
-                            <div style={{ ...orangeBar, background: '#F04B23', textAlign: 'left', padding: '6px 15px', fontSize: 11 }}>
-                              PROFESIONAL {pi+1}: <input value={prof.titulo_perfil} onChange={e => {
-                                const list = [...det.equipo.otros];
-                                list[pi].titulo_perfil = e.target.value;
-                                updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                              }} className="bg-transparent border-b border-white outline-none" />
-                              <input 
-                                placeholder="Describir los perfiles requeridos como equipo de trabajo..." 
-                                className="block w-full mt-1 bg-white/20 text-white placeholder:text-white/60 p-1 border-none outline-none font-normal text-[10px]"
-                                value={prof.requisito}
-                                onChange={e => {
-                                  const list = [...det.equipo.otros];
-                                  list[pi].requisito = e.target.value;
-                                  updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                }}
-                              />
-                            </div>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                              <thead>
-                                <tr>
-                                  <th style={thMini}>NOMBRE DEL PROFESIONAL PRESENTADO</th>
-                                  <th style={thMini}>TÍTULO</th>
-                                  <th style={thMini}>POSGRADO</th>
-                                  <th style={thMini}>CONTRATANTE</th>
-                                  <th style={thMini}>FECHA INICIO</th>
-                                  <th style={thMini}>FECHA FIN</th>
-                                  <th style={thMini}>PLAZO TOTAL</th>
-                                  <th style={thMini}>OBSERVACIONES</th>
-                                  <th style={thMini}>CUMPLE</th>
-                                  <th style={{ ...thMini, width: 30 }}></th>
+                      )}
+                      {(det?.academico?.equipo?.otros || []).filter((o: any) => o.miembros?.length > 0).map((perfil: any, pi: number) => (
+                        <div key={perfil.id || pi}>
+                          <p className="font-bold text-gray-500 mb-2 text-xs uppercase">{perfil.titulo_perfil || `Perfil ${pi + 1}`}</p>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>{['Nombre', 'Título', 'Posgrado', 'Cumple'].map(h => <th key={h} style={thMini}>{h}</th>)}</tr>
+                            </thead>
+                            <tbody>
+                              {perfil.miembros.map((m: any, i: number) => (
+                                <tr key={i}>
+                                  <td style={{ ...tdMini, textAlign: 'left' }}>{m.nombre || '—'}</td>
+                                  <td style={tdMini}>{m.titulo || '—'}</td>
+                                  <td style={tdMini}>{m.posgrado || '—'}</td>
+                                  <td style={{ ...tdMini, fontWeight: 'bold' }}>{m.cumple || 'SI'}</td>
                                 </tr>
-                              </thead>
-                              <tbody>
-                                {prof.miembros.map((m, i) => (
-                                  <tr key={i}>
-                                    <td style={tdMini}><input className="w-full border-none outline-none" value={m.nombre} onChange={e => {
-                                      const list = [...det.equipo.otros];
-                                      list[pi].miembros[i].nombre = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                    }} /></td>
-                                    <td style={tdMini}><input className="w-full border-none outline-none" value={m.titulo} onChange={e => {
-                                      const list = [...det.equipo.otros];
-                                      list[pi].miembros[i].titulo = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                    }} /></td>
-                                    <td style={tdMini}><input className="w-full border-none outline-none" value={m.posgrado} onChange={e => {
-                                      const list = [...det.equipo.otros];
-                                      list[pi].miembros[i].posgrado = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                    }} /></td>
-                                    <td style={tdMini}><input className="w-full border-none outline-none" value={m.contratante} onChange={e => {
-                                      const list = [...det.equipo.otros];
-                                      list[pi].miembros[i].contratante = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                    }} /></td>
-                                    <td style={tdMini}><input type="date" className="w-full border-none outline-none" value={m.fecha_inicio} onChange={e => {
-                                      const list = [...det.equipo.otros];
-                                      list[pi].miembros[i].fecha_inicio = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                    }} /></td>
-                                    <td style={tdMini}><input type="date" className="w-full border-none outline-none" value={m.fecha_fin} onChange={e => {
-                                      const list = [...det.equipo.otros];
-                                      list[pi].miembros[i].fecha_fin = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                    }} /></td>
-                                    <td style={tdMini}><input className="w-full border-none outline-none" value={m.plazo_total} onChange={e => {
-                                      const list = [...det.equipo.otros];
-                                      list[pi].miembros[i].plazo_total = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                    }} /></td>
-                                    <td style={tdMini}><input className="w-full border-none outline-none" value={m.observaciones} onChange={e => {
-                                      const list = [...det.equipo.otros];
-                                      list[pi].miembros[i].observaciones = e.target.value;
-                                      updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                    }} /></td>
-                                    <td style={tdMini}>
-                                      <select className="border-none outline-none font-bold" value={m.cumple} onChange={e => {
-                                        const list = [...det.equipo.otros];
-                                        list[pi].miembros[i].cumple = e.target.value;
-                                        updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                      }}>
-                                        <option>SI</option><option>NO</option><option>N/A</option>
-                                      </select>
-                                    </td>
-                                    <td style={tdMini}>
-                                      <button onClick={() => {
-                                        const list = [...det.equipo.otros];
-                                        list[pi].miembros = list[pi].miembros.filter((_, idx) => idx !== i);
-                                        updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                                      }} className="text-red-500 font-bold">X</button>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            <button 
-                              onClick={() => {
-                                const list = [...det.equipo.otros];
-                                list[pi].miembros.push({ nombre: '', titulo: '', posgrado: '', contratante: '', fecha_inicio: '', fecha_fin: '', plazo_total: '', observaciones: '', cumple: 'SI' });
-                                updateHabilitante(pNum, old => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                              }}
-                              className="mt-1 text-[10px] text-blue-600 font-bold underline"
-                            >
-                              + Agregar Integrante a este perfil
-                            </button>
-                          </div>
-                        ))}
-                        <button 
-                          onClick={() => {
-                            const list = [...det.equipo.otros, { id: Math.random().toString(36).substring(2, 9), titulo_perfil: 'NUEVO PERFIL', requisito: '', miembros: [] }];
-                            updateHabilitante(pNum, (old: any) => ({ ...old, equipo: { ...old.equipo, otros: list } }));
-                          }}
-                          className="mt-4 text-xs bg-slate-100 p-2 rounded border border-slate-300 font-bold"
-                        >
-                          + Agregar Otro Perfil de Equipo
-                        </button>
-                      </div>
-
-                      {/* OTROS CRITERIOS */}
-                      <div className="mb-8">
-                        <div style={{ ...orangeBar, background: '#F04B23', textAlign: 'left', padding: '10px 15px', fontWeight: 'bold' }}>
-                          OTROS CRITERIOS
-                          <input 
-                            placeholder="Describir los otros criterios habilitantes..." 
-                            className="block w-full mt-1 bg-white/20 text-white placeholder:text-white/60 p-1 border-none outline-none font-normal text-xs"
-                            value={det.otros_criterios.requisito}
-                            onChange={e => updateHabilitante(pNum, old => ({ ...old, otros_criterios: { ...old.otros_criterios, requisito: e.target.value } }))}
-                          />
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <tbody>
-                            <tr style={{ background: '#f8fafc' }}>
-                              <td style={tdMini} className="font-bold w-48">VALOR / DETALLE</td>
-                              <td style={tdMini}><input className="w-full border-none outline-none" value={det.otros_criterios.filas[0]?.detalle || ''} onChange={e => {
-                                const filas = [{ detalle: e.target.value }];
-                                updateHabilitante(pNum, old => ({ ...old, otros_criterios: { ...old.otros_criterios, filas } }));
-                              }} /></td>
-                              <td style={{ ...tdMini, width: 100 }}>
-                                 <select 
-                                   className="border-none outline-none font-bold bg-transparent w-full text-center"
-                                   value={det.otros_criterios.filas[0]?.cumple || 'SI'}
-                                   onChange={e => {
-                                     const filas = [{ ...det.otros_criterios.filas[0], cumple: e.target.value }];
-                                     updateHabilitante(pNum, (old: any) => ({ ...old, otros_criterios: { ...old.otros_criterios, filas } }));
-                                   }}
-                                 >
-                                    <option>SI</option><option>NO</option><option>N/A</option>
-                                 </select>
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="text-[10px] text-gray-400 italic space-y-1 mt-10 border-t pt-4">
-                        <p>Instructivo de diligenciamiento:</p>
-                        <p>(i) Se debe diligenciar un cuadro por cada proponente que se haya presentado.</p>
-                        <p>(ii) Los criterios habilitantes se deberán ajustar a los requerido en cada Término de Referencia.</p>
-                      </div>
+                      ))}
+                    </>
+                  ) : det?.academico?.personaNatural?.titulo && (
+                    <div>
+                      <p className="font-bold text-gray-500 mb-2 text-xs uppercase">Académicos del proponente (persona natural)</p>
+                      {det.academico.personaNatural.requisito && <p className="text-xs text-gray-500 italic mb-2">{det.academico.personaNatural.requisito}</p>}
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>{['Título', 'Posgrado', 'Observaciones', 'Cumple'].map(h => <th key={h} style={thMini}>{h}</th>)}</tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td style={{ ...tdMini, textAlign: 'left' }}>{det.academico.personaNatural.titulo || '—'}</td>
+                            <td style={{ ...tdMini, textAlign: 'left' }}>{det.academico.personaNatural.posgrado || '—'}</td>
+                            <td style={{ ...tdMini, textAlign: 'left' }}>{det.academico.personaNatural.observaciones || '—'}</td>
+                            <td style={{ ...tdMini, fontWeight: 'bold' }}>{det.academico.personaNatural.cumple || 'SI'}</td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
-                  );
-                })()}
-              </div>
-              <div className="p-4 border-t flex justify-end gap-2 sticky bottom-0 bg-white">
-                <button onClick={() => setProponenteAbiertoDetalle(null)} className="bg-gray-100 px-6 py-2 rounded font-bold">Cerrar y Volver al Excel</button>
-                <button onClick={guardar} className="bg-red-600 text-white px-6 py-2 rounded font-bold">Guardar Cambios</button>
+                  )}
+                </div>
+                <div className="p-4 border-t flex justify-end sticky bottom-0 bg-white">
+                  <button onClick={() => setProponenteAbiertoDetalle(null)} className="bg-gray-100 px-6 py-2 rounded font-bold">Cerrar</button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

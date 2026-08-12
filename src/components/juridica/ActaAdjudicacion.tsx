@@ -105,17 +105,22 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
   // MUST be before any conditional returns (Rules of Hooks)
   useEffect(() => {
     if (!data) return;
-    const invs: any[] = data.proponentes || [];
-    const cals: any[] = data.evaluacion?.calificaciones || [];
-    let g: any = null;
-    let ms = -Infinity;
-    invs.forEach((p: any) => {
-      const cal = cals.find((c: any) => Number(c.numero) === Number(p.numero));
-      const score = Number(cal?.total) || 0;
-      if (score > ms) { ms = score; g = p; }
-    });
-    if (!g && invs.length > 0) g = invs[0];
     const ev = data.evaluacion || {};
+    const invs: any[] = (data.proponentes || []).filter((p: any) => p.completo_fase1);
+    // Prioridad: elección explícita de Jurídica (ganador_email) — luego mayor puntaje del Supervisor.
+    let g: any = ev.ganador_email
+      ? invs.find((p: any) => String(p.email || '').toLowerCase() === String(ev.ganador_email).toLowerCase()) || null
+      : null;
+    if (!g) {
+      const cals: any[] = ev.supervisor?.calificaciones || [];
+      let ms = -Infinity;
+      invs.forEach((p: any) => {
+        const cal = cals.find((c: any) => Number(c.numero) === Number(p.numero));
+        const score = Number(cal?.total) || 0;
+        if (score > ms) { ms = score; g = p; }
+      });
+    }
+    if (!g && invs.length > 0) g = invs[0];
     setCcEditable(g?.cedula_nit || ev.cc_recomendado || '');
     setCcGuardado(false);
     // Pre-poblar firmantes con nombres guardados en la calificación
@@ -248,18 +253,39 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
 
   const solicitud = data.solicitud || {};
   const evaluacion = data.evaluacion || {};
+  const evaluacionSupervisor = evaluacion.supervisor || {};
 
-  // Backend ya deduplica por email — se usa directamente
-  const invitados: any[] = data.proponentes || [];
+  // El acta solo debe listar a quienes efectivamente se inscribieron en el link público
+  // de la Fase 1 (RA1-4) — no a todo el que Jurídica haya invitado originalmente.
+  const invitados: any[] = (data.proponentes || []).filter((inv: any) => inv.completo_fase1);
 
-  const configPuntajes = evaluacion.config_puntajes || {};
+  // Los puntajes son responsabilidad exclusiva del Supervisor (Jurídica solo revisa
+  // el cumplimiento legal/experiencia/académico) — el acta debe leer sus criterios reales,
+  // incluyendo cualquiera que haya agregado con "+ Agregar otro".
+  const configPuntajesRaw = evaluacionSupervisor.config_puntajes;
+  const configPuntajes: { id: string; label: string; max: number }[] = Array.isArray(configPuntajesRaw) && configPuntajesRaw.length
+    ? configPuntajesRaw
+    : (configPuntajesRaw && typeof configPuntajesRaw === 'object'
+      ? Object.entries(configPuntajesRaw).filter(([, v]: any) => v?.enabled).map(([key, v]: any) => ({ id: key, label: v.label, max: Number(v.max) || 0 }))
+      : []);
+  const calificacionesSupervisor: any[] = Array.isArray(evaluacionSupervisor.calificaciones) ? evaluacionSupervisor.calificaciones : [];
+  // Compatibilidad con evaluaciones del supervisor guardadas antes de tener puntajes dinámicos.
+  const puntajesSupervisorDe = (c: any): Record<string, number> => {
+    if (c?.puntajes && Object.keys(c.puntajes).length) return c.puntajes;
+    const map: Record<string, number> = {};
+    ['propuesta_economica', 'experiencia_adicional', 'experiencia_trabajo', 'otros_criterios_puntos'].forEach(k => {
+      if (c?.[k]) map[k] = Number(c[k]);
+    });
+    return map;
+  };
+  // El checklist de cumplimiento (legal/experiencia/académico) sigue siendo de Jurídica.
   const calificaciones: any[] = evaluacion.calificaciones || [];
 
   // Proponentes en el acta = solo los que enviaron su información (respondida = true)
   const proponentes = invitados.filter((inv: any) => inv.respondida);
 
-  // Ganador: primero por email guardado (estable aunque cambien los índices),
-  // luego por mayor puntaje en calificaciones, luego primer invitado.
+  // Ganador: primero por email guardado (estable aunque cambien los índices) — es la elección
+  // explícita de Jurídica — luego por mayor puntaje del Supervisor, luego primer invitado.
   let ganador: any = null;
   if (evaluacion.ganador_email) {
     ganador = invitados.find((p: any) =>
@@ -269,7 +295,7 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
   if (!ganador) {
     let maxScore = -Infinity;
     invitados.forEach((p: any) => {
-      const cal = calificaciones.find((c: any) => Number(c.numero) === Number(p.numero));
+      const cal = calificacionesSupervisor.find((c: any) => Number(c.numero) === Number(p.numero));
       const score = Number(cal?.total) || 0;
       if (score > maxScore) { maxScore = score; ganador = { ...p, score }; }
     });
@@ -491,7 +517,9 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
         </div>
 
         <div className="mb-6 text-xs leading-relaxed space-y-3">
-          <p><span className="font-bold">Nombre de Invitación:</span> <span className="underline uppercase">{solicitud.codigo} - {solicitud.objeto}</span></p>
+          <p><span className="font-bold">Nombre de Invitación:</span> <span className="underline uppercase">{solicitud.codigo} - {solicitud.titulo_contrato || solicitud.objeto}</span></p>
+          <p className="font-bold">Título del contrato:</p>
+          <p className="uppercase font-bold">{solicitud.titulo_contrato || solicitud.objeto}</p>
           <p className="font-bold">Objeto de la invitación:</p>
           <p className="uppercase">{solicitud.objeto}</p>
         </div>
@@ -560,15 +588,16 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
               })}
             </tr>
 
-            {/* Factores configurados */}
-            {Object.entries(configPuntajes).filter(([_, conf]: [string, any]) => conf.enabled).map(([key, conf]: [string, any], i: number) => (
-              <tr key={key}>
+            {/* Criterios de puntaje — los define y califica el Supervisor (incluye cualquier
+                criterio adicional agregado con "+ Agregar otro") */}
+            {configPuntajes.map((conf, i: number) => (
+              <tr key={conf.id}>
                 <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>{i + 2}</td>
-                <td style={{ ...tdStyle, backgroundColor: '#1d4ed8', color: '#fff', fontWeight: 'bold', textAlign: 'center', textTransform: 'uppercase' }}>{conf.label}</td>
+                <td style={{ ...tdStyle, backgroundColor: '#1d4ed8', color: '#fff', fontWeight: 'bold', textAlign: 'center', textTransform: 'uppercase' }}>{conf.label || 'Sin nombre'}</td>
                 <td style={{ ...tdStyle, textAlign: 'center', fontStyle: 'italic' }}>{conf.max} puntos</td>
                 {proponentes.map((p: any, idx: number) => {
-                  const cal = calificaciones.find((c: any) => Number(c.numero) === Number(p.numero));
-                  const score = cal?.[key] || 0;
+                  const cal = calificacionesSupervisor.find((c: any) => Number(c.numero) === Number(p.numero));
+                  const score = puntajesSupervisorDe(cal)[conf.id] || 0;
                   const pts = ((score * conf.max) / 100).toFixed(1);
                   return <td key={idx} style={{ ...tdStyle, textAlign: 'center' }}>{pts}</td>;
                 })}
@@ -576,9 +605,9 @@ export function ActaAdjudicacion({ solicitudId, onBack }: Props) {
             ))}
 
             <tr>
-              <td colSpan={3} style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', backgroundColor: '#f3f4f6' }}>Puntaje total</td>
+              <td colSpan={3} style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', backgroundColor: '#f3f4f6' }}>Puntaje total (Supervisor)</td>
               {proponentes.map((p: any, idx: number) => {
-                const cal = calificaciones.find((c: any) => Number(c.numero) === Number(p.numero));
+                const cal = calificacionesSupervisor.find((c: any) => Number(c.numero) === Number(p.numero));
                 return <td key={idx} style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>{cal?.total || 0}</td>;
               })}
             </tr>

@@ -4,6 +4,7 @@ import {
   Lock, FileText, Building2, User, ShieldCheck, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { COLORES } from '../../styles/colores-corporativos';
+import { buscarTarifaCiiu } from '../../lib/ciiuTarifas';
 
 const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
 const FONT = "'Gabarito', sans-serif";
@@ -157,6 +158,15 @@ export function PostulacionPublica() {
     setProveedorReconocido(false);
   };
 
+  /* ── Al salir del campo CIIU: autocompletar Actividad económica y Tarifa
+       según la tabla oficial de tarifas por código CIIU. ── */
+  const handleCiiuBlur = () => {
+    const encontrado = buscarTarifaCiiu(ciiu);
+    if (!encontrado) return;
+    setActividadEconomica(encontrado.descripcion);
+    if (encontrado.t2024 != null) setTarifa(String(encontrado.t2024));
+  };
+
   /* ── Al salir del campo "Número de documento": buscar si ya se registró antes
        en otra convocatoria y, de encontrarlo, completar los campos vacíos. ── */
   const buscarProveedorPorDocumento = async () => {
@@ -232,7 +242,6 @@ export function PostulacionPublica() {
     if (!telefono.trim()) { setErrorEnvio('El teléfono es obligatorio.'); return; }
     if (!tipoDocumento.trim()) { setErrorEnvio('El tipo de documento es obligatorio.'); return; }
     if (!domicilio.trim()) { setErrorEnvio('El domicilio es obligatorio.'); return; }
-    if (!paginaWeb.trim()) { setErrorEnvio('La página web es obligatoria.'); return; }
 
     if (!esPersona) {
       if (!representanteLegalNombre.trim() || !representanteLegalTipoId.trim() || !representanteLegalIdentificacion.trim() || !representanteLegalDireccion.trim()) {
@@ -596,7 +605,7 @@ export function PostulacionPublica() {
               </Campo>
             </Fila>
             <Fila>
-              <Campo label="Página web" minWidth={260}>
+              <Campo label="Página web (opcional)" minWidth={260}>
                 <input style={p.inputTabla} value={paginaWeb} onChange={e => setPaginaWeb(e.target.value)} placeholder="www.miempresa.com" />
               </Campo>
             </Fila>
@@ -635,7 +644,13 @@ export function PostulacionPublica() {
             <EncabezadoTabla>Datos tributarios</EncabezadoTabla>
             <Fila>
               <Campo label="CIIU" minWidth={180}>
-                <input style={p.inputTabla} value={ciiu} onChange={e => setCiiu(e.target.value)} placeholder="Ej: 7490" />
+                <input
+                  style={p.inputTabla}
+                  value={ciiu}
+                  onChange={e => setCiiu(e.target.value)}
+                  onBlur={handleCiiuBlur}
+                  placeholder="Ej: 7490"
+                />
               </Campo>
               <Campo label="Tarifa" minWidth={140}>
                 <input style={p.inputTabla} value={tarifa} onChange={e => setTarifa(e.target.value)} placeholder="Ej: 7,66" />

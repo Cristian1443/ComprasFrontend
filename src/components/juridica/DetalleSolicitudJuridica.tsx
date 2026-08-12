@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Loader2, CheckCircle2, XCircle, AlertTriangle,
-  Scale, Download, Clock,
+  Scale, Download, Clock, Info,
 } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
@@ -24,6 +24,7 @@ import {
   requiereFlujoSecuencial,
 } from '../../lib/flujoJuridico';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
+import { AMPAROS_GARANTIA, serializarGarantias, parsearGarantias } from '../../lib/garantias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -210,17 +211,58 @@ function ConceptoJuridicoEditable({
           />
         </div>
       </div>
-      <div style={rowStyle}>
-        <div style={labelCellStyle}>{n2} Garantías:</div>
-        <div style={valueCellStyle}>
-          <textarea
-            value={garantias}
-            onChange={e => setGarantias(e.target.value)}
-            rows={3} style={textareaJurStyle}
-            placeholder="Indique las garantías exigidas al contratista..."
-          />
-        </div>
-      </div>
+      {(() => {
+        const { seleccionadas, detalles } = parsearGarantias(garantias);
+        const toggleAmparo = (key: string) => {
+          const nuevas = seleccionadas.includes(key)
+            ? seleccionadas.filter(k => k !== key)
+            : [...seleccionadas, key];
+          setGarantias(serializarGarantias(nuevas, detalles));
+        };
+        return (
+          <div style={rowStyle}>
+            <div style={labelCellStyle}>{n2} Garantías:</div>
+            <div style={valueCellStyle}>
+              <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE', marginBottom: 14 }}>
+                <Info size={15} color="#1D4ED8" style={{ flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: '0.78rem', color: '#1e3a5f', margin: 0, lineHeight: 1.5 }}>
+                  Según el Manual de Procedimientos (num. 6.1), se debe constituir garantía cuando: la cuantía exceda los 25 SMLMV (incluido IVA); se trate de un contrato de obra; o cuando, conforme al análisis de riesgo del MA-SIG-01 (Manual de Gestión del Riesgo) o el que aplique en su versión vigente, sea necesario constituirlas, dejando constancia de ello en el contrato.
+                </p>
+              </div>
+
+              <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#374151', margin: '0 0 8px' }}>
+                Seleccione las garantías (amparos) exigidas al contratista, según el caso:
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {AMPAROS_GARANTIA.map(a => (
+                  <label key={a.key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={seleccionadas.includes(a.key)}
+                      onChange={() => toggleAmparo(a.key)}
+                      style={{ marginTop: 3, width: 15, height: 15, accentColor: '#2f6fa3', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1F2937' }}>{a.label}</span>
+                      <p style={{ fontSize: '0.72rem', color: '#6B7280', margin: '2px 0 0', fontStyle: 'italic' }}>{a.hint}</p>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: '#374151', margin: '0 0 6px' }}>Detalles adicionales (opcional):</p>
+                <textarea
+                  value={detalles}
+                  onChange={e => setGarantias(serializarGarantias(seleccionadas, e.target.value))}
+                  rows={2} style={textareaJurStyle}
+                  placeholder="Precisiones adicionales sobre las garantías (montos exactos, aseguradora, condiciones particulares)..."
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <div style={{ ...rowStyle, borderBottom: tieneRiesgos === 'si' ? '1px solid #e5e7eb' : 'none' }}>
         <div style={labelCellStyle}>{n3} ¿Tiene riesgos jurídicos?:</div>
         <div style={valueCellStyle}>

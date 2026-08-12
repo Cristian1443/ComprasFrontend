@@ -18,7 +18,11 @@ interface ArchivoSubido {
   subido_en: string;
 }
 
-type DocumentoRA14Key = 'rut' | 'camara_comercio' | 'cedula_rl' | 'sarlaft' | 'certificacion_bancaria';
+type DocumentoRA14Key = 'rut' | 'camara_comercio' | 'cedula_rl'
+  | 'redam' | 'antecedentes_fiscales' | 'antecedentes_disciplinarios' | 'antecedentes_judiciales'
+  | 'hoja_vida' | 'titulo_profesional' | 'certificaciones_laborales';
+
+type TipoObjetoContractual = 'bienes_servicios' | 'servicios_profesionales';
 
 interface DocumentoRA14 {
   tipo: DocumentoRA14Key;
@@ -32,11 +36,36 @@ interface DocumentoRA14 {
 
 const DOCUMENTOS_RA14: { tipo: DocumentoRA14Key; label: string }[] = [
   { tipo: 'rut', label: 'RUT' },
-  { tipo: 'camara_comercio', label: 'Cámara de comercio' },
-  { tipo: 'cedula_rl', label: 'Fotocopia cédula de ciudadanía' },
-  { tipo: 'sarlaft', label: 'SARLAFT' },
-  { tipo: 'certificacion_bancaria', label: 'Certificación bancaria' },
+  { tipo: 'cedula_rl', label: 'Cédula (persona natural / representante legal)' },
+  { tipo: 'camara_comercio', label: 'Certificado de existencia y representación legal (Cámara de comercio)' },
+  { tipo: 'redam', label: 'REDAM (Registro de Deudores Alimentarios Morosos)' },
+  { tipo: 'antecedentes_fiscales', label: 'Antecedentes fiscales' },
+  { tipo: 'antecedentes_disciplinarios', label: 'Antecedentes disciplinarios' },
+  { tipo: 'antecedentes_judiciales', label: 'Antecedentes judiciales' },
 ];
+
+// Documentos adicionales exigidos solo cuando la convocatoria es "Prestación de servicios profesionales"
+// (checklist oficial num. 2), según lo definido por Jurídica al crear la convocatoria.
+const DOCUMENTOS_RA14_SERVICIOS_PROFESIONALES: { tipo: DocumentoRA14Key; label: string }[] = [
+  { tipo: 'hoja_vida', label: 'Hoja de vida' },
+  { tipo: 'titulo_profesional', label: 'Título profesional' },
+  { tipo: 'certificaciones_laborales', label: 'Certificaciones laborales' },
+];
+
+// Documentos del checklist que solo aplican a proponentes tipo "empresa" (persona jurídica) —
+// el PDF oficial marca "Certificado de Existencia y Rep. Legal" como "(personas jurídicas)".
+const DOCUMENTOS_RA14_SOLO_EMPRESA: DocumentoRA14Key[] = ['camara_comercio'];
+
+function docsRequeridosRA14(tipoPersona?: 'persona' | 'empresa', tipoObjeto?: TipoObjetoContractual) {
+  let docs = DOCUMENTOS_RA14;
+  if (tipoPersona === 'persona') {
+    docs = docs.filter(d => !DOCUMENTOS_RA14_SOLO_EMPRESA.includes(d.tipo));
+  }
+  if (tipoObjeto === 'servicios_profesionales') {
+    docs = [...docs, ...DOCUMENTOS_RA14_SERVICIOS_PROFESIONALES];
+  }
+  return docs;
+}
 
 interface ConvocatoriaData {
   invitacion_id: string;
@@ -48,6 +77,8 @@ interface ConvocatoriaData {
   fecha_limite: string;
   solicitud_codigo: string;
   solicitud_objeto: string;
+  tipo_objeto?: TipoObjetoContractual;
+  tipo_persona?: 'persona' | 'empresa';
   documento_adjunto_url?: string | null;
   documento_adjunto_nombre?: string | null;
   ya_respondida: boolean;
@@ -295,7 +326,8 @@ export function RespuestaProponente() {
       setErrorEnvio('Completa todos los datos de tesorería (banco, sucursal, correo de contacto, tipo y número de cuenta).');
       return;
     }
-    for (const doc of DOCUMENTOS_RA14) {
+    const docsRequeridos = docsRequeridosRA14(data?.tipo_persona, data?.tipo_objeto);
+    for (const doc of docsRequeridos) {
       if (!documentosRA14.some(d => d.tipo === doc.tipo)) {
         setErrorEnvio(`Debes adjuntar el documento: ${doc.label}.`);
         return;
@@ -544,7 +576,7 @@ export function RespuestaProponente() {
               <h3 style={{ fontFamily: FONT, fontSize: 14, fontWeight: 800, color: '#1e293b', margin: 0 }}>Datos adjuntos</h3>
             </div>
             <div style={p.docsBox}>
-              {DOCUMENTOS_RA14.map(doc => (
+              {docsRequeridosRA14(data?.tipo_persona, data?.tipo_objeto).map(doc => (
                 <DocInputRA14
                   key={doc.tipo}
                   label={doc.label}
@@ -669,7 +701,7 @@ const p: Record<string, React.CSSProperties> = {
   loadText: { fontFamily: FONT, fontSize: 15, color: '#64748b', fontWeight: 600 },
   errorTitle: { fontFamily: FONT, fontSize: 22, fontWeight: 900, color: '#991B1B', margin: '0 0 8px' },
   errorText: { fontFamily: FONT, fontSize: 14, color: '#64748b', textAlign: 'center', maxWidth: 400 },
-  mainCard: { background: '#fff', borderRadius: 16, borderTop: `4px solid ${COLORES.primario}`, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 700, width: '100%', overflow: 'hidden' },
+  mainCard: { background: '#fff', borderRadius: 16, borderTop: `4px solid ${COLORES.primario}`, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: 900, width: '100%', overflow: 'hidden' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 28px', borderBottom: '1px solid #f1f5f9' },
   logoBadge: { fontFamily: FONT, fontSize: 16, fontWeight: 600, color: '#1e293b' },
   logoBold: { fontWeight: 900, color: COLORES.primario },

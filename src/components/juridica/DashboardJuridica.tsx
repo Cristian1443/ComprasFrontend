@@ -238,7 +238,7 @@ export function DashboardJuridica({
                           <span className="text-xs font-black" style={{ color: BRAND }}>{item.codigo}</span>
                           <EstadoBadge estado={item.estado} />
                         </div>
-                        <p className="text-sm font-semibold text-gray-700 truncate mt-0.5">{item.objeto || 'Sin objeto'}</p>
+                        <p className="text-sm font-semibold text-gray-700 truncate mt-0.5">{item.titulo_contrato || item.objeto || 'Sin objeto'}</p>
                         <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400 flex-wrap">
                           {item.solicitante_nombre && <span>{item.solicitante_nombre}</span>}
                           {getValor(item) && <><span>·</span><span className="font-semibold text-emerald-700">{getValor(item)}</span></>}

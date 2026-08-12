@@ -26,10 +26,15 @@ interface DocumentoProveedor {
 }
 const DOCUMENTO_PROVEEDOR_LABELS: Record<string, string> = {
   rut: 'RUT',
-  camara_comercio: 'Cámara de comercio',
-  cedula_rl: 'Fotocopia cédula de ciudadanía',
-  sarlaft: 'SARLAFT',
-  certificacion_bancaria: 'Certificación bancaria',
+  cedula_rl: 'Cédula (persona natural / representante legal)',
+  camara_comercio: 'Certificado de existencia y representación legal (Cámara de comercio)',
+  redam: 'REDAM (Registro de Deudores Alimentarios Morosos)',
+  antecedentes_fiscales: 'Antecedentes fiscales',
+  antecedentes_disciplinarios: 'Antecedentes disciplinarios',
+  antecedentes_judiciales: 'Antecedentes judiciales',
+  hoja_vida: 'Hoja de vida',
+  titulo_profesional: 'Título profesional',
+  certificaciones_laborales: 'Certificaciones laborales',
 };
 interface Invitacion {
   id?: string;
@@ -96,6 +101,7 @@ interface Convocatoria {
   creado_en: string;
   link_publico_activo?: boolean;
   tipo_proponente?: 'empresa' | 'persona';
+  tipo_objeto?: 'bienes_servicios' | 'servicios_profesionales';
   documento_adjunto_url?: string | null;
   documento_adjunto_nombre?: string | null;
 }
@@ -139,6 +145,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
   const [objetoSolicitud, setObjetoSolicitud] = useState('');
   const [descripcionPublica, setDescripcionPublica] = useState('');  // descripción visible en link público
   const [fechaLimiteRegistro, setFechaLimiteRegistro] = useState(enNDias(7));  // Fase 1: fecha cierre de registro
+  const [tipoObjeto, setTipoObjeto] = useState<'bienes_servicios' | 'servicios_profesionales'>('bienes_servicios');  // define documentos RA1-4 exigidos al proponente
 
   /* ─── Formulario crear — FASE 2 (opcional al crear, se puede dejar para después) ─── */
   const [requisitos, setRequisitos] = useState('');  // requisitos técnicos detallados (Fase 2)
@@ -159,6 +166,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
   const [enviandoMasivo, setEnviandoMasivo] = useState(false);
   const [resultadoMasivo, setResultadoMasivo] = useState<{ total: number; mensaje: string } | null>(null);
   const [fechaLimiteMasivo, setFechaLimiteMasivo] = useState('');  // fecha límite para propuestas en Fase 2
+  const [tipoObjetoMasivo, setTipoObjetoMasivo] = useState<'bienes_servicios' | 'servicios_profesionales'>('bienes_servicios');  // documentos RA1-4 exigidos al proponente
 
   /* ─── Ampliar plazo Fase 2 (después de enviar invitaciones) ─── */
   const [editandoFechaFase2, setEditandoFechaFase2] = useState(false);
@@ -251,6 +259,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
           ? detalleConv.fecha_limite.slice(0, 16)
           : enNDias(21)
       );
+      setTipoObjetoMasivo(detalleConv.tipo_objeto || 'bienes_servicios');
     }
   }, [detalleConv?.id]);
 
@@ -291,6 +300,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
         fecha_inicio: new Date().toISOString(),
         fecha_limite: fechaLimitePropuesta || null,
         fecha_limite_registro: fechaLimiteRegistro,
+        tipo_objeto: tipoObjeto,
         proponentes: propsFiltrados,
         creada_por: userEmail || 'juridica',
         documento_adjunto_url: docAdjunto?.url || null,
@@ -374,32 +384,24 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
     }
   };
 
-  /* Botón "Enviar Fase 2" — si Fase 1 ya fue enviada usa el ID existente, si no crea la convocatoria. */
+  /* Botón "Enviar Fase 2" — requiere que la Fase 1 ya haya sido enviada (link público activo). */
   const handleEnviarFase2Nuevo = async () => {
     setErrorCrear('');
-    if (!asunto.trim()) { setErrorCrear('El asunto es obligatorio'); return; }
-    if (!descripcionPublica.trim()) { setErrorCrear('La descripción pública es obligatoria'); return; }
-    if (!fechaLimiteRegistro) { setErrorCrear('La fecha límite de registro es obligatoria'); return; }
+    if (!convIdCreado) { setErrorCrear('Debes enviar la Fase 1 antes de poder enviar la Fase 2.'); return; }
     if (!fechaLimitePropuesta) { setErrorCrear('La fecha límite para entregar propuesta es obligatoria al enviar la Fase 2'); return; }
     if (new Date(fechaLimitePropuesta) <= new Date()) { setErrorCrear('La fecha límite de propuesta debe ser en el futuro'); return; }
     setCreando(true); setFaseCreando(2);
     try {
-      let convId: string;
-      if (convIdCreado) {
-        // Convocatoria ya creada por "Enviar Fase 1" — actualizar descripción y documento
-        convId = convIdCreado;
-        await apiFetch(`${API_URL}/api/convocatorias/${convId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            descripcion_requisitos: requisitos.trim() || '',
-            ...(docAdjunto ? { documento_adjunto_url: docAdjunto.url, documento_adjunto_nombre: docAdjunto.nombre } : {}),
-          }),
-        });
-      } else {
-        // Flujo normal: crear nueva convocatoria con todos los campos
-        convId = await crearBase();
-      }
+      const convId = convIdCreado;
+      // Convocatoria ya creada por "Enviar Fase 1" — actualizar descripción y documento
+      await apiFetch(`${API_URL}/api/convocatorias/${convId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          descripcion_requisitos: requisitos.trim() || '',
+          ...(docAdjunto ? { documento_adjunto_url: docAdjunto.url, documento_adjunto_nombre: docAdjunto.nombre } : {}),
+        }),
+      });
       const r2 = await apiFetch(`${API_URL}/api/convocatorias/${convId}/enviar-invitacion-masiva`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -577,7 +579,7 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
       const resp = await apiFetch(`${API_URL}/api/convocatorias/${convId}/enviar-invitacion-masiva`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha_limite: fechaLimiteMasivo, usuario_email: userEmail }),
+        body: JSON.stringify({ fecha_limite: fechaLimiteMasivo, usuario_email: userEmail, tipo_objeto: tipoObjetoMasivo }),
       });
       const data = await resp.json();
       if (!resp.ok) {
@@ -936,6 +938,20 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
                 {errorDoc && <p style={{ fontFamily: FONT, fontSize: 12, color: '#991B1B', margin: '4px 0 0' }}>{errorDoc}</p>}
               </div>
 
+              {/* Tipo de objeto contractual — define los documentos RA1-4 que se le exigirán al proponente */}
+              <label style={{ ...s.label, marginTop: 0 }}>Tipo de objeto contractual *</label>
+              <select
+                style={{ ...s.input, maxWidth: 360, marginBottom: 4 }}
+                value={tipoObjetoMasivo}
+                onChange={e => setTipoObjetoMasivo(e.target.value as 'bienes_servicios' | 'servicios_profesionales')}
+              >
+                <option value="bienes_servicios">Bienes y servicios</option>
+                <option value="servicios_profesionales">Prestación de servicios profesionales</option>
+              </select>
+              <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 16px' }}>
+                Hoja de vida, título profesional y certificaciones laborales solo se exigen en "Prestación de servicios profesionales".
+              </p>
+
               <label style={{ ...s.label, marginTop: 0 }}>
                 Fecha límite para ENTREGAR la propuesta *
               </label>
@@ -1146,6 +1162,20 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
                           </div>
                         )}
                       </>
+                    ) : !inv.tipo_documento ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' as const }}>
+                        <p style={{ ...s.invStatus, color: '#92400E', margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <AlertTriangle size={12} /> Falta completar el registro (RA1-4) en el link público
+                        </p>
+                        {detalleConv && (
+                          <button
+                            onClick={() => copiarLinkPublico(detalleConv.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: copiadoPublicoId === detalleConv.id ? '#D1FAE5' : '#fff', color: copiadoPublicoId === detalleConv.id ? '#065F46' : '#3384D6', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}
+                          >
+                            {copiadoPublicoId === detalleConv.id ? <><CheckCircle2 size={11} /> Copiado</> : <><Copy size={11} /> Copiar link de registro</>}
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
                         <p style={{ ...s.invStatus, color: '#94a3b8', margin: 0 }}>
@@ -1347,6 +1377,19 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
             </>
           )}
 
+          <label style={s.label}>Tipo de objeto contractual *</label>
+          <select
+            style={{ ...s.input, marginBottom: 4 }}
+            value={tipoObjeto}
+            onChange={e => setTipoObjeto(e.target.value as 'bienes_servicios' | 'servicios_profesionales')}
+            disabled={!!convIdCreado}
+          >
+            <option value="bienes_servicios">Bienes y servicios</option>
+            <option value="servicios_profesionales">Prestación de servicios profesionales</option>
+          </select>
+          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 0 }}>
+            Define los documentos RA1-4 que el proponente deberá cargar (hoja de vida, título y certificaciones laborales solo aplican a servicios profesionales).
+          </p>
         </div>
 
         {/* ─── FASE 1: Registro Público ─── */}
@@ -1482,10 +1525,18 @@ export function ConvocatoriaProponentes({ solicitudId, onBack, userEmail, onSubv
             Fecha hasta la cual los proponentes pueden entregar su propuesta.
           </p>
 
+          {!convIdCreado && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 14px', borderRadius: 8, background: '#FFF7ED', border: '1px solid #FED7AA', marginBottom: 12 }}>
+              <AlertTriangle size={15} color="#92400E" style={{ flexShrink: 0, marginTop: 1 }} />
+              <p style={{ fontFamily: FONT, fontSize: 12, color: '#92400E', margin: 0 }}>
+                Debes enviar la Fase 1 primero para habilitar el envío de la Fase 2.
+              </p>
+            </div>
+          )}
           <button
             onClick={handleEnviarFase2Nuevo}
-            disabled={creando}
-            style={{ ...s.btnPrimary, background: '#E84922', opacity: creando && faseCreando !== 2 ? 0.5 : 1 }}
+            disabled={creando || !convIdCreado}
+            style={{ ...s.btnPrimary, background: '#E84922', opacity: (creando && faseCreando !== 2) || !convIdCreado ? 0.5 : 1, cursor: !convIdCreado ? 'not-allowed' : 'pointer' }}
           >
             {creando && faseCreando === 2
               ? <><Loader2 size={15} className="animate-spin" /> Enviando Fase 2...</>

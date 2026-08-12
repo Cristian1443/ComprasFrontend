@@ -145,10 +145,15 @@ type FormularioRA14 = {
 
 const DOCUMENTO_PROVEEDOR_LABELS: Record<string, string> = {
   rut: 'RUT',
-  camara_comercio: 'Cámara de comercio',
-  cedula_rl: 'Fotocopia cédula de ciudadanía',
-  sarlaft: 'SARLAFT',
-  certificacion_bancaria: 'Certificación bancaria',
+  cedula_rl: 'Cédula (persona natural / representante legal)',
+  camara_comercio: 'Certificado de existencia y representación legal (Cámara de comercio)',
+  redam: 'REDAM (Registro de Deudores Alimentarios Morosos)',
+  antecedentes_fiscales: 'Antecedentes fiscales',
+  antecedentes_disciplinarios: 'Antecedentes disciplinarios',
+  antecedentes_judiciales: 'Antecedentes judiciales',
+  hoja_vida: 'Hoja de vida',
+  titulo_profesional: 'Título profesional',
+  certificaciones_laborales: 'Certificaciones laborales',
 };
 
 type EstadoFiltro = 'todos' | 'bloqueado' | 'evaluado' | 'sin_evaluar' | 'con_contrato';

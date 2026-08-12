@@ -6,6 +6,7 @@ import {
 } from '../../lib/formatPresupuesto';
 import { construirEtapasFlujo } from '../shared/TrazabilidadFlujo';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
+import { formatearGarantiasLegible } from '../../lib/garantias';
 
 const RED = '#E84922';
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
@@ -403,7 +404,7 @@ export function FormatoPlaneacionImprimible({ solicitud, onClose }: Props) {
             <tbody>
               <SH title="VII. CONCEPTO JURÍDICO Y GARANTÍAS." />
               <FR label="7.1 Concepto jurídico:" value={solicitud.concepto_juridico} />
-              <FR label="7.2 Garantías:" value={solicitud.garantias} />
+              <FR label="7.2 Garantías:" value={formatearGarantiasLegible(solicitud.garantias)} />
               <FR label="7.3 ¿Tiene riesgos jurídicos?:" value={solicitud.tiene_riesgos_juridicos === true ? 'Sí' : solicitud.tiene_riesgos_juridicos === false ? 'No' : ''} />
               {solicitud.tiene_riesgos_juridicos === true && (
                 <FR label="7.3.1 Riesgos:" value={solicitud.riesgos_juridicos} />

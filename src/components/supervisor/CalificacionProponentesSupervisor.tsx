@@ -1,14 +1,25 @@
 import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Loader2, Save, CheckCircle2, Lock, ShieldAlert, ClipboardCheck, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, CheckCircle2, Lock, ShieldAlert, ClipboardCheck, ArrowRight, Plus, X } from 'lucide-react';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
 type ScoreSupervisor = {
-  propuesta_economica: number;
-  experiencia_adicional: number;
-  experiencia_trabajo: number;
-  otros_criterios_puntos: number;
+  puntajes: Record<string, number>;
+};
+
+type CriterioPuntaje = { id: string; label: string; max: number };
+
+type ExperienciaCert = { contratante: string; contratista: string; objeto: string; valor: string; fecha_inicio: string; fecha_fin: string; plazo_total: string; observaciones: string; cumple: string };
+type EquipoMiembro = { nombre: string; titulo: string; posgrado: string; contratante: string; fecha_inicio: string; fecha_fin: string; plazo_total: string; observaciones: string; cumple: string };
+type PersonaNaturalAcademico = { requisito: string; titulo: string; posgrado: string; observaciones: string; cumple: string };
+
+type HabilitanteDetalle = {
+  experiencia: { requisito: string; certificaciones: ExperienciaCert[] };
+  academico: {
+    equipo?: { director: { requisito: string; miembros: EquipoMiembro[] }; otros: { id: string; titulo_perfil: string; requisito: string; miembros: EquipoMiembro[] }[] };
+    personaNatural?: PersonaNaturalAcademico;
+  };
 };
 
 interface CalificacionProponentesSupervisorProps {
@@ -17,15 +28,111 @@ interface CalificacionProponentesSupervisorProps {
   onBack: () => void;
 }
 
-const requisitosLegales = [
-  { key: 'carta_presentacion', label: 'Carta de presentación de la propuesta' },
-  { key: 'camara_comercio', label: 'Certificado de constitución, existencia y representación legal' },
-  { key: 'titulo', label: 'Titulo profesional' },
-  { key: 'rut', label: 'Certificado de registro único tributario' },
+// Documentos que el proponente debe cargar según el checklist oficial RA1-4 (mismo criterio
+// usado en Jurídica) — se muestran aquí solo de referencia, en modo lectura.
+const requisitosLegalesBase = [
+  { key: 'rut', label: 'RUT' },
+  { key: 'cedula_rl', label: 'Cédula (persona natural / representante legal)' },
+  { key: 'camara_comercio', label: 'Certificado de existencia y representación legal (Cámara de comercio)', soloEmpresa: true },
+  { key: 'redam', label: 'REDAM (Registro de Deudores Alimentarios Morosos)' },
   { key: 'antecedentes_fiscales', label: 'Antecedentes fiscales' },
   { key: 'antecedentes_disciplinarios', label: 'Antecedentes disciplinarios' },
-  { key: 'copia_cedula', label: 'Copia de documento de identificación' },
-  { key: 'seguridad_social', label: 'Aportes a seguridad social y parafiscales' }
+  { key: 'antecedentes_judiciales', label: 'Antecedentes judiciales' },
+];
+const requisitosLegalesServiciosProfesionales = [
+  { key: 'hoja_vida', label: 'Hoja de vida' },
+  { key: 'titulo_profesional', label: 'Título profesional' },
+  { key: 'certificaciones_laborales', label: 'Certificaciones laborales' },
+];
+const requisitosLegalesPara = (p: any) => {
+  let docs = requisitosLegalesBase.filter(d => !d.soloEmpresa || p?.tipo_persona === 'empresa');
+  if (p?.tipo_objeto === 'servicios_profesionales') docs = [...docs, ...requisitosLegalesServiciosProfesionales];
+  return docs;
+};
+
+const nuevaCertificacion = (): ExperienciaCert => ({ contratante: '', contratista: '', objeto: '', valor: '', fecha_inicio: '', fecha_fin: '', plazo_total: '', observaciones: '', cumple: 'SI' });
+const nuevoMiembro = (): EquipoMiembro => ({ nombre: '', titulo: '', posgrado: '', contratante: '', fecha_inicio: '', fecha_fin: '', plazo_total: '', observaciones: '', cumple: 'SI' });
+
+function detalleHabilitantePorDefecto(p: any): HabilitanteDetalle {
+  return {
+    experiencia: { requisito: '', certificaciones: [] },
+    academico: p?.tipo_persona === 'empresa'
+      ? { equipo: { director: { requisito: '', miembros: [] }, otros: [] } }
+      : { personaNatural: { requisito: '', titulo: '', posgrado: '', observaciones: '', cumple: 'SI' } }
+  };
+}
+
+const thMini: React.CSSProperties = { border: '1px solid #9CA3AF', padding: '4px 6px', fontSize: 9, fontWeight: 700, textAlign: 'center', background: '#f8fafc' };
+const tdMini: React.CSSProperties = { border: '1px solid #9CA3AF', padding: '4px 6px', fontSize: 10, textAlign: 'center' };
+
+// Tabla genérica de filas editables (certificaciones de experiencia / miembros de equipo) —
+// definida fuera del componente principal para no perder el foco de los inputs en cada render.
+function TablaFilasEditable({ campos, filas, onChangeCampo, onRemove }: {
+  campos: { key: string; label: string; tipo?: string }[];
+  filas: any[];
+  onChangeCampo: (indice: number, campo: string, valor: string) => void;
+  onRemove: (indice: number) => void;
+}) {
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <thead>
+        <tr>
+          {campos.map(c => <th key={c.key} style={thMini}>{c.label}</th>)}
+          <th style={thMini}>CUMPLE</th>
+          <th style={{ ...thMini, width: 30 }}></th>
+        </tr>
+      </thead>
+      <tbody>
+        {filas.map((fila, i) => (
+          <tr key={i}>
+            {campos.map(c => (
+              <td key={c.key} style={tdMini}>
+                <input
+                  className="w-full border-none outline-none text-center"
+                  style={{ fontSize: 10 }}
+                  type={c.tipo || 'text'}
+                  value={fila[c.key] || ''}
+                  onChange={e => onChangeCampo(i, c.key, e.target.value)}
+                />
+              </td>
+            ))}
+            <td style={tdMini}>
+              <select className="border-none outline-none font-bold" style={{ fontSize: 10 }} value={fila.cumple || 'SI'} onChange={e => onChangeCampo(i, 'cumple', e.target.value)}>
+                <option>SI</option><option>NO</option><option>N/A</option>
+              </select>
+            </td>
+            <td style={tdMini}>
+              <button type="button" onClick={() => onRemove(i)} className="text-red-500"><X size={12} /></button>
+            </td>
+          </tr>
+        ))}
+        {filas.length === 0 && (
+          <tr><td colSpan={campos.length + 2} style={{ ...tdMini, color: '#9CA3AF', fontStyle: 'italic' }}>Sin registros</td></tr>
+        )}
+      </tbody>
+    </table>
+  );
+}
+
+const CAMPOS_EXPERIENCIA = [
+  { key: 'contratante', label: 'CONTRATANTE' },
+  { key: 'contratista', label: 'CONTRATISTA' },
+  { key: 'objeto', label: 'OBJETO' },
+  { key: 'valor', label: 'VALOR' },
+  { key: 'fecha_inicio', label: 'F. INICIO', tipo: 'date' },
+  { key: 'fecha_fin', label: 'F. FIN', tipo: 'date' },
+  { key: 'plazo_total', label: 'PLAZO' },
+  { key: 'observaciones', label: 'OBSERVACIONES' },
+];
+const CAMPOS_MIEMBRO = [
+  { key: 'nombre', label: 'NOMBRE' },
+  { key: 'titulo', label: 'TÍTULO' },
+  { key: 'posgrado', label: 'POSGRADO' },
+  { key: 'contratante', label: 'CONTRATANTE' },
+  { key: 'fecha_inicio', label: 'F. INICIO', tipo: 'date' },
+  { key: 'fecha_fin', label: 'F. FIN', tipo: 'date' },
+  { key: 'plazo_total', label: 'PLAZO' },
+  { key: 'observaciones', label: 'OBSERVACIONES' },
 ];
 
 export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBack }: CalificacionProponentesSupervisorProps) {
@@ -39,14 +146,10 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
   const [errorAcceso, setErrorAcceso] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<any>(null);
   const [calificaciones, setCalificaciones] = useState<Record<string, ScoreSupervisor>>({});
-  const [configPuntajes, setConfigPuntajes] = useState<Record<string, { enabled: boolean; max: number; label: string }>>({
-    propuesta_economica: { enabled: true, max: 100, label: 'Propuesta Económica' },
-    experiencia_adicional: { enabled: false, max: 0, label: 'Experiencia Adicional / Visional' },
-    experiencia_trabajo: { enabled: false, max: 0, label: 'Experiencia de Trabajo Adicional' },
-    otros_criterios_puntos: { enabled: false, max: 0, label: 'Otros Criterios' }
-  });
+  const [configPuntajes, setConfigPuntajes] = useState<CriterioPuntaje[]>([{ id: 'propuesta_economica', label: 'Propuesta Económica', max: 100 }]);
   const [evaluacionConsolidada, setEvaluacionConsolidada] = useState('');
   const [habilitantesRevisados, setHabilitantesRevisados] = useState<Set<number>>(new Set());
+  const [habilitanteDetalle, setHabilitanteDetalle] = useState<Record<string, HabilitanteDetalle>>({});
   const [finalizada, setFinalizada] = useState(false);
   const [proponenteAbiertoDetalle, setProponenteAbiertoDetalle] = useState<number | null>(null);
 
@@ -85,17 +188,32 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
         const ev = data?.evaluacion?.supervisor || {};
         const list = Array.isArray(data?.proponentes) ? data.proponentes : [];
         const initial: Record<string, ScoreSupervisor> = {};
+        const initialDetalle: Record<string, HabilitanteDetalle> = {};
         list.forEach((p: any) => {
           const existing = (Array.isArray(ev.calificaciones) ? ev.calificaciones : []).find((c: any) => Number(c?.numero) === Number(p.numero));
-          initial[String(p.numero)] = {
-            propuesta_economica: Number(existing?.propuesta_economica || 0),
-            experiencia_adicional: Number(existing?.experiencia_adicional || 0),
-            experiencia_trabajo: Number(existing?.experiencia_trabajo || 0),
-            otros_criterios_puntos: Number(existing?.otros_criterios_puntos || 0)
-          };
+          // Compatibilidad con evaluaciones guardadas antes de tener puntajes dinámicos.
+          const puntajes: Record<string, number> = (existing?.puntajes && Object.keys(existing.puntajes).length)
+            ? existing.puntajes
+            : {
+                propuesta_economica: Number(existing?.propuesta_economica || 0),
+                ...(existing?.experiencia_adicional ? { experiencia_adicional: Number(existing.experiencia_adicional) } : {}),
+                ...(existing?.experiencia_trabajo ? { experiencia_trabajo: Number(existing.experiencia_trabajo) } : {}),
+                ...(existing?.otros_criterios_puntos ? { otros_criterios_puntos: Number(existing.otros_criterios_puntos) } : {}),
+              };
+          initial[String(p.numero)] = { puntajes };
+          initialDetalle[String(p.numero)] = existing?.habilitante_detalle || detalleHabilitantePorDefecto(p);
         });
         setCalificaciones(initial);
-        if (ev.config_puntajes) setConfigPuntajes(ev.config_puntajes);
+        setHabilitanteDetalle(initialDetalle);
+        // Compatibilidad con el formato anterior de config_puntajes (objeto con enabled/max/label).
+        if (Array.isArray(ev.config_puntajes) && ev.config_puntajes.length) {
+          setConfigPuntajes(ev.config_puntajes);
+        } else if (ev.config_puntajes && typeof ev.config_puntajes === 'object') {
+          const migrado = Object.entries(ev.config_puntajes)
+            .filter(([, v]: any) => v?.enabled)
+            .map(([key, v]: any) => ({ id: key, label: v.label, max: Number(v.max) || 0 }));
+          setConfigPuntajes(migrado.length ? migrado : [{ id: 'propuesta_economica', label: 'Propuesta Económica', max: 100 }]);
+        }
         setEvaluacionConsolidada(String(ev.evaluacion_consolidada || ''));
         setHabilitantesRevisados(new Set(Array.isArray(ev.habilitantes_revisados) ? ev.habilitantes_revisados.map(Number) : []));
         setFinalizada(Boolean(ev.finalizada));
@@ -115,24 +233,32 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
   const proponentesVista = useMemo(() => (Array.isArray(detalle?.proponentes) ? detalle.proponentes.filter((p: any) => p.respondida) : []), [detalle]);
   const calificacionesJuridica = useMemo(() => (Array.isArray(detalle?.evaluacion?.calificaciones) ? detalle.evaluacion.calificaciones : []), [detalle]);
 
-  const handleScoreChange = (numero: number, key: string, value: number) => {
+  const handleScoreChange = (numero: number, criterioId: string, value: number) => {
     const safe = Math.max(0, Math.min(100, Number(value || 0)));
     setCalificaciones(prev => ({
       ...prev,
-      [String(numero)]: {
-        ...(prev[String(numero)] || { propuesta_economica: 0, experiencia_adicional: 0, experiencia_trabajo: 0, otros_criterios_puntos: 0 }),
-        [key]: safe
-      }
+      [String(numero)]: { puntajes: { ...(prev[String(numero)]?.puntajes || {}), [criterioId]: safe } }
     }));
   };
 
   const total = (numero: number) => {
-    const s = calificaciones[String(numero)] || { propuesta_economica: 0, experiencia_adicional: 0, experiencia_trabajo: 0, otros_criterios_puntos: 0 };
+    const s = calificaciones[String(numero)]?.puntajes || {};
     let sum = 0;
-    Object.entries(configPuntajes).forEach(([key, config]) => {
-      if (config.enabled) sum += ((s as any)[key] || 0) * config.max / 100;
-    });
+    configPuntajes.forEach(cfg => { sum += (s[cfg.id] || 0) * cfg.max / 100; });
     return Number(sum.toFixed(2));
+  };
+
+  const agregarCriterio = () => setConfigPuntajes(prev => [...prev, { id: `criterio_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, label: '', max: 0 }]);
+  const quitarCriterio = (id: string) => setConfigPuntajes(prev => prev.filter(c => c.id !== id));
+  const renombrarCriterio = (id: string, label: string) => setConfigPuntajes(prev => prev.map(c => c.id === id ? { ...c, label } : c));
+  const cambiarPesoCriterio = (id: string, max: number) => setConfigPuntajes(prev => prev.map(c => c.id === id ? { ...c, max } : c));
+
+  const updateHabilitante = (numero: number, updater: (old: HabilitanteDetalle) => HabilitanteDetalle) => {
+    setHabilitanteDetalle(prev => {
+      const p = proponentesVista.find((pp: any) => pp.numero === numero);
+      const actual = prev[String(numero)] || detalleHabilitantePorDefecto(p);
+      return { ...prev, [String(numero)]: updater(actual) };
+    });
   };
 
   const proponentesQueRespondieron = proponentesVista.filter((p: any) => p.respondida);
@@ -144,7 +270,7 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
 
   const guardar = async (finalizar = false) => {
     if (!selectedId || !userEmail || finalizada) return;
-    const totalPuntaje = Object.values(configPuntajes).reduce((acc, c) => acc + (c.enabled ? c.max : 0), 0);
+    const totalPuntaje = configPuntajes.reduce((acc, c) => acc + c.max, 0);
 
     if (finalizar) {
       if (proponentesPendientesRevision.length > 0) {
@@ -166,7 +292,8 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
         config_puntajes: configPuntajes,
         calificaciones: proponentesVista.map((p: any) => ({
           numero: p.numero,
-          ...(calificaciones[String(p.numero)] || { propuesta_economica: 0, experiencia_adicional: 0, experiencia_trabajo: 0, otros_criterios_puntos: 0 }),
+          puntajes: calificaciones[String(p.numero)]?.puntajes || {},
+          habilitante_detalle: habilitanteDetalle[String(p.numero)] || detalleHabilitantePorDefecto(p),
           total: total(p.numero)
         })),
         evaluacion_consolidada: evaluacionConsolidada,
@@ -365,12 +492,14 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
                   <tr>
                     <td style={{ ...tdCell, fontWeight: 'bold', textAlign: 'left', paddingLeft: 16 }}>
                       ¿CUMPLE REQUISITOS HABILITANTES?
-                      <p style={{ fontWeight: 400, fontSize: 9, color: '#6B7280', marginTop: 2 }}>Debe revisar el detalle de cada proponente para poder finalizar</p>
+                      <p style={{ fontWeight: 400, fontSize: 9, color: '#6B7280', marginTop: 2 }}>
+                        Haga clic para diligenciar experiencia y requisitos académicos — debe revisar el detalle de cada proponente para poder finalizar
+                      </p>
                     </td>
                     {proponentesVista.map((p: any) => {
                       const cj = calificacionesJuridica.find((c: any) => Number(c?.numero) === Number(p.numero));
                       const chk = cj?.checklist || {};
-                      const cumple = requisitosLegales.every(r => (chk[r.key] || 'SI') !== 'NO') ? 'SI' : 'NO';
+                      const cumple = requisitosLegalesPara(p).every(r => (chk[r.key] || 'SI') !== 'NO') ? 'SI' : 'NO';
                       const revisado = habilitantesRevisados.has(Number(p.numero));
                       return (
                         <td
@@ -381,7 +510,7 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
                             if (p.respondida) setHabilitantesRevisados(prev => new Set(prev).add(Number(p.numero)));
                           }}
                         >
-                          {cumple} <span className="text-[10px] block font-normal underline">Ver Detalle</span>
+                          {cumple} <span className="text-[10px] block font-normal underline">Ver / Diligenciar Detalle</span>
                           {p.respondida && (
                             <span className={`text-[9px] block font-bold mt-0.5 ${revisado ? 'text-emerald-800' : 'text-red-700'}`}>
                               {revisado ? '✓ REVISADO' : '⚠ PENDIENTE DE REVISAR'}
@@ -396,55 +525,67 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
                     <td colSpan={proponentesVista.length + 1} style={{ ...tdCell, background: '#eff6ff', borderTop: '2px solid #2f6fa3' }}>
                       <div className="flex items-center justify-between px-4 py-2">
                         <div className="text-left">
-                          <span className="font-bold text-blue-700 text-sm">II. CALIFICACIÓN DEL SUPERVISOR</span>
-                          <p className="text-[10px] text-blue-500">Habilite los criterios y asigne el peso (la suma debe ser 100)</p>
+                          <span className="font-bold text-blue-700 text-sm">IV. CRITERIOS DE EVALUACIÓN</span>
+                          <p className="text-[10px] text-blue-500">La suma de los pesos debe ser 100</p>
                         </div>
-                        <div className={`px-3 py-1 rounded text-white font-bold text-xs ${Object.values(configPuntajes).reduce((a, b) => a + (b.enabled ? b.max : 0), 0) === 100 ? 'bg-green-600' : 'bg-red-600'}`}>
-                          TOTAL PESO: {Object.values(configPuntajes).reduce((a, b) => a + (b.enabled ? b.max : 0), 0)} / 100
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={agregarCriterio} className="flex items-center gap-1 text-xs font-bold text-blue-700 bg-white border border-blue-300 rounded-full px-3 py-1.5 hover:bg-blue-50">
+                            <Plus size={13} /> Agregar otro
+                          </button>
+                          <div className={`px-3 py-1 rounded text-white font-bold text-xs ${configPuntajes.reduce((a, c) => a + c.max, 0) === 100 ? 'bg-green-600' : 'bg-red-600'}`}>
+                            TOTAL PESO: {configPuntajes.reduce((a, c) => a + c.max, 0)} / 100
+                          </div>
                         </div>
                       </div>
                     </td>
                   </tr>
 
-                  {Object.entries(configPuntajes).map(([key, config]) => (
-                    <tr key={key}>
-                      <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16, background: config.enabled ? '#fff' : '#f9fafb' }}>
-                        <div className="flex items-center gap-3">
-                          <input type="checkbox" checked={config.enabled} onChange={e => setConfigPuntajes(prev => ({ ...prev, [key]: { ...prev[key], enabled: e.target.checked } }))} />
-                          <span className={config.enabled ? 'font-medium' : 'text-gray-400 line-through'}>{config.label}</span>
-                          {config.enabled && (
-                            <div className="ml-auto flex items-center gap-1">
-                              <span className="text-[10px] text-gray-500 font-bold uppercase">PESO:</span>
-                              <input
-                                type="number"
-                                value={config.max}
-                                onChange={e => setConfigPuntajes(prev => ({ ...prev, [key]: { ...prev[key], max: Number(e.target.value) } }))}
-                                onFocus={e => e.target.select()}
-                                className="w-16 border rounded text-center text-sm font-bold bg-yellow-50 focus:bg-white outline-none"
-                              />
-                            </div>
+                  {configPuntajes.map((cfg) => (
+                    <tr key={cfg.id}>
+                      <td style={{ ...tdCell, textAlign: 'left', paddingLeft: 16 }}>
+                        <div className="flex items-center gap-2">
+                          {cfg.id === 'propuesta_economica' ? (
+                            <span className="font-medium">{cfg.label}</span>
+                          ) : (
+                            <input
+                              value={cfg.label}
+                              onChange={e => renombrarCriterio(cfg.id, e.target.value)}
+                              placeholder="Nombre del criterio..."
+                              className="border-b border-dashed border-gray-300 outline-none font-medium flex-1 bg-transparent"
+                            />
+                          )}
+                          <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+                            <span className="text-[10px] text-gray-500 font-bold uppercase">PESO:</span>
+                            <input
+                              type="number"
+                              value={cfg.max}
+                              onChange={e => cambiarPesoCriterio(cfg.id, Number(e.target.value))}
+                              onFocus={e => e.target.select()}
+                              className="w-16 border rounded text-center text-sm font-bold bg-yellow-50 focus:bg-white outline-none"
+                            />
+                          </div>
+                          {cfg.id !== 'propuesta_economica' && (
+                            <button type="button" onClick={() => quitarCriterio(cfg.id)} className="text-red-500 flex-shrink-0"><X size={14} /></button>
                           )}
                         </div>
                       </td>
                       {proponentesVista.map((p: any) => (
-                        <td key={p.numero} style={{ ...tdCell, background: !p.respondida ? '#fafafa' : config.enabled ? '#fff' : '#f1f5f9' }}>
+                        <td key={p.numero} style={{ ...tdCell, background: !p.respondida ? '#fafafa' : '#fff' }}>
                           {!p.respondida ? (
                             <span className="text-gray-300 text-[10px] italic">Sin respuesta</span>
-                          ) : config.enabled ? (
+                          ) : (
                             <div className="flex flex-col items-center">
                               <input
                                 type="number" min={0} max={100}
-                                value={(calificaciones[String(p.numero)] as any)?.[key] || 0}
-                                onChange={e => handleScoreChange(p.numero, key, Number(e.target.value))}
+                                value={calificaciones[String(p.numero)]?.puntajes?.[cfg.id] || 0}
+                                onChange={e => handleScoreChange(p.numero, cfg.id, Number(e.target.value))}
                                 onFocus={e => e.target.select()}
                                 style={{ width: '100%', textAlign: 'center', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '2px', fontWeight: 'bold' }}
                               />
                               <span className="text-[9px] text-blue-600 font-bold mt-1">
-                                {(((calificaciones[String(p.numero)] as any)?.[key] || 0) * config.max / 100).toFixed(1)} pts
+                                {((calificaciones[String(p.numero)]?.puntajes?.[cfg.id] || 0) * cfg.max / 100).toFixed(1)} pts
                               </span>
                             </div>
-                          ) : (
-                            <span className="text-gray-300 text-[10px]">---</span>
                           )}
                         </td>
                       ))}
@@ -490,102 +631,241 @@ export function CalificacionProponentesSupervisor({ solicitudId, userEmail, onBa
           </div>
         </div>
 
-        {/* MODAL DETALLE HABILITANTES — SOLO LECTURA */}
-        {proponenteAbiertoDetalle && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg w-full max-w-4xl max-h-[85vh] overflow-y-auto shadow-2xl">
-              <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-                <h2 className="text-lg font-bold text-gray-800">Verificación Habilitante — Proponente {proponenteAbiertoDetalle}</h2>
-                <button onClick={() => setProponenteAbiertoDetalle(null)} className="text-gray-500 hover:text-black">Cerrar</button>
-              </div>
-              <div className="p-6 space-y-6">
-                {(() => {
-                  const cj = calificacionesJuridica.find((c: any) => Number(c?.numero) === Number(proponenteAbiertoDetalle));
-                  const chk = cj?.checklist || {};
-                  const det = cj?.habilitante_detalle;
-                  return (
-                    <>
-                      <div>
-                        <p className="font-bold text-gray-500 mb-2 text-xs uppercase">Verificación legal (Jurídica)</p>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ background: '#f8fafc' }}>
-                              <th style={thCell}>Requisito</th>
-                              <th style={{ ...thCell, width: 100 }}>Estado</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {requisitosLegales.map(r => (
-                              <tr key={r.key}>
-                                <td style={{ ...tdCell, textAlign: 'left' }}>{r.label}</td>
-                                <td style={{ ...tdCell, fontWeight: 'bold', background: (chk[r.key] || 'SI') === 'NO' ? '#FEE2E2' : 'transparent' }}>{chk[r.key] || 'SI'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+        {/* MODAL: EXPERIENCIA Y REQUISITOS ACADÉMICOS — el Supervisor diligencia esto directamente */}
+        {proponenteAbiertoDetalle && (() => {
+          const pNum = proponenteAbiertoDetalle;
+          const p = proponentesVista.find((pp: any) => pp.numero === pNum);
+          const cj = calificacionesJuridica.find((c: any) => Number(c?.numero) === Number(pNum));
+          const chk = cj?.checklist || {};
+          const det = habilitanteDetalle[String(pNum)] || detalleHabilitantePorDefecto(p);
+          const esEmpresa = p?.tipo_persona === 'empresa';
 
-                      {det?.experiencia?.certificaciones?.length > 0 && (
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 text-xs uppercase">Experiencia del proponente</p>
-                          {det.experiencia.requisito && <p className="text-xs text-gray-500 italic mb-2">{det.experiencia.requisito}</p>}
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr style={{ background: '#f8fafc' }}>
-                                {['Contratante', 'Objeto', 'Valor', 'Plazo', 'Cumple'].map(h => <th key={h} style={{ ...thCell, fontSize: 10 }}>{h}</th>)}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {det.experiencia.certificaciones.map((c: any, i: number) => (
-                                <tr key={i}>
-                                  <td style={{ ...tdCell, fontSize: 10, textAlign: 'left' }}>{c.contratante || '—'}</td>
-                                  <td style={{ ...tdCell, fontSize: 10, textAlign: 'left' }}>{c.objeto || '—'}</td>
-                                  <td style={{ ...tdCell, fontSize: 10 }}>{c.valor || '—'}</td>
-                                  <td style={{ ...tdCell, fontSize: 10 }}>{c.plazo_total || '—'}</td>
-                                  <td style={{ ...tdCell, fontSize: 10, fontWeight: 'bold' }}>{c.cumple || 'SI'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+          return (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+                  <h2 className="text-lg font-bold text-gray-800">Requerimientos Habilitantes — Proponente {pNum}: {p?.nombre_proveedor?.toUpperCase()}</h2>
+                  <button onClick={() => setProponenteAbiertoDetalle(null)} className="text-gray-500 hover:text-black">Cerrar</button>
+                </div>
+                <div className="p-6 space-y-8">
+
+                  {/* I. Verificación legal — solo lectura, la diligencia Jurídica */}
+                  <div>
+                    <p className="font-bold text-gray-500 mb-2 text-xs uppercase">I. Verificación legal (Jurídica — solo lectura)</p>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc' }}>
+                          <th style={thCell}>Requisito</th>
+                          <th style={{ ...thCell, width: 100 }}>Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {requisitosLegalesPara(p).map(r => (
+                          <tr key={r.key}>
+                            <td style={{ ...tdCell, textAlign: 'left' }}>{r.label}</td>
+                            <td style={{ ...tdCell, fontWeight: 'bold', background: (chk[r.key] || 'SI') === 'NO' ? '#FEE2E2' : 'transparent' }}>{chk[r.key] || 'SI'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* II. Experiencia — la diligencia el Supervisor */}
+                  <div>
+                    <div style={{ background: '#2f6fa3', color: '#fff', padding: '8px 14px', fontWeight: 'bold', fontSize: 13, borderRadius: '4px 4px 0 0' }}>
+                      II. Requerimientos habilitantes de experiencia
+                    </div>
+                    <div className="border border-t-0 rounded-b p-3" style={{ borderColor: '#2f6fa3' }}>
+                      <input
+                        placeholder="Describa el requisito de experiencia exigido al proponente..."
+                        className="w-full text-sm p-2 border rounded mb-3 outline-none focus:border-blue-500"
+                        value={det.experiencia.requisito}
+                        onChange={e => updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, requisito: e.target.value } }))}
+                      />
+                      <TablaFilasEditable
+                        campos={CAMPOS_EXPERIENCIA}
+                        filas={det.experiencia.certificaciones}
+                        onChangeCampo={(i, campo, valor) => updateHabilitante(pNum, old => {
+                          const lista = [...old.experiencia.certificaciones];
+                          lista[i] = { ...lista[i], [campo]: valor };
+                          return { ...old, experiencia: { ...old.experiencia, certificaciones: lista } };
+                        })}
+                        onRemove={i => updateHabilitante(pNum, old => ({
+                          ...old,
+                          experiencia: { ...old.experiencia, certificaciones: old.experiencia.certificaciones.filter((_, idx) => idx !== i) }
+                        }))}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateHabilitante(pNum, old => ({ ...old, experiencia: { ...old.experiencia, certificaciones: [...old.experiencia.certificaciones, nuevaCertificacion()] } }))}
+                        className="mt-2 flex items-center gap-1 text-xs font-bold text-blue-700"
+                      >
+                        <Plus size={13} /> Agregar certificación
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* III. Requisitos académicos — la diligencia el Supervisor */}
+                  <div>
+                    <div style={{ background: '#2f6fa3', color: '#fff', padding: '8px 14px', fontWeight: 'bold', fontSize: 13, borderRadius: '4px 4px 0 0' }}>
+                      III. Requerimientos habilitantes académicos
+                    </div>
+                    <div className="border border-t-0 rounded-b p-3" style={{ borderColor: '#2f6fa3' }}>
+                      {esEmpresa ? (
+                        <div className="space-y-6">
+                          <div>
+                            <p className="font-bold text-gray-600 text-xs uppercase mb-1">Director del proyecto</p>
+                            <input
+                              placeholder="Describa el requisito académico exigido al director del proyecto..."
+                              className="w-full text-sm p-2 border rounded mb-2 outline-none focus:border-blue-500"
+                              value={det.academico.equipo?.director.requisito || ''}
+                              onChange={e => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, director: { ...old.academico.equipo!.director, requisito: e.target.value } } } }))}
+                            />
+                            <TablaFilasEditable
+                              campos={CAMPOS_MIEMBRO}
+                              filas={det.academico.equipo?.director.miembros || []}
+                              onChangeCampo={(i, campo, valor) => updateHabilitante(pNum, old => {
+                                const miembros = [...(old.academico.equipo!.director.miembros)];
+                                miembros[i] = { ...miembros[i], [campo]: valor };
+                                return { ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, director: { ...old.academico.equipo!.director, miembros } } } };
+                              })}
+                              onRemove={i => updateHabilitante(pNum, old => ({
+                                ...old,
+                                academico: { ...old.academico, equipo: { ...old.academico.equipo!, director: { ...old.academico.equipo!.director, miembros: old.academico.equipo!.director.miembros.filter((_, idx) => idx !== i) } } }
+                              }))}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, director: { ...old.academico.equipo!.director, miembros: [...old.academico.equipo!.director.miembros, nuevoMiembro()] } } } }))}
+                              className="mt-2 flex items-center gap-1 text-xs font-bold text-blue-700"
+                            >
+                              <Plus size={13} /> Agregar miembro
+                            </button>
+                          </div>
+
+                          {(det.academico.equipo?.otros || []).map((perfil, pi) => (
+                            <div key={perfil.id}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <input
+                                  placeholder="Nombre del perfil (ej. Ingeniero residente)..."
+                                  className="font-bold text-gray-600 text-xs uppercase border-b border-dashed outline-none flex-1"
+                                  value={perfil.titulo_perfil}
+                                  onChange={e => updateHabilitante(pNum, old => {
+                                    const otros = [...(old.academico.equipo!.otros)];
+                                    otros[pi] = { ...otros[pi], titulo_perfil: e.target.value };
+                                    return { ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, otros } } };
+                                  })}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, otros: old.academico.equipo!.otros.filter((_, idx) => idx !== pi) } } }))}
+                                  className="text-red-500"
+                                ><X size={13} /></button>
+                              </div>
+                              <input
+                                placeholder="Requisito académico exigido a este perfil..."
+                                className="w-full text-sm p-2 border rounded mb-2 outline-none focus:border-blue-500"
+                                value={perfil.requisito}
+                                onChange={e => updateHabilitante(pNum, old => {
+                                  const otros = [...(old.academico.equipo!.otros)];
+                                  otros[pi] = { ...otros[pi], requisito: e.target.value };
+                                  return { ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, otros } } };
+                                })}
+                              />
+                              <TablaFilasEditable
+                                campos={CAMPOS_MIEMBRO}
+                                filas={perfil.miembros}
+                                onChangeCampo={(i, campo, valor) => updateHabilitante(pNum, old => {
+                                  const otros = [...(old.academico.equipo!.otros)];
+                                  const miembros = [...otros[pi].miembros];
+                                  miembros[i] = { ...miembros[i], [campo]: valor };
+                                  otros[pi] = { ...otros[pi], miembros };
+                                  return { ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, otros } } };
+                                })}
+                                onRemove={i => updateHabilitante(pNum, old => {
+                                  const otros = [...(old.academico.equipo!.otros)];
+                                  otros[pi] = { ...otros[pi], miembros: otros[pi].miembros.filter((_, idx) => idx !== i) };
+                                  return { ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, otros } } };
+                                })}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateHabilitante(pNum, old => {
+                                  const otros = [...(old.academico.equipo!.otros)];
+                                  otros[pi] = { ...otros[pi], miembros: [...otros[pi].miembros, nuevoMiembro()] };
+                                  return { ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, otros } } };
+                                })}
+                                className="mt-2 flex items-center gap-1 text-xs font-bold text-blue-700"
+                              >
+                                <Plus size={13} /> Agregar miembro a este perfil
+                              </button>
+                            </div>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, equipo: { ...old.academico.equipo!, otros: [...old.academico.equipo!.otros, { id: `perfil_${Date.now()}`, titulo_perfil: '', requisito: '', miembros: [] }] } } }))}
+                            className="flex items-center gap-1 text-xs font-bold text-emerald-700"
+                          >
+                            <Plus size={13} /> Agregar otro perfil profesional
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="col-span-2">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Requisito académico exigido</label>
+                            <input
+                              className="w-full text-sm p-2 border rounded outline-none focus:border-blue-500"
+                              value={det.academico.personaNatural?.requisito || ''}
+                              onChange={e => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, personaNatural: { ...old.academico.personaNatural!, requisito: e.target.value } } }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Título</label>
+                            <input
+                              className="w-full text-sm p-2 border rounded outline-none focus:border-blue-500"
+                              value={det.academico.personaNatural?.titulo || ''}
+                              onChange={e => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, personaNatural: { ...old.academico.personaNatural!, titulo: e.target.value } } }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Posgrado</label>
+                            <input
+                              className="w-full text-sm p-2 border rounded outline-none focus:border-blue-500"
+                              value={det.academico.personaNatural?.posgrado || ''}
+                              onChange={e => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, personaNatural: { ...old.academico.personaNatural!, posgrado: e.target.value } } }))}
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Observaciones</label>
+                            <input
+                              className="w-full text-sm p-2 border rounded outline-none focus:border-blue-500"
+                              value={det.academico.personaNatural?.observaciones || ''}
+                              onChange={e => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, personaNatural: { ...old.academico.personaNatural!, observaciones: e.target.value } } }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase block">¿Cumple?</label>
+                            <select
+                              className="w-full text-sm p-2 border rounded font-bold outline-none"
+                              value={det.academico.personaNatural?.cumple || 'SI'}
+                              onChange={e => updateHabilitante(pNum, old => ({ ...old, academico: { ...old.academico, personaNatural: { ...old.academico.personaNatural!, cumple: e.target.value } } }))}
+                            >
+                              <option>SI</option><option>NO</option><option>N/A</option>
+                            </select>
+                          </div>
                         </div>
                       )}
-
-                      {det?.equipo?.director?.miembros?.length > 0 && (
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 text-xs uppercase">Director del proyecto</p>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr style={{ background: '#f8fafc' }}>
-                                {['Nombre', 'Título', 'Posgrado', 'Cumple'].map(h => <th key={h} style={{ ...thCell, fontSize: 10 }}>{h}</th>)}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {det.equipo.director.miembros.map((m: any, i: number) => (
-                                <tr key={i}>
-                                  <td style={{ ...tdCell, fontSize: 10, textAlign: 'left' }}>{m.nombre || '—'}</td>
-                                  <td style={{ ...tdCell, fontSize: 10 }}>{m.titulo || '—'}</td>
-                                  <td style={{ ...tdCell, fontSize: 10 }}>{m.posgrado || '—'}</td>
-                                  <td style={{ ...tdCell, fontSize: 10, fontWeight: 'bold' }}>{m.cumple || 'SI'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      {!det && (
-                        <p className="text-sm text-gray-400 italic">Jurídica aún no ha registrado el detalle habilitante de este proponente.</p>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-              <div className="p-4 border-t flex justify-end sticky bottom-0 bg-white">
-                <button onClick={() => setProponenteAbiertoDetalle(null)} className="bg-gray-100 px-6 py-2 rounded font-bold">Cerrar</button>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 border-t flex justify-end sticky bottom-0 bg-white">
+                  <button onClick={() => setProponenteAbiertoDetalle(null)} className="bg-blue-700 text-white px-6 py-2 rounded font-bold">Cerrar y guardar en el borrador</button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import {
 import { SeccionPresupuestoLectura } from '../shared/SeccionPresupuestoLectura';
 import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
+import { formatearGarantiasLegible } from '../../lib/garantias';
 import { DetallePlaneacionContractualParte1, DetallePlaneacionContractualParte2 } from '../shared/DetallePlaneacionContractual';
 import { FormatoPlaneacionImprimible } from './FormatoPlaneacionImprimible';
 import {
@@ -185,7 +186,7 @@ export function FichaComite({
   // Solo aplica cuando el caso realmente pasa por el rol Riesgos (riesgos jurídicos = sí).
   const riesgos: string = solicitud.tiene_riesgos_juridicos === true ? (solicitud.riesgos || '') : '';
   const conceptoJuridico: string = solicitud.concepto_juridico || '';
-  const garantias: string = solicitud.garantias || '';
+  const garantias: string = formatearGarantiasLegible(solicitud.garantias);
   const riesgosJuridicos: string = solicitud.tiene_riesgos_juridicos === true ? (solicitud.riesgos_juridicos || '') : '';
 
   const proponentes: any[] = Array.isArray(solicitud.proponentes) ? solicitud.proponentes : [];

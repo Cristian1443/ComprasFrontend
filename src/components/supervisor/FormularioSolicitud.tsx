@@ -7,6 +7,7 @@ import { FormatoPlaneacionImprimible } from '../secretaria/FormatoPlaneacionImpr
 import { useMsal } from "@azure/msal-react";
 import { getCompanyUsers, getCompanyUsersFromGroup } from "../../lib/graphService";
 import { loginRequest } from "../../authConfig";
+import { formatearGarantiasLegible } from "../../lib/garantias";
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -216,7 +217,7 @@ function ConceptoJuridicoLectura({ solicitud }: { solicitud: any }) {
       <div style={rowStyle}>
         <div style={labelCellStyle}>{n2} Garantías:</div>
         <div style={{ flex: 1, padding: 16, fontFamily: 'Gabarito, sans-serif', fontSize: '0.875rem', color: '#1F2937', whiteSpace: 'pre-wrap' }}>
-          {s.garantias || pendiente}
+          {formatearGarantiasLegible(s.garantias) || pendiente}
         </div>
       </div>
       <div style={{ ...rowStyle, borderBottom: tieneRiesgos ? '1px solid #e5e7eb' : 'none' }}>
@@ -785,11 +786,31 @@ export function FormularioSolicitud({
     setAnalisisMercado(prev => (prev.valorPromedio === texto ? prev : { ...prev, valorPromedio: texto }));
   }, [proponentes, esInvitacionOTdr]);
 
-  // La Moneda de pago (y su(s) valor(es)) de la Sección IV se sincronizan
-  // automáticamente con las monedas y promedios detectados en el Estudio de
-  // Mercado (Sección III): si hay una sola moneda entre las cotizaciones, se usa
-  // esa; si hay varias, se marca "Moneda Combinada" y se completa un valor por
-  // cada una. Solo aplica a Invitación / TDR (Directa no tiene este cruce).
+  // Valor mínimo permitido en "Forma de pago": no puede quedar por debajo del
+  // promedio cotizado en el Estudio de Mercado (Sección III) — se puede subir,
+  // pero no bajar de ese monto. Aplica en las 3 modalidades: en Directa el
+  // valor se diligencia manualmente desde cero; en Invitación/TDR se sugiere
+  // automáticamente el promedio pero el usuario puede editarlo hacia arriba.
+  const promediosEstudioMercado = calcularPromediosPorMoneda(proponentes);
+  const promedioMercadoPorMoneda = (moneda: string) => promediosEstudioMercado.find(p => p.moneda === moneda)?.promedio;
+  const avisoValorMinimo = (moneda: 'COP' | 'USD' | 'EUR', valorActual: string) => {
+    const promedio = promedioMercadoPorMoneda(moneda);
+    const actual = parseValorMoneda(valorActual);
+    if (promedio === undefined || actual <= 0 || actual >= promedio) return null;
+    return (
+      <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: 6 }}>
+        El valor no puede quedar por debajo del promedio cotizado en el Estudio de Mercado ({moneda} {promedio.toLocaleString('es-CO')}). Puede aumentarlo, pero no reducirlo por debajo de ese monto.
+      </p>
+    );
+  };
+
+  // La Moneda de pago de la Sección IV se detecta automáticamente a partir de
+  // las monedas registradas en el Estudio de Mercado (Sección III), y cada
+  // valor se sugiere inicialmente igual al promedio de esa moneda. El usuario
+  // puede editar el valor hacia arriba libremente: por eso, si ya escribió un
+  // valor igual o mayor al promedio, no se lo pisamos al recalcular (solo lo
+  // subimos automáticamente si quedó vacío o por debajo del nuevo promedio).
+  // Solo aplica a Invitación / TDR (Directa no tiene este cruce).
   useEffect(() => {
     if (!esInvitacionOTdr) return;
     const promedios = calcularPromediosPorMoneda(proponentes);
@@ -800,13 +821,15 @@ export function FormularioSolicitud({
     const valorUSD = promedios.find(p => p.moneda === 'USD')?.promedio;
     const valorEUR = promedios.find(p => p.moneda === 'EUR')?.promedio;
     setDatosPlaneacion(prev => {
+      const sugerido = (promedio: number | undefined, actual: string) =>
+        promedio === undefined ? '' : (parseValorMoneda(actual) >= promedio ? actual : promedio.toLocaleString('es-CO'));
       const next = {
         ...prev,
         moneda: nuevaMoneda,
         monedasSeleccionadas: monedasPresentes,
-        valorMonedaCOP: valorCOP !== undefined ? valorCOP.toLocaleString('es-CO') : '',
-        valorMonedaUSD: valorUSD !== undefined ? valorUSD.toLocaleString('es-CO') : '',
-        valorMonedaEUR: valorEUR !== undefined ? valorEUR.toLocaleString('es-CO') : '',
+        valorMonedaCOP: sugerido(valorCOP, prev.valorMonedaCOP),
+        valorMonedaUSD: sugerido(valorUSD, prev.valorMonedaUSD),
+        valorMonedaEUR: sugerido(valorEUR, prev.valorMonedaEUR),
       };
       const sinCambios = prev.moneda === next.moneda
         && prev.valorMonedaCOP === next.valorMonedaCOP
@@ -2023,37 +2046,43 @@ export function FormularioSolicitud({
 
                             {(datosPlaneacion.moneda === 'USD' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('USD'))) && (
                               <div style={{ marginTop: 16 }}>
-                                <FieldLabel label="Valor en Dólares (USD)" />
+                                <FieldLabel label="Valor en Dólares (USD)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaUSD}
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: soloNumeros(e.target.value) })}
-                                  readOnly={esInvitacionOTdr}
-                                  style={esInvitacionOTdr ? { ...inputStyle, backgroundColor: '#f9fafb', color: '#374151', cursor: 'default' } : inputStyle} placeholder="0.00"
+                                  style={inputStyle} placeholder="0.00"
+                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
                                 />
+                                {avisoValorMinimo('USD', datosPlaneacion.valorMonedaUSD)}
                               </div>
                             )}
 
                             {(datosPlaneacion.moneda === 'COP' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('COP'))) && (
                               <div style={{ marginTop: 16 }}>
-                                <FieldLabel label="Valor en Pesos (COP)" />
+                                <FieldLabel label="Valor en Pesos (COP)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaCOP}
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: soloNumeros(e.target.value) })}
-                                  readOnly={esInvitacionOTdr}
-                                  style={esInvitacionOTdr ? { ...inputStyle, backgroundColor: '#f9fafb', color: '#374151', cursor: 'default' } : inputStyle} placeholder="0.00"
+                                  style={inputStyle} placeholder="0.00"
+                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
                                 />
+                                {avisoValorMinimo('COP', datosPlaneacion.valorMonedaCOP)}
                               </div>
                             )}
 
                             {(datosPlaneacion.moneda === 'EUR' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('EUR'))) && (
                               <div style={{ marginTop: 16 }}>
-                                <FieldLabel label="Valor en Euros (EUR)" />
+                                <FieldLabel label="Valor en Euros (EUR)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaEUR}
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: soloNumeros(e.target.value) })}
-                                  readOnly={esInvitacionOTdr}
-                                  style={esInvitacionOTdr ? { ...inputStyle, backgroundColor: '#f9fafb', color: '#374151', cursor: 'default' } : inputStyle} placeholder="0.00"
+                                  style={inputStyle} placeholder="0.00"
+                                  onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
+                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
                                 />
+                                {avisoValorMinimo('EUR', datosPlaneacion.valorMonedaEUR)}
                               </div>
                             )}
                           </div>
