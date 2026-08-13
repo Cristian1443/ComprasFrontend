@@ -1075,15 +1075,31 @@ export function FormularioSolicitud({
 
     const proponentesValidos = proponentes.filter(p => (p.nombreProveedor || '').trim().length > 0);
 
-    // 1. Validar SMLV
+    // 1. Validar SMLV — Invitación < 25 SMLV, TDR >= 25 SMLV.
+    // El umbral está en pesos, así que un contrato en USD/EUR debe convertirse
+    // antes de comparar (si no, un valor grande en dólares parece "pequeño" en
+    // pesos y nunca alcanza el umbral). Se usa una tasa aproximada fija — no
+    // una TRM configurable ni un servicio externo — solo para ubicar el
+    // contrato en el lado correcto del umbral de SMLV.
     const smlv = 1300000;
-    const valor = valorValidacion;
-    if (esInvitacion && valor >= (50 * smlv)) {
-      alert(`Error: La modalidad Invitación solo permite valores menores a 50 SMLV ($65.000.000). El valor actual es ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a TDR o ajuste el presupuesto.`);
+    const TASA_APROX_COP: Record<string, number> = { COP: 1, USD: 4000, EUR: 4300 };
+    const valorEnCopAprox = (): number => {
+      if (datosPlaneacion.moneda === 'COMBINADA') {
+        let total = 0;
+        if (datosPlaneacion.monedasSeleccionadas.includes('COP')) total += parseValorMoneda(datosPlaneacion.valorMonedaCOP) * TASA_APROX_COP.COP;
+        if (datosPlaneacion.monedasSeleccionadas.includes('USD')) total += parseValorMoneda(datosPlaneacion.valorMonedaUSD) * TASA_APROX_COP.USD;
+        if (datosPlaneacion.monedasSeleccionadas.includes('EUR')) total += parseValorMoneda(datosPlaneacion.valorMonedaEUR) * TASA_APROX_COP.EUR;
+        return total || valorValidacion;
+      }
+      return valorValidacion * (TASA_APROX_COP[datosPlaneacion.moneda] ?? 1);
+    };
+    const valor = valorEnCopAprox();
+    if (esInvitacion && valor >= (25 * smlv)) {
+      alert(`Error: La modalidad Invitación solo permite valores menores a 25 SMLV ($32.500.000). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a TDR o ajuste el presupuesto.`);
       return;
     }
-    if (esTDR && valor < (50 * smlv)) {
-      alert(`Error: La modalidad TDR solo permite valores iguales o superiores a 50 SMLV ($65.000.000). El valor actual es ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a Invitación o ajuste el presupuesto.`);
+    if (esTDR && valor < (25 * smlv)) {
+      alert(`Error: La modalidad TDR solo permite valores iguales o superiores a 25 SMLV ($32.500.000). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a Invitación o ajuste el presupuesto.`);
       return;
     }
 
