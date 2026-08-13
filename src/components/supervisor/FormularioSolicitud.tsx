@@ -566,7 +566,11 @@ export function FormularioSolicitud({
   }, [tabActual]);
 
   const irASiguiente = () => {
-    if (tabActual === 'planeacion') setTabActual('avanzado');
+    if (tabActual === 'planeacion') {
+      const error = validarPlaneacionCompleta();
+      if (error) { alert(error); return; }
+      setTabActual('avanzado');
+    }
     scrollAlInicio();
   };
 
@@ -1090,6 +1094,56 @@ export function FormularioSolicitud({
       procesandoRef.current = false;
       setProcesando(false);
     }
+  };
+
+  // Replica, para la transición Parte I → Parte II, las validaciones de
+  // campos obligatorios de Planeación que procesarEnvio aplica al final
+  // (así el Supervisor no puede llegar a la Parte II con la Parte I incompleta).
+  const validarPlaneacionCompleta = (): string | null => {
+    if (!datosPlaneacion.tituloContrato.trim()) return "El campo 'Nombre del proceso' es obligatorio.";
+    if (!datosPlaneacion.objeto.trim()) return "El campo 'Objeto' es obligatorio.";
+    if (!datosPlaneacion.fechaEstimadaSolicitud) return "Debe indicar la 'Fecha estimada en la que se requiere el contrato'.";
+    if (datosPlaneacion.fechaEstimadaSolicitud < fechaMinimaContrato) {
+      return `La 'Fecha estimada en la que se requiere el contrato' debe ser igual o superior que ${fechaMinimaContratoDisplay} (mínimo ${DIAS_HABILES_MINIMOS_CONTRATO} días hábiles a partir de hoy).`;
+    }
+    if (!supervisionEntregables.supervisionId && !supervisionEntregables.supervision) {
+      return "Debe seleccionar un 'Supervisor del contrato' válido de la lista de empleados.";
+    }
+    if (!datosPlaneacion.descripcionNecesidad.trim()) return "El campo '1.1 Justificación y Descripción' es obligatorio.";
+    if (!datosPlaneacion.descripcionNecesidadDetalle.trim()) return "El campo '1.2 Especificaciones técnicas' es obligatorio.";
+    if (criteriosHabilitantes.filter(c => c.descripcion.trim()).length === 0) {
+      return "Debe agregar al menos un criterio habilitante en '1.3 Criterios habilitantes'.";
+    }
+    if (!datosPlaneacion.experienciaAcreditadaExigida.trim()) return "El campo '1.4 Experiencia Acreditada Exigida' es obligatorio.";
+    if (!datosPlaneacion.plazoEjecucionMeses && !datosPlaneacion.plazoEjecucionDias) {
+      return "Debe indicar el '2.1 Plazo de ejecución' (meses y/o días).";
+    }
+    if (!datosPlaneacion.lugarEjecucion.trim()) return "El campo '2.2 Lugar de ejecución' es obligatorio.";
+
+    if (esInvitacionOTdr) {
+      const invitadosCompletos = proponentes.filter(p =>
+        p.nombreProveedor.trim() && p.datosContacto.trim() && p.valorCotizacion.trim()
+      );
+      if (invitadosCompletos.length < 3) {
+        return "En 'III. Estudio de Mercado' debe registrar mínimo 3 proponentes con nombre del proveedor, datos de contacto y valor de cotización.";
+      }
+      if (!analisisMercado.serviciosOfertados.trim()) {
+        return "El campo 'Servicios ofertados' del Análisis del Mercado es obligatorio.";
+      }
+    } else {
+      const proponenteCompleto = proponentes.some(p => p.nombreProveedor.trim() && p.datosContacto.trim());
+      if (!proponenteCompleto) {
+        return "En 'III. Estudio de Mercado' debe registrar el proponente con nombre del proveedor y datos de contacto.";
+      }
+      if (!datosPlaneacion.modalidadSeleccion) {
+        return "Debe seleccionar la '4.1 Causal de contratación'.";
+      }
+      if (!datosPlaneacion.justificacionCD.trim()) {
+        return "El campo '4.2 Justificación de la causal' es obligatorio.";
+      }
+    }
+
+    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
