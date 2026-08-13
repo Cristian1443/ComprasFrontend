@@ -821,8 +821,11 @@ export function FormularioSolicitud({
     const valorUSD = promedios.find(p => p.moneda === 'USD')?.promedio;
     const valorEUR = promedios.find(p => p.moneda === 'EUR')?.promedio;
     setDatosPlaneacion(prev => {
+      // Si esa moneda ya no tiene ninguna cotización en el Estudio de Mercado,
+      // no borramos lo que el usuario ya haya escrito a mano — solo sugerimos
+      // (o subimos) el valor cuando sí hay un promedio real con el que comparar.
       const sugerido = (promedio: number | undefined, actual: string) =>
-        promedio === undefined ? '' : (parseValorMoneda(actual) >= promedio ? actual : promedio.toLocaleString('es-CO'));
+        promedio === undefined ? actual : (parseValorMoneda(actual) >= promedio ? actual : promedio.toLocaleString('es-CO'));
       const next = {
         ...prev,
         moneda: nuevaMoneda,
