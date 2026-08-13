@@ -38,6 +38,7 @@ interface FacturaHistorial {
     actualizado_en: string;
     contrato_codigo: string;
     contrato_objeto: string;
+    contrato_titulo?: string | null;
 }
 
 const fmtCOP = (v: number | null) =>
@@ -287,7 +288,7 @@ export function HistorialAprobaciones({ userEmail }: { userEmail: string }) {
                                         </td>
                                         <td className="px-5 py-4 max-w-[180px]">
                                             <p className="text-xs font-black" style={{ color: BRAND }}>{fac.contrato_codigo}</p>
-                                            <p className="text-[10px] text-gray-400 truncate">{fac.contrato_objeto}</p>
+                                            <p className="text-[10px] text-gray-400 truncate">{fac.contrato_titulo || fac.contrato_objeto}</p>
                                         </td>
                                         <td className="px-5 py-4 max-w-xs">
                                             <p className="text-sm text-gray-700 truncate">{fac.concepto || '-'}</p>

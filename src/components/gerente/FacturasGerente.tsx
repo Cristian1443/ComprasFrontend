@@ -26,6 +26,7 @@ interface FacturaGerente {
   creado_en: string;
   contrato_codigo: string;
   contrato_objeto: string;
+  contrato_titulo?: string | null;
   aprobado_supervisor: boolean | null;
   comentario_supervisor: string | null;
   aprobado_gerente: boolean | null;
@@ -180,7 +181,7 @@ export function FacturasGerente() {
                     {f.aprobado_supervisor === false && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold"><XCircle size={10} /> Supervisor ✗</span>}
                     {f.aprobado_supervisor === null && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold"><Clock size={10} /> Supervisor…</span>}
                   </div>
-                  <p className="text-sm font-semibold text-gray-800 truncate">{f.contrato_objeto}</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{f.contrato_titulo || f.contrato_objeto}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
                     <span className="font-mono font-semibold">AP {f.numero_ap}</span>
                     <span>·</span>
