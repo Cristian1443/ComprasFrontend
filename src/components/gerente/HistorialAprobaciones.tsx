@@ -47,6 +47,8 @@ const fmtCOP = (v: number | null) =>
 function StatusBadge({ estado }: { estado: string }) {
     if (estado === 'aprobada' || estado === 'aprobado_gerente')
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-100"><CheckCircle2 size={11} /> Aprobado</span>;
+    if (estado === 'devuelta')
+        return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-100"><XCircle size={11} /> Devuelto</span>;
     if (estado === 'rechazada' || estado === 'rechazado_gerente')
         return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-100"><XCircle size={11} /> Rechazado</span>;
     return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-100"><Clock size={11} /> Pendiente</span>;
@@ -56,7 +58,11 @@ function getSolicitudStatus(estado: string) {
     if (['aprobado_gerente', 'en_financiera', 'aprobado_financiera', 'aprobado_comite',
          'en_juridica', 'contratado'].includes(estado))
         return 'aprobada';
-    if (['rechazado_gerente', 'rechazado_financiera', 'rechazado_comite'].includes(estado))
+    // devuelto_al_solicitante es la propia decisión del Gerente al devolver la
+    // solicitud (ver gerente/DetalleAprobacion.tsx) — sin esto, su historial
+    // mostraba "Pendiente" para algo que él mismo ya decidió.
+    if (estado === 'devuelto_al_solicitante') return 'devuelta';
+    if (['rechazado_gerente', 'rechazado_financiera', 'rechazado_comite', 'rechazado_juridica'].includes(estado))
         return 'rechazada';
     return 'pendiente';
 }
