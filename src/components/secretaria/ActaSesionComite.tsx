@@ -406,6 +406,8 @@ export function ActaSesionComite({
               actaNumero,
               fechaSesion: fechaSesionISO ?? new Date().toISOString(),
               participantes,
+              desarrollo: desarrolloTexto,
+              conclusion: conclusionTexto,
               solicitudesMultiples: ids.map((id) => ({
                 id,
                 discusion: discusionesPorId[id] ?? '',
