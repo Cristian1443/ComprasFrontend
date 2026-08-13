@@ -1,6 +1,6 @@
 import { apiFetch } from '../../lib/apiClient';
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Save, Send, FileText, User, Building2, Shield, ChevronDown, ChevronUp, Lock, Plus, Trash2, Calendar, Download, Upload } from 'lucide-react';
+import { ArrowLeft, Save, Send, FileText, User, Building2, Shield, ChevronDown, ChevronUp, Lock, Plus, Trash2, Calendar, Download, Upload, Loader2 } from 'lucide-react';
 import { datosExistentes } from './datosSolicitudes';
 import { InstanciasAprobacion } from '../shared/InstanciasAprobacion';
 import { FormatoPlaneacionImprimible } from '../secretaria/FormatoPlaneacionImprimible';
@@ -1029,7 +1029,17 @@ export function FormularioSolicitud({
     anexos: anexosDocs
   });
 
-  const guardarBorrador = async (mostrarAlerta = true, payloadOverride?: ReturnType<typeof getPayload>) => {
+  // `procesandoRef` es un mutex compartido entre "Guardar Borrador" y "Enviar
+  // a Gerente": sin él, un doble clic (o dar "Enviar" justo después de
+  // "Guardar Borrador" sin esperar a que termine) dispara una segunda
+  // petición antes de que `currentSolicitudId` se actualice, y esa segunda
+  // petición cree un registro NUEVO en vez de reutilizar el borrador —
+  // exactamente el bug de solicitudes duplicadas. Un `ref` (no un state)
+  // porque necesita bloquear de forma síncrona, sin esperar al re-render.
+  const procesandoRef = useRef(false);
+  const [procesando, setProcesando] = useState(false);
+
+  const guardarBorradorInterno = async (mostrarAlerta: boolean, payloadOverride?: ReturnType<typeof getPayload>) => {
     try {
       const payload = payloadOverride || getPayload();
       if (currentSolicitudId) {
@@ -1070,9 +1080,32 @@ export function FormularioSolicitud({
     }
   };
 
+  const guardarBorrador = async (mostrarAlerta = true, payloadOverride?: ReturnType<typeof getPayload>) => {
+    if (procesandoRef.current) return currentSolicitudId;
+    procesandoRef.current = true;
+    setProcesando(true);
+    try {
+      return await guardarBorradorInterno(mostrarAlerta, payloadOverride);
+    } finally {
+      procesandoRef.current = false;
+      setProcesando(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (procesandoRef.current) return;
+    procesandoRef.current = true;
+    setProcesando(true);
+    try {
+      await procesarEnvio();
+    } finally {
+      procesandoRef.current = false;
+      setProcesando(false);
+    }
+  };
 
+  const procesarEnvio = async () => {
     const proponentesValidos = proponentes.filter(p => (p.nombreProveedor || '').trim().length > 0);
 
     // 1. Validar SMLV — Invitación < 25 SMLV, TDR >= 25 SMLV.
@@ -1136,8 +1169,11 @@ export function FormularioSolicitud({
       return;
     }
     try {
-      // 2. Primero guardamos el borrador (sin mostrar alerta individual)
-      const idActual = await guardarBorrador(false);
+      // 2. Primero guardamos el borrador (sin mostrar alerta individual).
+      // Usa la versión interna (sin mutex propio): ya estamos dentro del
+      // mutex compartido de handleSubmit, y volver a pasar por guardarBorrador
+      // lo bloquearía a sí mismo devolviendo el id viejo (o null) sin guardar nada.
+      const idActual = await guardarBorradorInterno(false);
       if (!idActual) throw new Error("No se pudo guardar la solicitud antes de enviar.");
 
       // 3. Enviar al Gerente
@@ -2381,10 +2417,12 @@ export function FormularioSolicitud({
                 <button
                   type="button"
                   onClick={() => guardarBorrador()}
-                  className="px-6 py-3 border-2 text-gray-700 rounded-lg hover:shadow-md transition-all font-medium flex items-center justify-center gap-2"
+                  disabled={procesando}
+                  className="px-6 py-3 border-2 text-gray-700 rounded-lg hover:shadow-md transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   style={{ borderColor: '#00A9E0', fontFamily: 'Gabarito, sans-serif', color: '#007AA3' }}
                 >
-                  <Save size={20} /> Guardar Borrador
+                  {procesando ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                  {procesando ? 'Guardando...' : 'Guardar Borrador'}
                 </button>
 
                 {tabActual === 'planeacion' ? (
@@ -2401,10 +2439,12 @@ export function FormularioSolicitud({
                 ) : (
                   <button
                     type="submit"
-                    className="px-8 py-3 text-white rounded-lg hover:shadow-lg transition-all font-bold flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(232,73,34,0.39)]"
+                    disabled={procesando}
+                    className="px-8 py-3 text-white rounded-lg hover:shadow-lg transition-all font-bold flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(232,73,34,0.39)] disabled:opacity-60 disabled:cursor-not-allowed"
                     style={{ backgroundColor: '#10B981', fontFamily: 'Gabarito, sans-serif' }}
                   >
-                    <Send size={20} /> Enviar a Gerente
+                    {procesando ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                    {procesando ? 'Enviando...' : 'Enviar a Gerente'}
                   </button>
                 )}
               </div>
