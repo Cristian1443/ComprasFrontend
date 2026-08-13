@@ -609,55 +609,48 @@ export function FormularioSolicitud({
   const separadoresPara = (moneda?: string): { decimal: string; miles: string } =>
     String(moneda || '').toUpperCase() === 'USD' ? { decimal: '.', miles: ',' } : { decimal: ',', miles: '.' };
 
-  // Sanitiza mientras se escribe (solo dígitos + el separador decimal propio
-  // de esa moneda), SIN insertar el separador de miles todavía: hacerlo en
-  // cada tecla mueve el cursor al final del input en cada re-render y hace
-  // imposible corregir un dígito en medio del número o escribir el decimal
-  // donde corresponde.
-  const soloNumeros = (v: string, moneda?: string): string => {
-    const { decimal } = separadoresPara(moneda);
-    const patron = decimal === '.' ? /[^0-9.]/g : /[^0-9,]/g;
-    let limpio = v.replace(patron, '');
-    const idx = limpio.indexOf(decimal);
+  // Sanitiza mientras se escribe: dígitos + como mucho UN separador decimal.
+  // No se restringe a la coma o el punto "propio" de la moneda porque muchos
+  // usuarios digitan por costumbre uno u otro sin fijarse en la moneda del
+  // campo — se respeta el primero que aparezca (sea cual sea) y se descarta
+  // cualquier otro que escriban después. Tampoco se inserta el separador de
+  // miles todavía: hacerlo en cada tecla mueve el cursor al final del input
+  // en cada re-render y hace imposible corregir un dígito en medio del
+  // número o escribir el decimal donde corresponde.
+  const soloNumeros = (v: string): string => {
+    let limpio = v.replace(/[^0-9.,]/g, '');
+    const idx = limpio.search(/[.,]/);
     if (idx > -1) {
-      limpio = limpio.slice(0, idx + 1) + limpio.slice(idx + 1).split(decimal).join('');
+      limpio = limpio.slice(0, idx + 1) + limpio.slice(idx + 1).replace(/[.,]/g, '');
     }
     return limpio;
   };
 
-  // Aplica el separador de miles al perder el foco del campo (ya no hay
-  // riesgo de mover el cursor porque el usuario terminó de escribir).
+  // Aplica el separador de miles al perder el foco del campo, usando la
+  // sintaxis propia de esa moneda (COP/EUR: punto de miles; USD: coma de
+  // miles) — sin importar qué carácter haya usado el usuario como decimal
+  // mientras escribía, se reexpresa con el separador correcto de la moneda.
   const formatearMiles = (v: string, moneda?: string): string => {
     const { decimal, miles } = separadoresPara(moneda);
-    const [entero, dec] = v.split(decimal);
-    const enteroFormateado = (entero || '').replace(/\B(?=(\d{3})+(?!\d))/g, miles);
+    const idx = v.search(/[.,]/);
+    const entero = idx > -1 ? v.slice(0, idx) : v;
+    const dec = idx > -1 ? v.slice(idx + 1) : undefined;
+    const enteroFormateado = entero.replace(/\B(?=(\d{3})+(?!\d))/g, miles);
     return dec !== undefined ? `${enteroFormateado}${decimal}${dec}` : enteroFormateado;
   };
 
   // Convierte texto monetario a número para validaciones sin imponer formato en UI.
-  // Si se conoce la moneda, se usa su separador decimal de forma autoritativa
-  // (evita ambigüedad: en USD una sola coma son miles, en COP/EUR es decimal).
-  const parseValorMoneda = (raw: string | number | null | undefined, moneda?: string): number => {
+  // No depende de la moneda: un solo separador con exactamente 3 dígitos
+  // detrás se interpreta como miles (p.ej. USD "1,234" o COP "1.234"), y con
+  // 1 o 2 dígitos como decimal (p.ej. "62,50" o "62.50") — así que da igual
+  // si el usuario usó coma o punto por costumbre, nunca se pierde la parte
+  // decimal como pasaba antes al asumir siempre el separador "propio" de la moneda.
+  const parseValorMoneda = (raw: string | number | null | undefined): number => {
     if (raw === null || raw === undefined) return 0;
     if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0;
     const txt = String(raw).trim();
     if (!txt) return 0;
     const limpio = txt.replace(/[^\d.,-]/g, '');
-
-    if (moneda) {
-      const { decimal } = separadoresPara(moneda);
-      const otro = decimal === '.' ? ',' : '.';
-      const lastDecimal = limpio.lastIndexOf(decimal);
-      let normalizado = limpio.split(otro).join('');
-      if (lastDecimal > -1) {
-        const antes = normalizado.slice(0, normalizado.lastIndexOf(decimal));
-        const despues = normalizado.slice(normalizado.lastIndexOf(decimal) + 1);
-        normalizado = `${antes}.${despues}`;
-      }
-      const n = Number(normalizado);
-      return Number.isFinite(n) ? n : 0;
-    }
-
     const lastComma = limpio.lastIndexOf(',');
     const lastDot = limpio.lastIndexOf('.');
     const dotCount = (limpio.match(/\./g) || []).length;
@@ -677,8 +670,9 @@ export function FormularioSolicitud({
         // Múltiples comas = separadores de miles: 62,000,000
         normalizado = limpio.replace(/,/g, '');
       } else {
-        // Una sola coma = decimal: 62,50
-        normalizado = limpio.replace(',', '.');
+        // Una sola coma: si hay exactamente 3 dígitos después → miles (p.ej. USD "1,234"), si no → decimal
+        const afterComma = limpio.slice(lastComma + 1);
+        normalizado = afterComma.length === 3 ? limpio.replace(/,/g, '') : limpio.replace(',', '.');
       }
     } else if (lastDot > -1) {
       if (dotCount > 1) {
@@ -698,13 +692,13 @@ export function FormularioSolicitud({
   const getValorTotalReferencia = () => {
     let total = 0;
     if (datosPlaneacion.moneda === 'COP' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('COP'))) {
-      total += parseValorMoneda(datosPlaneacion.valorMonedaCOP, 'COP');
+      total += parseValorMoneda(datosPlaneacion.valorMonedaCOP);
     }
     if (datosPlaneacion.moneda === 'USD' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('USD'))) {
-      total += parseValorMoneda(datosPlaneacion.valorMonedaUSD, 'USD');
+      total += parseValorMoneda(datosPlaneacion.valorMonedaUSD);
     }
     if (datosPlaneacion.moneda === 'EUR' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('EUR'))) {
-      total += parseValorMoneda(datosPlaneacion.valorMonedaEUR, 'EUR');
+      total += parseValorMoneda(datosPlaneacion.valorMonedaEUR);
     }
     return total || parseValorMoneda(datosPlaneacion.valorEstimado);
   };
@@ -712,9 +706,9 @@ export function FormularioSolicitud({
   const valorValidacion = getValorTotalReferencia();
 
   const getValorVisual = () => {
-    if (datosPlaneacion.moneda === 'USD') return parseValorMoneda(datosPlaneacion.valorMonedaUSD, 'USD');
-    if (datosPlaneacion.moneda === 'EUR') return parseValorMoneda(datosPlaneacion.valorMonedaEUR, 'EUR');
-    if (datosPlaneacion.moneda === 'COP') return parseValorMoneda(datosPlaneacion.valorMonedaCOP, 'COP');
+    if (datosPlaneacion.moneda === 'USD') return parseValorMoneda(datosPlaneacion.valorMonedaUSD);
+    if (datosPlaneacion.moneda === 'EUR') return parseValorMoneda(datosPlaneacion.valorMonedaEUR);
+    if (datosPlaneacion.moneda === 'COP') return parseValorMoneda(datosPlaneacion.valorMonedaCOP);
     return valorValidacion; // Fallback para combinada
   };
 
@@ -732,7 +726,7 @@ export function FormularioSolicitud({
     const grupos: Record<string, number[]> = {};
     lista.forEach(p => {
       const m = (p.moneda || 'COP').toUpperCase();
-      const v = parseValorMoneda(p.valorCotizacion, m);
+      const v = parseValorMoneda(p.valorCotizacion);
       if (v > 0) {
         (grupos[m] = grupos[m] || []).push(v);
       }
@@ -836,7 +830,7 @@ export function FormularioSolicitud({
   const promedioMercadoPorMoneda = (moneda: string) => promediosEstudioMercado.find(p => p.moneda === moneda)?.promedio;
   const avisoValorMinimo = (moneda: 'COP' | 'USD' | 'EUR', valorActual: string) => {
     const promedio = promedioMercadoPorMoneda(moneda);
-    const actual = parseValorMoneda(valorActual, moneda);
+    const actual = parseValorMoneda(valorActual);
     if (promedio === undefined || actual <= 0 || actual >= promedio) return null;
     return (
       <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: 6 }}>
@@ -866,7 +860,7 @@ export function FormularioSolicitud({
       // no borramos lo que el usuario ya haya escrito a mano — solo sugerimos
       // (o subimos) el valor cuando sí hay un promedio real con el que comparar.
       const sugerido = (promedio: number | undefined, actual: string, moneda: string) =>
-        promedio === undefined ? actual : (parseValorMoneda(actual, moneda) >= promedio ? actual : formatearPromedio(promedio, moneda));
+        promedio === undefined ? actual : (parseValorMoneda(actual) >= promedio ? actual : formatearPromedio(promedio, moneda));
       const next = {
         ...prev,
         moneda: nuevaMoneda,
@@ -922,7 +916,7 @@ export function FormularioSolicitud({
   const cambiarMonedaProponente = (index: number, nuevaMoneda: string) => {
     setProponentes(prev => {
       const p = prev[index];
-      const valorNumerico = parseValorMoneda(p.valorCotizacion, p.moneda);
+      const valorNumerico = parseValorMoneda(p.valorCotizacion);
       const valorConvertido = valorNumerico > 0
         ? formatearMiles(String(valorNumerico).replace('.', separadoresPara(nuevaMoneda).decimal), nuevaMoneda)
         : p.valorCotizacion;
@@ -995,9 +989,9 @@ export function FormularioSolicitud({
     valor_estimado: getValorVisual(),
     valor_en_cop: valorValidacion,
     moneda: datosPlaneacion.moneda,
-    valor_moneda_cop: parseValorMoneda(datosPlaneacion.valorMonedaCOP, 'COP'),
-    valor_moneda_usd: parseValorMoneda(datosPlaneacion.valorMonedaUSD, 'USD'),
-    valor_moneda_eur: parseValorMoneda(datosPlaneacion.valorMonedaEUR, 'EUR'),
+    valor_moneda_cop: parseValorMoneda(datosPlaneacion.valorMonedaCOP),
+    valor_moneda_usd: parseValorMoneda(datosPlaneacion.valorMonedaUSD),
+    valor_moneda_eur: parseValorMoneda(datosPlaneacion.valorMonedaEUR),
     valor_moneda_cop_texto: datosPlaneacion.valorMonedaCOP,
     valor_moneda_usd_texto: datosPlaneacion.valorMonedaUSD,
     valor_moneda_eur_texto: datosPlaneacion.valorMonedaEUR,
@@ -1728,7 +1722,7 @@ export function FormularioSolicitud({
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
                                       <span style={{ padding: '5px 4px 5px 7px', fontSize: '0.78rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', flexShrink: 0 }}>$</span>
                                       <input type="text" inputMode="decimal" value={p.valorCotizacion}
-                                        onChange={e => handleProponenteChange(i, 'valorCotizacion', soloNumeros(e.target.value, p.moneda))}
+                                        onChange={e => handleProponenteChange(i, 'valorCotizacion', soloNumeros(e.target.value))}
                                         placeholder="0"
                                         style={{ flex: 1, padding: '5px 7px 5px 2px', border: '1px solid transparent', borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.78rem', outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box' as const, minWidth: 0 }}
                                         onFocus={e => { (e.target.parentElement as HTMLElement).style.border = '1px solid var(--brand-primary)'; (e.target.parentElement as HTMLElement).style.borderRadius = '4px'; e.target.style.backgroundColor = '#fff'; (e.target.parentElement as HTMLElement).style.backgroundColor = '#fff'; }}
@@ -1879,7 +1873,7 @@ export function FormularioSolicitud({
                                       ) : (
                                         <input
                                           type="text" inputMode={numerico ? 'decimal' : undefined} value={p[field] as string}
-                                          onChange={e => handleProponenteChange(i, field, numerico ? soloNumeros(e.target.value, p.moneda) : e.target.value)}
+                                          onChange={e => handleProponenteChange(i, field, numerico ? soloNumeros(e.target.value) : e.target.value)}
                                           style={{
                                             width: '100%', padding: '6px 8px', border: '1px solid transparent',
                                             borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.78rem',
@@ -2109,7 +2103,7 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Dólares (USD)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaUSD}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: soloNumeros(e.target.value, 'USD') })}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0.00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                                   onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaUSD: formatearMiles(prev.valorMonedaUSD, 'USD') })); }}
@@ -2123,7 +2117,7 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Pesos (COP)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaCOP}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: soloNumeros(e.target.value, 'COP') })}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0,00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                                   onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaCOP: formatearMiles(prev.valorMonedaCOP, 'COP') })); }}
@@ -2137,7 +2131,7 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Euros (EUR)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaEUR}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: soloNumeros(e.target.value, 'EUR') })}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0,00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                                   onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaEUR: formatearMiles(prev.valorMonedaEUR, 'EUR') })); }}
