@@ -21,7 +21,7 @@ const ESTADO_LABEL: Record<string, string> = {
   rechazado_financiera: 'Devuelto financiera', en_juridica: 'En juridica',
   enviado_juridica: 'En juridica', aprobado_juridica: 'Aprobado juridica',
   rechazado_juridica: 'Devuelto juridica', aprobado_comite: 'Aprobado comite',
-  rechazado_comite: 'Devuelto comite', devuelto_al_solicitante: 'Devuelto',
+  rechazado_comite: 'Devuelto comite', devuelto_al_solicitante: 'Devuelto gerente',
   finalizado: 'Finalizado', contratado: 'Contratado',
 };
 
