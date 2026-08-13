@@ -2,7 +2,7 @@ import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   PenLine, CheckCircle2, XCircle, Clock, Loader2, FileDown, Send,
-  AlertTriangle, RefreshCw,
+  AlertTriangle, RefreshCw, Pencil, Check, X,
 } from 'lucide-react';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
@@ -71,6 +71,10 @@ export function BloqueFirma({
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editandoRol, setEditandoRol] = useState<string | null>(null);
+  const [edicion, setEdicion] = useState({ nombre: '', email: '' });
+  const [guardandoFirmante, setGuardandoFirmante] = useState(false);
+  const [avisoFirmante, setAvisoFirmante] = useState<string | null>(null);
 
   const cargarEstadoFirma = useCallback(async () => {
     try {
@@ -142,6 +146,53 @@ export function BloqueFirma({
     window.open(`${API_URL}/api/firmas/${firma.firma_id}/pdf-firmado`, '_blank');
   };
 
+  const empezarEdicion = (f: FirmanteAPI) => {
+    setEditandoRol(f.rol);
+    setEdicion({ nombre: f.nombre, email: f.email });
+    setAvisoFirmante(null);
+  };
+
+  const cancelarEdicion = () => {
+    setEditandoRol(null);
+    setEdicion({ nombre: '', email: '' });
+  };
+
+  const guardarEdicionFirmante = async (f: FirmanteAPI) => {
+    if (!edicion.email.trim()) return;
+    setGuardandoFirmante(true);
+    try {
+      const r = await apiFetch(`${API_URL}/api/configuracion/firmantes/${f.rol}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: edicion.nombre.trim(),
+          email: edicion.email.trim(),
+          cargo: f.cargo || null,
+          activo: true,
+        }),
+      });
+      if (!r.ok) throw new Error('No se pudo guardar el correo');
+      setFirma((prev) => prev ? {
+        ...prev,
+        firmantes: (prev.firmantes || []).map((x) => x.rol === f.rol
+          ? { ...x, nombre: edicion.nombre.trim(), email: edicion.email.trim() }
+          : x),
+      } : prev);
+      setEditandoRol(null);
+      const yaEnviado = firma && ['enviado', 'firmando'].includes(firma.estado_firma);
+      setAvisoFirmante(
+        yaEnviado
+          ? 'Correo actualizado. Esta firma ya se envió con el correo anterior — dale "Reenviar firma" para aplicar el cambio.'
+          : 'Correo actualizado.'
+      );
+      setTimeout(() => setAvisoFirmante(null), 6000);
+    } catch (e: any) {
+      setAvisoFirmante(e.message || 'Error al guardar el correo');
+    } finally {
+      setGuardandoFirmante(false);
+    }
+  };
+
   if (cargando) {
     return (
       <div style={{ ...s.wrap, ...(compacto ? s.wrapCompacto : {}) }}>
@@ -210,34 +261,81 @@ export function BloqueFirma({
           <p style={s.empty}>Sin firmantes configurados.</p>
         ) : firmantes.map((f) => (
           <div key={`${f.email}-${f.orden}`} style={s.firmanteRow}>
-            <div style={s.firmanteLeft}>
-              <span style={s.firmanteOrden}>{f.orden}</span>
-              <div style={{ minWidth: 0 }}>
-                <p style={s.firmanteNombre}>{f.nombre}</p>
-                <p style={s.firmanteEmail}>
-                  {f.email}{f.cargo ? ` · ${f.cargo}` : ''}
-                </p>
+            {editandoRol === f.rol ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0 }}>
+                <input
+                  type="text"
+                  value={edicion.nombre}
+                  onChange={(e) => setEdicion((p) => ({ ...p, nombre: e.target.value }))}
+                  placeholder="Nombre"
+                  style={s.inputEdicion}
+                />
+                <input
+                  type="email"
+                  value={edicion.email}
+                  onChange={(e) => setEdicion((p) => ({ ...p, email: e.target.value }))}
+                  placeholder="Correo"
+                  style={s.inputEdicion}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => guardarEdicionFirmante(f)}
+                    disabled={guardandoFirmante}
+                    style={s.btnMiniGuardar}
+                  >
+                    {guardandoFirmante ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Guardar
+                  </button>
+                  <button type="button" onClick={cancelarEdicion} disabled={guardandoFirmante} style={s.btnMiniCancelar}>
+                    <X size={12} /> Cancelar
+                  </button>
+                </div>
               </div>
-            </div>
-            <span
-              style={{
-                ...s.estadoMini,
-                background: f.estado === 'firmado' ? '#ECFDF5'
-                  : f.estado === 'rechazado' ? '#FEF2F2' : '#F3F4F6',
-                color: f.estado === 'firmado' ? '#065F46'
-                  : f.estado === 'rechazado' ? '#991B1B' : '#6B7280',
-                borderColor: f.estado === 'firmado' ? '#A7F3D0'
-                  : f.estado === 'rechazado' ? '#FECACA' : '#E5E7EB',
-              }}
-            >
-              {f.estado === 'firmado' ? <CheckCircle2 size={11} />
-                : f.estado === 'rechazado' ? <XCircle size={11} />
-                : <Clock size={11} />}
-              {f.estado === 'firmado' ? 'Firmado' : f.estado === 'rechazado' ? 'Rechazado' : 'Pendiente'}
-            </span>
+            ) : (
+              <>
+                <div style={s.firmanteLeft}>
+                  <span style={s.firmanteOrden}>{f.orden}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={s.firmanteNombre}>{f.nombre}</p>
+                    <p style={s.firmanteEmail}>
+                      {f.email}{f.cargo ? ` · ${f.cargo}` : ''}
+                    </p>
+                  </div>
+                </div>
+                {f.estado !== 'firmado' && (
+                  <button
+                    type="button"
+                    onClick={() => empezarEdicion(f)}
+                    title="Cambiar nombre/correo"
+                    style={s.btnEditarFirmante}
+                  >
+                    <Pencil size={12} />
+                  </button>
+                )}
+                <span
+                  style={{
+                    ...s.estadoMini,
+                    background: f.estado === 'firmado' ? '#ECFDF5'
+                      : f.estado === 'rechazado' ? '#FEF2F2' : '#F3F4F6',
+                    color: f.estado === 'firmado' ? '#065F46'
+                      : f.estado === 'rechazado' ? '#991B1B' : '#6B7280',
+                    borderColor: f.estado === 'firmado' ? '#A7F3D0'
+                      : f.estado === 'rechazado' ? '#FECACA' : '#E5E7EB',
+                  }}
+                >
+                  {f.estado === 'firmado' ? <CheckCircle2 size={11} />
+                    : f.estado === 'rechazado' ? <XCircle size={11} />
+                    : <Clock size={11} />}
+                  {f.estado === 'firmado' ? 'Firmado' : f.estado === 'rechazado' ? 'Rechazado' : 'Pendiente'}
+                </span>
+              </>
+            )}
           </div>
         ))}
       </div>
+      {avisoFirmante && (
+        <p style={s.avisoFirmante}>{avisoFirmante}</p>
+      )}
 
       {/* Acciones según estado */}
       <div style={s.actions}>
@@ -349,6 +447,32 @@ const s: Record<string, React.CSSProperties> = {
     border: '1px solid', whiteSpace: 'nowrap',
   },
   empty: { margin: 0, fontSize: 11, color: '#9CA3AF', fontStyle: 'italic' },
+  btnEditarFirmante: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+    background: '#fff', color: '#9A3412', border: '1px solid #FED7AA', cursor: 'pointer',
+  },
+  inputEdicion: {
+    width: '100%', padding: '6px 8px', borderRadius: 6,
+    border: '1px solid #FDBA74', fontSize: 12, fontFamily: "'Gabarito', 'Segoe UI', sans-serif",
+    color: '#111827',
+  },
+  btnMiniGuardar: {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '5px 10px', borderRadius: 6,
+    background: '#E84922', color: '#fff', border: 'none',
+    fontSize: 11, fontWeight: 800, cursor: 'pointer',
+  },
+  btnMiniCancelar: {
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '5px 10px', borderRadius: 6,
+    background: '#fff', color: '#6B7280', border: '1px solid #E5E7EB',
+    fontSize: 11, fontWeight: 800, cursor: 'pointer',
+  },
+  avisoFirmante: {
+    margin: 0, fontSize: 11, color: '#065F46', background: '#ECFDF5',
+    border: '1px solid #A7F3D0', borderRadius: 6, padding: '6px 10px', fontWeight: 700,
+  },
   actions: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   hint: { margin: 0, fontSize: 11, color: '#92400E', display: 'inline-flex', alignItems: 'center', fontWeight: 600 },
   errorBox: {
