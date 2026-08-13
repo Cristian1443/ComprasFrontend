@@ -33,7 +33,7 @@ export function Ayuda() {
     },
     {
       pregunta: '¿Qué modalidades de contratación existen?',
-      respuesta: 'Existen tres modalidades: Directa (sin proceso de selección), Invitación (<50 SMLV) y TDR (>50 SMLV con términos de referencia completos).',
+      respuesta: 'Existen tres modalidades: Directa (sin proceso de selección), Invitación (<25 SMLV) y TDR (≥25 SMLV con términos de referencia completos).',
     },
     {
       pregunta: '¿Puedo editar una solicitud después de enviarla?',

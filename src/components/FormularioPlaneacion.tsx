@@ -802,8 +802,8 @@ export function FormularioPlaneacion({ onBack }: FormularioPlaneacionProps) {
                 </p>
                 <p className="text-sm text-gray-600 mt-1">
                   {m === 'Directa' && 'Sin proceso de selección'}
-                  {m === 'Invitacion' && '< 50 SMLV'}
-                  {m === 'TDR' && '> 50 SMLV'}
+                  {m === 'Invitacion' && '< 25 SMLV'}
+                  {m === 'TDR' && '≥ 25 SMLV'}
                 </p>
               </button>
             ))}

@@ -20,22 +20,22 @@ const modalidades = [
     {
         id: 'Invitación' as const,
         titulo: 'Invitación a Ofertar',
-        descripcion: 'Proceso de invitación a mínimo 3 proponentes. Aplica para contrataciones menores a 50 SMLV con cronograma definido.',
+        descripcion: 'Proceso de invitación a mínimo 3 proponentes. Aplica para contrataciones menores a 25 SMLV con cronograma definido.',
         icon: Users,
         color: 'var(--brand-secondary)',
         bgColor: 'rgba(51, 132, 214, 0.08)',
         borderColor: 'var(--brand-secondary)',
-        tags: ['< 50 SMLV', 'Mín. 3 proponentes', 'Cronograma'],
+        tags: ['< 25 SMLV', 'Mín. 3 proponentes', 'Cronograma'],
     },
     {
         id: 'TDR' as const,
         titulo: 'Términos de Referencia',
-        descripcion: 'Proceso con Términos de Referencia completos. Para contrataciones superiores a 50 SMLV que requieren ficha técnica detallada.',
+        descripcion: 'Proceso con Términos de Referencia completos. Para contrataciones iguales o superiores a 25 SMLV que requieren ficha técnica detallada.',
         icon: BookOpen,
         color: 'var(--brand-accent)',
         bgColor: 'rgba(0, 169, 224, 0.07)',
         borderColor: 'var(--brand-accent)',
-        tags: ['> 50 SMLV', 'TDR completo', 'Ficha técnica'],
+        tags: ['≥ 25 SMLV', 'TDR completo', 'Ficha técnica'],
     },
 ];
 
