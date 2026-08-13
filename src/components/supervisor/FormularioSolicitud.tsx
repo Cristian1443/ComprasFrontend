@@ -603,35 +603,61 @@ export function FormularioSolicitud({
     plazoEjecucionDias: datosIniciales.plazoEjecucionDias || '',
   });
 
-  // Filtra y formatea cualquier campo de valor/dinero: agrega puntos de miles mientras se escribe (coma opcional para decimales).
-  // Sanitiza mientras se escribe (solo dígitos + una coma decimal), SIN insertar
-  // puntos de miles todavía: hacerlo en cada tecla mueve el cursor al final del
-  // input en cada re-render y hace imposible corregir un dígito en medio del
-  // número o escribir la coma decimal donde corresponde.
-  const soloNumeros = (v: string): string => {
-    let limpio = v.replace(/[^0-9,]/g, '');
-    const idxComa = limpio.indexOf(',');
-    if (idxComa > -1) {
-      limpio = limpio.slice(0, idxComa + 1) + limpio.slice(idxComa + 1).replace(/,/g, '');
+  // Cada moneda tiene su propia convención de separadores: COP/EUR usan coma
+  // decimal y punto de miles (1.234,56); USD usa punto decimal y coma de
+  // miles (1,234.56) — el estándar de cada una, no un formato único forzado.
+  const separadoresPara = (moneda?: string): { decimal: string; miles: string } =>
+    String(moneda || '').toUpperCase() === 'USD' ? { decimal: '.', miles: ',' } : { decimal: ',', miles: '.' };
+
+  // Sanitiza mientras se escribe (solo dígitos + el separador decimal propio
+  // de esa moneda), SIN insertar el separador de miles todavía: hacerlo en
+  // cada tecla mueve el cursor al final del input en cada re-render y hace
+  // imposible corregir un dígito en medio del número o escribir el decimal
+  // donde corresponde.
+  const soloNumeros = (v: string, moneda?: string): string => {
+    const { decimal } = separadoresPara(moneda);
+    const patron = decimal === '.' ? /[^0-9.]/g : /[^0-9,]/g;
+    let limpio = v.replace(patron, '');
+    const idx = limpio.indexOf(decimal);
+    if (idx > -1) {
+      limpio = limpio.slice(0, idx + 1) + limpio.slice(idx + 1).split(decimal).join('');
     }
     return limpio;
   };
 
-  // Aplica el punto de miles al perder el foco del campo (ya no hay riesgo
-  // de mover el cursor porque el usuario terminó de escribir).
-  const formatearMiles = (v: string): string => {
-    const [entero, decimal] = v.split(',');
-    const enteroFormateado = (entero || '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    return decimal !== undefined ? `${enteroFormateado},${decimal}` : enteroFormateado;
+  // Aplica el separador de miles al perder el foco del campo (ya no hay
+  // riesgo de mover el cursor porque el usuario terminó de escribir).
+  const formatearMiles = (v: string, moneda?: string): string => {
+    const { decimal, miles } = separadoresPara(moneda);
+    const [entero, dec] = v.split(decimal);
+    const enteroFormateado = (entero || '').replace(/\B(?=(\d{3})+(?!\d))/g, miles);
+    return dec !== undefined ? `${enteroFormateado}${decimal}${dec}` : enteroFormateado;
   };
 
   // Convierte texto monetario a número para validaciones sin imponer formato en UI.
-  const parseValorMoneda = (raw: string | number | null | undefined): number => {
+  // Si se conoce la moneda, se usa su separador decimal de forma autoritativa
+  // (evita ambigüedad: en USD una sola coma son miles, en COP/EUR es decimal).
+  const parseValorMoneda = (raw: string | number | null | undefined, moneda?: string): number => {
     if (raw === null || raw === undefined) return 0;
     if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0;
     const txt = String(raw).trim();
     if (!txt) return 0;
     const limpio = txt.replace(/[^\d.,-]/g, '');
+
+    if (moneda) {
+      const { decimal } = separadoresPara(moneda);
+      const otro = decimal === '.' ? ',' : '.';
+      const lastDecimal = limpio.lastIndexOf(decimal);
+      let normalizado = limpio.split(otro).join('');
+      if (lastDecimal > -1) {
+        const antes = normalizado.slice(0, normalizado.lastIndexOf(decimal));
+        const despues = normalizado.slice(normalizado.lastIndexOf(decimal) + 1);
+        normalizado = `${antes}.${despues}`;
+      }
+      const n = Number(normalizado);
+      return Number.isFinite(n) ? n : 0;
+    }
+
     const lastComma = limpio.lastIndexOf(',');
     const lastDot = limpio.lastIndexOf('.');
     const dotCount = (limpio.match(/\./g) || []).length;
@@ -672,13 +698,13 @@ export function FormularioSolicitud({
   const getValorTotalReferencia = () => {
     let total = 0;
     if (datosPlaneacion.moneda === 'COP' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('COP'))) {
-      total += parseValorMoneda(datosPlaneacion.valorMonedaCOP);
+      total += parseValorMoneda(datosPlaneacion.valorMonedaCOP, 'COP');
     }
     if (datosPlaneacion.moneda === 'USD' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('USD'))) {
-      total += parseValorMoneda(datosPlaneacion.valorMonedaUSD);
+      total += parseValorMoneda(datosPlaneacion.valorMonedaUSD, 'USD');
     }
     if (datosPlaneacion.moneda === 'EUR' || (datosPlaneacion.moneda === 'COMBINADA' && datosPlaneacion.monedasSeleccionadas.includes('EUR'))) {
-      total += parseValorMoneda(datosPlaneacion.valorMonedaEUR);
+      total += parseValorMoneda(datosPlaneacion.valorMonedaEUR, 'EUR');
     }
     return total || parseValorMoneda(datosPlaneacion.valorEstimado);
   };
@@ -686,9 +712,9 @@ export function FormularioSolicitud({
   const valorValidacion = getValorTotalReferencia();
 
   const getValorVisual = () => {
-    if (datosPlaneacion.moneda === 'USD') return parseValorMoneda(datosPlaneacion.valorMonedaUSD);
-    if (datosPlaneacion.moneda === 'EUR') return parseValorMoneda(datosPlaneacion.valorMonedaEUR);
-    if (datosPlaneacion.moneda === 'COP') return parseValorMoneda(datosPlaneacion.valorMonedaCOP);
+    if (datosPlaneacion.moneda === 'USD') return parseValorMoneda(datosPlaneacion.valorMonedaUSD, 'USD');
+    if (datosPlaneacion.moneda === 'EUR') return parseValorMoneda(datosPlaneacion.valorMonedaEUR, 'EUR');
+    if (datosPlaneacion.moneda === 'COP') return parseValorMoneda(datosPlaneacion.valorMonedaCOP, 'COP');
     return valorValidacion; // Fallback para combinada
   };
 
@@ -705,9 +731,9 @@ export function FormularioSolicitud({
   const calcularPromediosPorMoneda = (lista: Proponente[]): { moneda: string; promedio: number }[] => {
     const grupos: Record<string, number[]> = {};
     lista.forEach(p => {
-      const v = parseValorMoneda(p.valorCotizacion);
+      const m = (p.moneda || 'COP').toUpperCase();
+      const v = parseValorMoneda(p.valorCotizacion, m);
       if (v > 0) {
-        const m = (p.moneda || 'COP').toUpperCase();
         (grupos[m] = grupos[m] || []).push(v);
       }
     });
@@ -801,15 +827,20 @@ export function FormularioSolicitud({
   // pero no bajar de ese monto. Aplica en las 3 modalidades: en Directa el
   // valor se diligencia manualmente desde cero; en Invitación/TDR se sugiere
   // automáticamente el promedio pero el usuario puede editarlo hacia arriba.
+  // Formatea un número ya parseado con la convención propia de cada moneda
+  // (USD: coma de miles / punto decimal — en-US; COP/EUR: punto de miles / coma decimal — es-CO).
+  const formatearPromedio = (n: number, moneda: string): string =>
+    n.toLocaleString(String(moneda).toUpperCase() === 'USD' ? 'en-US' : 'es-CO');
+
   const promediosEstudioMercado = calcularPromediosPorMoneda(proponentes);
   const promedioMercadoPorMoneda = (moneda: string) => promediosEstudioMercado.find(p => p.moneda === moneda)?.promedio;
   const avisoValorMinimo = (moneda: 'COP' | 'USD' | 'EUR', valorActual: string) => {
     const promedio = promedioMercadoPorMoneda(moneda);
-    const actual = parseValorMoneda(valorActual);
+    const actual = parseValorMoneda(valorActual, moneda);
     if (promedio === undefined || actual <= 0 || actual >= promedio) return null;
     return (
       <p style={{ fontSize: '0.75rem', color: '#DC2626', marginTop: 6 }}>
-        El valor no puede quedar por debajo del promedio cotizado en el Estudio de Mercado ({moneda} {promedio.toLocaleString('es-CO')}). Puede aumentarlo, pero no reducirlo por debajo de ese monto.
+        El valor no puede quedar por debajo del promedio cotizado en el Estudio de Mercado ({moneda} {formatearPromedio(promedio, moneda)}). Puede aumentarlo, pero no reducirlo por debajo de ese monto.
       </p>
     );
   };
@@ -834,15 +865,15 @@ export function FormularioSolicitud({
       // Si esa moneda ya no tiene ninguna cotización en el Estudio de Mercado,
       // no borramos lo que el usuario ya haya escrito a mano — solo sugerimos
       // (o subimos) el valor cuando sí hay un promedio real con el que comparar.
-      const sugerido = (promedio: number | undefined, actual: string) =>
-        promedio === undefined ? actual : (parseValorMoneda(actual) >= promedio ? actual : promedio.toLocaleString('es-CO'));
+      const sugerido = (promedio: number | undefined, actual: string, moneda: string) =>
+        promedio === undefined ? actual : (parseValorMoneda(actual, moneda) >= promedio ? actual : formatearPromedio(promedio, moneda));
       const next = {
         ...prev,
         moneda: nuevaMoneda,
         monedasSeleccionadas: monedasPresentes,
-        valorMonedaCOP: sugerido(valorCOP, prev.valorMonedaCOP),
-        valorMonedaUSD: sugerido(valorUSD, prev.valorMonedaUSD),
-        valorMonedaEUR: sugerido(valorEUR, prev.valorMonedaEUR),
+        valorMonedaCOP: sugerido(valorCOP, prev.valorMonedaCOP, 'COP'),
+        valorMonedaUSD: sugerido(valorUSD, prev.valorMonedaUSD, 'USD'),
+        valorMonedaEUR: sugerido(valorEUR, prev.valorMonedaEUR, 'EUR'),
       };
       const sinCambios = prev.moneda === next.moneda
         && prev.valorMonedaCOP === next.valorMonedaCOP
@@ -883,6 +914,22 @@ export function FormularioSolicitud({
     const n = [...proponentes];
     n[index][field] = value;
     setProponentes(n);
+  };
+
+  // Al cambiar la moneda de un proponente, re-interpreta el valor ya escrito
+  // con las reglas de la moneda ANTERIOR y lo reescribe con las de la nueva
+  // — si no, "1.234,56" (COP) pasaría a leerse como 1.23456 al marcarlo USD.
+  const cambiarMonedaProponente = (index: number, nuevaMoneda: string) => {
+    setProponentes(prev => {
+      const p = prev[index];
+      const valorNumerico = parseValorMoneda(p.valorCotizacion, p.moneda);
+      const valorConvertido = valorNumerico > 0
+        ? formatearMiles(String(valorNumerico).replace('.', separadoresPara(nuevaMoneda).decimal), nuevaMoneda)
+        : p.valorCotizacion;
+      const n = [...prev];
+      n[index] = { ...p, moneda: nuevaMoneda, valorCotizacion: valorConvertido };
+      return n;
+    });
   };
 
   const agregarProponente = () => {
@@ -948,9 +995,9 @@ export function FormularioSolicitud({
     valor_estimado: getValorVisual(),
     valor_en_cop: valorValidacion,
     moneda: datosPlaneacion.moneda,
-    valor_moneda_cop: parseValorMoneda(datosPlaneacion.valorMonedaCOP),
-    valor_moneda_usd: parseValorMoneda(datosPlaneacion.valorMonedaUSD),
-    valor_moneda_eur: parseValorMoneda(datosPlaneacion.valorMonedaEUR),
+    valor_moneda_cop: parseValorMoneda(datosPlaneacion.valorMonedaCOP, 'COP'),
+    valor_moneda_usd: parseValorMoneda(datosPlaneacion.valorMonedaUSD, 'USD'),
+    valor_moneda_eur: parseValorMoneda(datosPlaneacion.valorMonedaEUR, 'EUR'),
     valor_moneda_cop_texto: datosPlaneacion.valorMonedaCOP,
     valor_moneda_usd_texto: datosPlaneacion.valorMonedaUSD,
     valor_moneda_eur_texto: datosPlaneacion.valorMonedaEUR,
@@ -1681,16 +1728,16 @@ export function FormularioSolicitud({
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
                                       <span style={{ padding: '5px 4px 5px 7px', fontSize: '0.78rem', color: '#6B7280', fontFamily: 'Gabarito, sans-serif', flexShrink: 0 }}>$</span>
                                       <input type="text" inputMode="decimal" value={p.valorCotizacion}
-                                        onChange={e => handleProponenteChange(i, 'valorCotizacion', soloNumeros(e.target.value))}
+                                        onChange={e => handleProponenteChange(i, 'valorCotizacion', soloNumeros(e.target.value, p.moneda))}
                                         placeholder="0"
                                         style={{ flex: 1, padding: '5px 7px 5px 2px', border: '1px solid transparent', borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.78rem', outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box' as const, minWidth: 0 }}
                                         onFocus={e => { (e.target.parentElement as HTMLElement).style.border = '1px solid var(--brand-primary)'; (e.target.parentElement as HTMLElement).style.borderRadius = '4px'; e.target.style.backgroundColor = '#fff'; (e.target.parentElement as HTMLElement).style.backgroundColor = '#fff'; }}
-                                        onBlur={e => { (e.target.parentElement as HTMLElement).style.border = '1px solid transparent'; e.target.style.backgroundColor = 'transparent'; (e.target.parentElement as HTMLElement).style.backgroundColor = 'transparent'; handleProponenteChange(i, 'valorCotizacion', formatearMiles(p.valorCotizacion)); }}
+                                        onBlur={e => { (e.target.parentElement as HTMLElement).style.border = '1px solid transparent'; e.target.style.backgroundColor = 'transparent'; (e.target.parentElement as HTMLElement).style.backgroundColor = 'transparent'; handleProponenteChange(i, 'valorCotizacion', formatearMiles(p.valorCotizacion, p.moneda)); }}
                                       />
                                     </div>
                                   </td>
                                   <td style={{ border: '1px solid #e5e7eb', padding: '2px 4px', verticalAlign: 'middle' }}>
-                                    <select value={p.moneda} onChange={e => handleProponenteChange(i, 'moneda', e.target.value)}
+                                    <select value={p.moneda} onChange={e => cambiarMonedaProponente(i, e.target.value)}
                                       style={{ width: '100%', padding: '5px 4px', border: '1px solid transparent', borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.72rem', outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box' as const }}
                                       onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
                                       onBlur={e => e.target.style.borderColor = 'transparent'}
@@ -1832,14 +1879,14 @@ export function FormularioSolicitud({
                                       ) : (
                                         <input
                                           type="text" inputMode={numerico ? 'decimal' : undefined} value={p[field] as string}
-                                          onChange={e => handleProponenteChange(i, field, numerico ? soloNumeros(e.target.value) : e.target.value)}
+                                          onChange={e => handleProponenteChange(i, field, numerico ? soloNumeros(e.target.value, p.moneda) : e.target.value)}
                                           style={{
                                             width: '100%', padding: '6px 8px', border: '1px solid transparent',
                                             borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.78rem',
                                             outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box'
                                           }}
                                           onFocus={e => { e.target.style.borderColor = 'var(--brand-primary)'; e.target.style.backgroundColor = '#fff'; }}
-                                          onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.backgroundColor = 'transparent'; if (numerico) handleProponenteChange(i, field, formatearMiles(p[field] as string)); }}
+                                          onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.backgroundColor = 'transparent'; if (numerico) handleProponenteChange(i, field, formatearMiles(p[field] as string, p.moneda)); }}
                                         />
                                       )}
                                     </td>
@@ -2062,10 +2109,10 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Dólares (USD)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaUSD}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: soloNumeros(e.target.value) })}
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: soloNumeros(e.target.value, 'USD') })}
                                   style={inputStyle} placeholder="0.00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaUSD: formatearMiles(prev.valorMonedaUSD) })); }}
+                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaUSD: formatearMiles(prev.valorMonedaUSD, 'USD') })); }}
                                 />
                                 {avisoValorMinimo('USD', datosPlaneacion.valorMonedaUSD)}
                               </div>
@@ -2076,10 +2123,10 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Pesos (COP)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaCOP}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: soloNumeros(e.target.value) })}
-                                  style={inputStyle} placeholder="0.00"
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: soloNumeros(e.target.value, 'COP') })}
+                                  style={inputStyle} placeholder="0,00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaCOP: formatearMiles(prev.valorMonedaCOP) })); }}
+                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaCOP: formatearMiles(prev.valorMonedaCOP, 'COP') })); }}
                                 />
                                 {avisoValorMinimo('COP', datosPlaneacion.valorMonedaCOP)}
                               </div>
@@ -2090,10 +2137,10 @@ export function FormularioSolicitud({
                                 <FieldLabel label="Valor en Euros (EUR)" hint={esInvitacionOTdr ? "Se sugiere a partir del promedio cotizado en el Estudio de Mercado (Sección III). Puede ajustarlo, pero no puede quedar por debajo de ese promedio." : undefined} />
                                 <input type="text" inputMode="decimal"
                                   value={datosPlaneacion.valorMonedaEUR}
-                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: soloNumeros(e.target.value) })}
-                                  style={inputStyle} placeholder="0.00"
+                                  onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: soloNumeros(e.target.value, 'EUR') })}
+                                  style={inputStyle} placeholder="0,00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaEUR: formatearMiles(prev.valorMonedaEUR) })); }}
+                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaEUR: formatearMiles(prev.valorMonedaEUR, 'EUR') })); }}
                                 />
                                 {avisoValorMinimo('EUR', datosPlaneacion.valorMonedaEUR)}
                               </div>
