@@ -604,14 +604,24 @@ export function FormularioSolicitud({
   });
 
   // Filtra y formatea cualquier campo de valor/dinero: agrega puntos de miles mientras se escribe (coma opcional para decimales).
+  // Sanitiza mientras se escribe (solo dígitos + una coma decimal), SIN insertar
+  // puntos de miles todavía: hacerlo en cada tecla mueve el cursor al final del
+  // input en cada re-render y hace imposible corregir un dígito en medio del
+  // número o escribir la coma decimal donde corresponde.
   const soloNumeros = (v: string): string => {
     let limpio = v.replace(/[^0-9,]/g, '');
     const idxComa = limpio.indexOf(',');
     if (idxComa > -1) {
       limpio = limpio.slice(0, idxComa + 1) + limpio.slice(idxComa + 1).replace(/,/g, '');
     }
-    const [entero, decimal] = limpio.split(',');
-    const enteroFormateado = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return limpio;
+  };
+
+  // Aplica el punto de miles al perder el foco del campo (ya no hay riesgo
+  // de mover el cursor porque el usuario terminó de escribir).
+  const formatearMiles = (v: string): string => {
+    const [entero, decimal] = v.split(',');
+    const enteroFormateado = (entero || '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return decimal !== undefined ? `${enteroFormateado},${decimal}` : enteroFormateado;
   };
 
@@ -1675,7 +1685,7 @@ export function FormularioSolicitud({
                                         placeholder="0"
                                         style={{ flex: 1, padding: '5px 7px 5px 2px', border: '1px solid transparent', borderRadius: 4, fontFamily: 'Gabarito, sans-serif', fontSize: '0.78rem', outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box' as const, minWidth: 0 }}
                                         onFocus={e => { (e.target.parentElement as HTMLElement).style.border = '1px solid var(--brand-primary)'; (e.target.parentElement as HTMLElement).style.borderRadius = '4px'; e.target.style.backgroundColor = '#fff'; (e.target.parentElement as HTMLElement).style.backgroundColor = '#fff'; }}
-                                        onBlur={e => { (e.target.parentElement as HTMLElement).style.border = '1px solid transparent'; e.target.style.backgroundColor = 'transparent'; (e.target.parentElement as HTMLElement).style.backgroundColor = 'transparent'; }}
+                                        onBlur={e => { (e.target.parentElement as HTMLElement).style.border = '1px solid transparent'; e.target.style.backgroundColor = 'transparent'; (e.target.parentElement as HTMLElement).style.backgroundColor = 'transparent'; handleProponenteChange(i, 'valorCotizacion', formatearMiles(p.valorCotizacion)); }}
                                       />
                                     </div>
                                   </td>
@@ -1829,7 +1839,7 @@ export function FormularioSolicitud({
                                             outline: 'none', backgroundColor: 'transparent', boxSizing: 'border-box'
                                           }}
                                           onFocus={e => { e.target.style.borderColor = 'var(--brand-primary)'; e.target.style.backgroundColor = '#fff'; }}
-                                          onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.backgroundColor = 'transparent'; }}
+                                          onBlur={e => { e.target.style.borderColor = 'transparent'; e.target.style.backgroundColor = 'transparent'; if (numerico) handleProponenteChange(i, field, formatearMiles(p[field] as string)); }}
                                         />
                                       )}
                                     </td>
@@ -2055,7 +2065,7 @@ export function FormularioSolicitud({
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaUSD: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0.00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaUSD: formatearMiles(prev.valorMonedaUSD) })); }}
                                 />
                                 {avisoValorMinimo('USD', datosPlaneacion.valorMonedaUSD)}
                               </div>
@@ -2069,7 +2079,7 @@ export function FormularioSolicitud({
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaCOP: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0.00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaCOP: formatearMiles(prev.valorMonedaCOP) })); }}
                                 />
                                 {avisoValorMinimo('COP', datosPlaneacion.valorMonedaCOP)}
                               </div>
@@ -2083,7 +2093,7 @@ export function FormularioSolicitud({
                                   onChange={e => setDatosPlaneacion({ ...datosPlaneacion, valorMonedaEUR: soloNumeros(e.target.value) })}
                                   style={inputStyle} placeholder="0.00"
                                   onFocus={e => e.target.style.borderColor = 'var(--brand-primary)'}
-                                  onBlur={e => e.target.style.borderColor = '#D1D5DB'}
+                                  onBlur={e => { e.target.style.borderColor = '#D1D5DB'; setDatosPlaneacion(prev => ({ ...prev, valorMonedaEUR: formatearMiles(prev.valorMonedaEUR) })); }}
                                 />
                                 {avisoValorMinimo('EUR', datosPlaneacion.valorMonedaEUR)}
                               </div>
