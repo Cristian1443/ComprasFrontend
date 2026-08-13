@@ -1168,7 +1168,8 @@ export function FormularioSolicitud({
     // pesos y nunca alcanza el umbral). Se usa una tasa aproximada fija — no
     // una TRM configurable ni un servicio externo — solo para ubicar el
     // contrato en el lado correcto del umbral de SMLV.
-    const smlv = 1300000;
+    const smlv = 2000000;
+    const umbralSMLVTexto = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(25 * smlv);
     const TASA_APROX_COP: Record<string, number> = { COP: 1, USD: 4000, EUR: 4300 };
     const valorEnCopAprox = (): number => {
       if (datosPlaneacion.moneda === 'COMBINADA') {
@@ -1182,11 +1183,11 @@ export function FormularioSolicitud({
     };
     const valor = valorEnCopAprox();
     if (esInvitacion && valor >= (25 * smlv)) {
-      alert(`Error: La modalidad Invitación solo permite valores menores a 25 SMLV ($32.500.000). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a TDR o ajuste el presupuesto.`);
+      alert(`Error: La modalidad Invitación solo permite valores menores a 25 SMLV (${umbralSMLVTexto}). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a TDR o ajuste el presupuesto.`);
       return;
     }
     if (esTDR && valor < (25 * smlv)) {
-      alert(`Error: La modalidad TDR solo permite valores iguales o superiores a 25 SMLV ($32.500.000). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a Invitación o ajuste el presupuesto.`);
+      alert(`Error: La modalidad TDR solo permite valores iguales o superiores a 25 SMLV (${umbralSMLVTexto}). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a Invitación o ajuste el presupuesto.`);
       return;
     }
 
