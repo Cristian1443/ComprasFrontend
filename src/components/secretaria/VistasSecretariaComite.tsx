@@ -72,20 +72,21 @@ interface ActaHistorial extends ActaSnapshot {
 type Fase = 'config' | 'seleccion' | 'sesion' | 'acta';
 
 const STORAGE_KEY = 'secretaria_comite_sesion_v2';
-const ACTA_COUNTER_KEY_PREFIX = 'secretaria_acta_consecutivo_';
 const ACTAS_HISTORIAL_KEY = 'secretaria_actas_historial';
 
-function getSiguienteNumeroActa(): string {
+// El siguiente número de acta se calcula en el backend (a partir de las actas
+// ya guardadas en la BD), no en el navegador de cada persona — así es igual
+// para cualquiera que pueda iniciar un comité, sin importar el dispositivo.
+async function fetchSiguienteNumeroActa(): Promise<string> {
   const año = new Date().getFullYear();
-  const counter = parseInt(localStorage.getItem(`${ACTA_COUNTER_KEY_PREFIX}${año}`) || '0', 10);
-  return `${año}-${String(counter + 1).padStart(3, '0')}`;
-}
-
-function incrementarContadorActa(): void {
-  const año = new Date().getFullYear();
-  const key = `${ACTA_COUNTER_KEY_PREFIX}${año}`;
-  const actual = parseInt(localStorage.getItem(key) || '0', 10);
-  localStorage.setItem(key, String(actual + 1));
+  try {
+    const res = await apiFetch(`${API_URL}/api/secretaria/actas/siguiente-numero?año=${año}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.acta_numero) return data.acta_numero;
+    }
+  } catch { /* no-op */ }
+  return `${año}-001`;
 }
 
 /** Clave única por nombre (sin acentos, minúsculas, sin espacios extra). */
@@ -313,13 +314,13 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (!saved) {
-        setActaNumero(getSiguienteNumeroActa());
+        fetchSiguienteNumeroActa().then(setActaNumero);
         return;
       }
       const p = JSON.parse(saved);
       if (p?.fase) setFase(p.fase);
       if (p?.acta_numero) setActaNumero(p.acta_numero);
-      else setActaNumero(getSiguienteNumeroActa());
+      else fetchSiguienteNumeroActa().then(setActaNumero);
       if (p?.iniciado_en) setComiteIniciadoEn(p.iniciado_en);
       if (Array.isArray(p?.participantes)) {
         setParticipantes(deduplicarParticipantes(p.participantes));
@@ -548,7 +549,6 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
       alert(`No se pudo cerrar el comité porque falló el guardado de decisiones: ${err instanceof Error ? err.message : 'Error desconocido'}`);
       return;
     }
-    incrementarContadorActa();
     const ids = Array.from(seleccionadas);
     const snapshot: ActaSnapshot = {
       ids,
@@ -572,8 +572,25 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
           decisiones: snapshot.decisiones,
         }),
       });
-      if (r.ok) { const data = await r.json(); actaId = data.id; }
-    } catch (e) { console.error('No se pudo guardar acta en la BD:', e); }
+      if (r.ok) {
+        const data = await r.json();
+        actaId = data.id;
+        if (data.acta_numero) snapshot.actaNumero = data.acta_numero;
+      } else if (r.status === 409) {
+        // Otra persona ya usó este número (dos comités iniciados casi al mismo tiempo).
+        const body = await r.json().catch(() => ({}));
+        const numeroSugerido = await fetchSiguienteNumeroActa();
+        setActaNumero(numeroSugerido);
+        alert(body?.error || `El número de acta "${snapshot.actaNumero}" ya fue usado. Se sugiere el número ${numeroSugerido}; revísalo e intenta cerrar el comité de nuevo.`);
+        return;
+      } else {
+        throw new Error(`HTTP ${r.status}`);
+      }
+    } catch (e) {
+      console.error('No se pudo guardar acta en la BD:', e);
+      alert('No se pudo guardar el acta en la base de datos. Intenta cerrar el comité nuevamente antes de continuar.');
+      return;
+    }
 
     const snapshotConId: ActaSnapshot = { ...snapshot, actaId };
 
@@ -1166,7 +1183,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
                 <input
                   value={actaNumero}
                   onChange={(e) => setActaNumero(e.target.value)}
-                  placeholder={getSiguienteNumeroActa()}
+                  placeholder={`${new Date().getFullYear()}-001`}
                   style={s.configInputLarge}
                 />
                 <p style={s.configHint}>Número generado automáticamente ({new Date().getFullYear()}-consecutivo). Puedes editarlo si es necesario.</p>
