@@ -51,6 +51,8 @@ interface ActaSesionComiteProps {
   firmanteDirectoraCargoInicial?: string;
   firmanteSecretariaNombreInicial?: string;
   firmanteSecretariaCargoInicial?: string;
+  /** Firmantes reales capturados al momento de enviar a Adobe Sign (fuente de verdad si el acta ya fue firmada) */
+  firmantesRealesInicial?: Array<{ rolFirma: string; nombre: string; cargo: string; estado?: string; firmadoEn?: string | null }>;
   /** Fecha en la que el acta quedó firmada electrónicamente (null = pendiente) */
   cerradaEnInicial?: string | null;
   /** Si true, oculta los botones de edición (vista de historial) */
@@ -200,6 +202,7 @@ export function ActaSesionComite({
   firmanteDirectoraCargoInicial = '',
   firmanteSecretariaNombreInicial = '',
   firmanteSecretariaCargoInicial = '',
+  firmantesRealesInicial = [],
   cerradaEnInicial = null,
   soloLectura = false,
   onBack,
@@ -221,11 +224,12 @@ export function ActaSesionComite({
   const guardarTexto = async (
     campo: 'desarrollo' | 'conclusion',
     texto: string
-  ) => {
-    if (!actaId) return;
+  ): Promise<boolean> => {
+    if (!actaId) return false;
     setGuardando(campo);
+    let ok = false;
     try {
-      await apiFetch(`${API_URL}/api/secretaria/actas/${actaId}/textos`, {
+      const res = await apiFetch(`${API_URL}/api/secretaria/actas/${actaId}/textos`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
@@ -234,10 +238,19 @@ export function ActaSesionComite({
             : { conclusion_texto: texto, cerrar_conclusion: true }
         ),
       });
-      if (campo === 'desarrollo') setDesarrolloCerrado(true);
-      else setConclusionCerrada(true);
-    } catch { /* no-op */ }
+      if (res.ok) {
+        ok = true;
+        if (campo === 'desarrollo') setDesarrolloCerrado(true);
+        else setConclusionCerrada(true);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        alert(body?.error || `No se pudo guardar el ${campo}. Intenta de nuevo antes de continuar — no quedó guardado en la base de datos.`);
+      }
+    } catch {
+      alert(`No se pudo guardar el ${campo} por un problema de conexión. Intenta de nuevo antes de continuar.`);
+    }
     setGuardando(null);
+    return ok;
   };
 
   useEffect(() => {
@@ -294,18 +307,24 @@ export function ActaSesionComite({
   );
 
   /* ── Firmantes: Directora y Secretaria de este comité en particular.
-     Se editan por acta porque las personas en esos cargos pueden cambiar
-     de una sesión a otra (ver botón "Editar firmantes" más abajo). ── */
+     Prioridad: (1) quien realmente firmó en Adobe Sign (firmantes_documento,
+     capturado en el momento del envío a firma — es la fuente de verdad para
+     actas ya firmadas y no cambia aunque luego se reconfigure el firmante
+     global); (2) firmante fijado por acta (actualmente sin UI que lo escriba);
+     (3) configuración global vigente, solo como último recurso para un acta
+     que aún no se ha firmado. ── */
+  const directoraReal = firmantesRealesInicial.find((f) => f.rolFirma === 'directora_comite');
+  const secretariaReal = firmantesRealesInicial.find((f) => f.rolFirma === 'secretaria_comite');
   const directoraGlobal = firmantesApi.find((f) => f.rol_firma === 'directora_comite');
   const secretariaGlobal = firmantesApi.find((f) => f.rol_firma === 'secretaria_comite');
   const firmantes: { nombre: string; cargo: string }[] = [
     {
-      nombre: firmanteDirectoraNombreInicial || directoraGlobal?.nombre || '___________________________',
-      cargo: firmanteDirectoraCargoInicial || directoraGlobal?.cargo || 'Directora de Comité',
+      nombre: directoraReal?.nombre || firmanteDirectoraNombreInicial || directoraGlobal?.nombre || '___________________________',
+      cargo: directoraReal?.cargo || firmanteDirectoraCargoInicial || directoraGlobal?.cargo || 'Directora de Comité',
     },
     {
-      nombre: firmanteSecretariaNombreInicial || secretariaGlobal?.nombre || '___________________________',
-      cargo: firmanteSecretariaCargoInicial || secretariaGlobal?.cargo || 'Secretaria de Comité',
+      nombre: secretariaReal?.nombre || firmanteSecretariaNombreInicial || secretariaGlobal?.nombre || '___________________________',
+      cargo: secretariaReal?.cargo || firmanteSecretariaCargoInicial || secretariaGlobal?.cargo || 'Secretaria de Comité',
     },
   ];
 
@@ -497,8 +516,8 @@ export function ActaSesionComite({
               <button
                 data-print="hide"
                 onClick={async () => {
-                  await guardarTexto('desarrollo', desarrolloTexto);
-                  setEditandoDesarrollo(false);
+                  const ok = await guardarTexto('desarrollo', desarrolloTexto);
+                  if (ok) setEditandoDesarrollo(false);
                 }}
                 style={sx.btnGuardar}
                 disabled={guardando === 'desarrollo'}
@@ -620,8 +639,8 @@ export function ActaSesionComite({
               <button
                 data-print="hide"
                 onClick={async () => {
-                  await guardarTexto('conclusion', conclusionTexto);
-                  setEditandoConclusion(false);
+                  const ok = await guardarTexto('conclusion', conclusionTexto);
+                  if (ok) setEditandoConclusion(false);
                 }}
                 style={sx.btnGuardar}
                 disabled={guardando === 'conclusion'}

@@ -67,6 +67,8 @@ interface ActaHistorial extends ActaSnapshot {
   firmanteSecretariaCargo?: string;
   /** Fecha en la que quedó firmada electrónicamente en Adobe Sign (null = pendiente) */
   cerradaEn?: string | null;
+  /** Firmantes reales capturados en firmantes_documento al momento de enviar a Adobe Sign (solo si ya se firmó) */
+  firmantesReales?: Array<{ rolFirma: string; nombre: string; cargo: string; estado?: string; firmadoEn?: string | null }>;
 }
 
 type Fase = 'config' | 'seleccion' | 'sesion' | 'acta';
@@ -632,6 +634,7 @@ export function VistasSecretariaComite(_props: VistasSecretariaComiteProps) {
         firmanteDirectoraCargoInicial={actaHistorialVisualizando.firmanteDirectoraCargo}
         firmanteSecretariaNombreInicial={actaHistorialVisualizando.firmanteSecretariaNombre}
         firmanteSecretariaCargoInicial={actaHistorialVisualizando.firmanteSecretariaCargo}
+        firmantesRealesInicial={actaHistorialVisualizando.firmantesReales}
         cerradaEnInicial={actaHistorialVisualizando.cerradaEn}
         soloLectura
         onBack={() => setActaHistorialVisualizando(null)}
