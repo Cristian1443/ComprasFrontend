@@ -37,6 +37,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
   const [supervisionId, setSupervisionId] = useState<string>('');
   const [savingSuper, setSavingSuper] = useState(false);
   const [superOk, setSuperOk] = useState(false);
+  const [superMsg, setSuperMsg] = useState<string | null>(null);
 
   // Cambio de código
   const [codigoAnio, setCodigoAnio] = useState('');
@@ -130,19 +131,35 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
 
   const guardarSupervisor = async () => {
     if (!selectedId || !supervisionId) return;
+
+    const nuevoNombre = usuarios.find(u => u.id === supervisionId)?.nombre || 'este usuario';
+    if (supervisorActual && supervisorActual !== nuevoNombre) {
+      const confirmado = window.confirm(
+        `¿Reasignar la supervisión de este contrato de "${supervisorActual}" a "${nuevoNombre}"?\n\n` +
+        `Los entregables, informes, documentos y facturas ya registrados NO se pierden — quedan disponibles tal cual para el nuevo supervisor. Se le notificará por correo.`
+      );
+      if (!confirmado) return;
+    }
+
     setSavingSuper(true);
     setError(null);
+    setSuperMsg(null);
     try {
       const resp = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/supervisor`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ supervision_id: supervisionId }),
       });
+      const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err?.error || 'Error al actualizar supervisor');
+        throw new Error(data?.error || 'Error al actualizar supervisor');
       }
       setSuperOk(true);
+      setSuperMsg(
+        data.reasignado
+          ? `Reasignado de "${data.supervisorAnterior?.nombre || 'sin asignar'}" a "${data.supervisor?.nombre}". El nuevo supervisor conserva todo lo ya registrado del contrato y fue notificado por correo.`
+          : `Asignado a "${data.supervisor?.nombre}".`
+      );
       await loadDocs(selectedId);
     } catch (e: any) {
       setError(e.message || 'Error al guardar supervisor');
@@ -344,14 +361,14 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
                   style={{ backgroundColor: '#2f6fa3' }}
                 >
                   {savingSuper ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                  Guardar supervisor
+                  {supervisorActual ? 'Reasignar supervisor' : 'Asignar supervisor'}
                 </button>
-                {superOk && (
-                  <span className="flex items-center gap-1 text-emerald-600 text-sm font-bold">
-                    <CheckCircle2 size={16} /> Guardado
-                  </span>
-                )}
               </div>
+              {superOk && superMsg && (
+                <div className="flex items-start gap-2 text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" /> {superMsg}
+                </div>
+              )}
             </div>
 
             {/* Documentos por tipo */}
