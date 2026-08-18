@@ -337,6 +337,12 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
           <SectionHeader title={sol.supervision_nombre ? 'Reasignar Supervisor' : 'Asignar Supervisor'} icon={Building2} />
           <div style={{ padding: '16px' }}>
+            <p className="text-sm text-gray-600 mb-3">
+              Supervisor actual:{' '}
+              {sol.supervision_nombre
+                ? <span className="font-semibold text-gray-900">{sol.supervision_nombre}{sol.supervision_cargo ? ` — ${sol.supervision_cargo}` : ''}</span>
+                : <span className="italic text-gray-400">No asignado</span>}
+            </p>
             <div className="flex gap-3 flex-wrap items-end">
               <div className="flex-1 min-w-[240px]">
                 <select

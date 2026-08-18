@@ -2,6 +2,7 @@ import React from 'react';
 import { Download } from 'lucide-react';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
 import { formatearGarantiasLegible } from '../../lib/garantias';
+import { getCausalTexto } from '../../lib/causales';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -125,7 +126,6 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
   const fechaSolicitud = fmtFecha(s?.creado_en);
   const fechaEstimada = fmtFecha(s?.fecha_estimada_solicitud);
 
-  const proponentes: any[] = Array.isArray(s?.proponentes) ? s.proponentes : [];
   const anexosDocsIV: any[] = Array.isArray(s?.anexosDocs) ? s.anexosDocs : (Array.isArray(s?.anexos) ? s.anexos : []);
 
   return (
@@ -232,112 +232,42 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
         />
       </div>
 
-      {/* ── SECCIÓN III — Estudio de Mercado ── */}
+      {/* ── SECCIÓN III — Estudio de Mercado ──
+          Las tablas de proponentes/cotizaciones (comparación de ofertas) se
+          retiraron de esta vista de solo lectura en todas las pantallas que
+          usan este componente — esa comparación se revisa en el módulo de
+          Jurídica (Calificación de Proponentes), no aquí. Se conserva el
+          encabezado "III." para no correr la numeración de las secciones
+          siguientes (Presupuesto, Supervisión, etc.), que depende de que
+          esta sección exista para ambas modalidades. */}
       <div className="rounded-xl overflow-hidden shadow-md border border-gray-200" style={CARD}>
         <SectionHeader title="III. ESTUDIO DE MERCADO" />
 
-        <div style={{ padding: '8px 20px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
-          <p style={{ fontSize: '0.78rem', color: '#6B7280', fontStyle: 'italic', fontFamily: 'Gabarito, sans-serif' }}>
-            Ingresar la siguiente información de los posibles proponentes que puedan suplir la contratación.
-            {esDirecta && <strong style={{ color: 'var(--brand-primary)', marginLeft: 4 }}>Contratación Directa: solo se registra un (1) proponente.</strong>}
-          </p>
-        </div>
-
         {esDirecta ? (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', fontFamily: 'Gabarito, sans-serif', tableLayout: 'fixed' }}>
-              <colgroup>
-                <col style={{ width: '6%' }} /><col style={{ width: '18%' }} /><col style={{ width: '18%' }} />
-                <col style={{ width: '14%' }} /><col style={{ width: '14%' }} /><col style={{ width: '14%' }} />
-                <col style={{ width: '12%' }} /><col style={{ width: '14%' }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th colSpan={8} style={{ border: '1px solid #d1d5db', padding: '7px 10px', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#374151', backgroundColor: '#fff' }}>
-                    ÚNICO PROPONENTE
-                  </th>
-                </tr>
-                <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                  <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px 6px', color: '#fff', textAlign: 'center' }}>No.</th>
-                  {['Nombre del proveedor', 'Datos de contacto', 'Requisitos técnicos', 'Experiencia', 'Criterios habilitantes', 'Valor + Impuestos', 'Anexo / Observaciones (Valor agregado)'].map(h => (
-                    <th key={h} style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '8px', color: '#fff', textAlign: 'center', lineHeight: 1.2, fontWeight: 700 }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(proponentes.length > 0 ? proponentes : [{}]).map((p: any, i: number) => {
-                  const c = (v: string) => v || EMPTY_DASH;
-                  return (
-                    <tr key={p.id || i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                      <td style={{ border: '1px solid #e5e7eb', padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: '#374151', verticalAlign: 'top' }}>{i + 1}</td>
-                      <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.nombre_proveedor || p.nombreProveedor)}</td>
-                      <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.datos_contacto || p.datosContacto)}</td>
-                      <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.requisitos_tecnicos || p.requisitosTecnicos)}</td>
-                      <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.experiencia)}</td>
-                      <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.criterios_habilitantes || p.criteriosHabilitantes)}</td>
-                      <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.valor_con_impuestos || p.valorConImpuestos || p.valorImpuestos)}</td>
-                      <td style={{ border: '1px solid #e5e7eb', padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.observaciones)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div style={{ padding: '16px 20px' }}>
+            <span style={{ color: '#9CA3AF', fontStyle: 'italic', fontSize: '0.85rem' }}>
+              Ver comparación de proponentes en el módulo de Jurídica.
+            </span>
           </div>
         ) : (
-          <>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', fontFamily: 'Gabarito, sans-serif', tableLayout: 'fixed' }}>
-                <colgroup>
-                  <col style={{ width: '5%' }} /><col style={{ width: '32%' }} />
-                  <col style={{ width: '32%' }} /><col style={{ width: '31%' }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th colSpan={4} style={{ border: '1px solid #d1d5db', padding: '7px 10px', textAlign: 'center', fontWeight: 700, fontSize: '0.8rem', color: '#374151', backgroundColor: '#fff' }}>INVITADOS</th>
-                  </tr>
-                  <tr style={{ backgroundColor: 'var(--brand-primary)' }}>
-                    <th style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 4px', color: '#fff', textAlign: 'center' }}>No.</th>
-                    {['Nombre del proveedor', 'Datos de contacto', 'Valor de cotización'].map(h => (
-                      <th key={h} style={{ border: '1px solid rgba(255,255,255,0.25)', padding: '6px 8px', color: '#fff', textAlign: 'left', fontWeight: 700 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(proponentes.length > 0 ? proponentes : [{}, {}, {}]).map((p: any, i: number) => {
-                    const c = (v: string) => v || EMPTY_DASH;
-                    return (
-                      <tr key={p.id || i} style={{ backgroundColor: '#fff' }}>
-                        <td style={{ border: '1px solid #e5e7eb', padding: '6px', textAlign: 'center', fontWeight: 700, color: '#374151' }}>{i + 1}</td>
-                        <td style={{ border: '1px solid #e5e7eb', padding: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.nombre_proveedor || p.nombreProveedor)}</td>
-                        <td style={{ border: '1px solid #e5e7eb', padding: '8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c(p.datos_contacto || p.datosContacto)}</td>
-                        <td style={{ border: '1px solid #e5e7eb', padding: '8px' }}>{p.valor_cotizacion || p.valorCotizacion ? `$ ${p.valor_cotizacion || p.valorCotizacion}` : EMPTY_DASH}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <div>
+            <div style={{ backgroundColor: '#1a3a5c', color: '#fff', fontWeight: 700, fontSize: '0.82rem', textAlign: 'center', padding: '10px 24px', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'Gabarito, sans-serif' }}>
+              ANÁLISIS DEL MERCADO
             </div>
-
-            {/* ANÁLISIS DEL MERCADO */}
-            <div style={{ borderTop: '2px solid #e5e7eb' }}>
-              <div style={{ backgroundColor: '#1a3a5c', color: '#fff', fontWeight: 700, fontSize: '0.82rem', textAlign: 'center', padding: '10px 24px', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'Gabarito, sans-serif' }}>
-                ANÁLISIS DEL MERCADO
-              </div>
-              <DataRow
-                label="Servicios ofertados:"
-                hint="Definir si el oferente presta la totalidad de servicios solicitados y si encontró algún valor agregado en el estudio de mercado."
-                value={s?.analisis_servicios_ofertados}
-              />
-              <DataRow
-                label="Valor promedio:"
-                hint="Promedio calculado a partir de los valores de cotización de los proponentes, uno por cada moneda registrada."
-                value={s?.analisis_valor_promedio
-                  ? (/^(COP|USD|EUR)\b/.test(String(s.analisis_valor_promedio)) ? s.analisis_valor_promedio : `$ ${s.analisis_valor_promedio}`)
-                  : ''}
-                last
-              />
-            </div>
-          </>
+            <DataRow
+              label="Servicios ofertados:"
+              hint="Definir si el oferente presta la totalidad de servicios solicitados y si encontró algún valor agregado en el estudio de mercado."
+              value={s?.analisis_servicios_ofertados}
+            />
+            <DataRow
+              label="Valor promedio:"
+              hint="Promedio calculado a partir de los valores de cotización de los proponentes, uno por cada moneda registrada."
+              value={s?.analisis_valor_promedio
+                ? (/^(COP|USD|EUR)\b/.test(String(s.analisis_valor_promedio)) ? s.analisis_valor_promedio : `$ ${s.analisis_valor_promedio}`)
+                : ''}
+              last
+            />
+          </div>
         )}
       </div>
 
@@ -348,7 +278,7 @@ export function DetallePlaneacionContractualParte1({ solicitud: s }: Props) {
           <DataRow
             label="4.1 Causal de contratación:"
             hint="Conforme con los resultados del apartado anterior 'III. Investigación de mercado', la contratación se debe realizar de manera directa, seleccione la causal que justifica la modalidad de contratación, de acuerdo con lo indicado en el ítem a) del numeral 5.2.1 del MA-GAF-01 Manual de Procedimientos de Compras y Contratación."
-            value={s?.modalidad_seleccion}
+            value={getCausalTexto(s?.modalidad_seleccion)}
           />
           <DataRow
             label="4.2 Justificación de la causal:"
