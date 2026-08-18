@@ -224,7 +224,14 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
 
   const fechaFin = calcFechaFin();
 
-  // Ganador: primero desde la evaluación (fuente de verdad), luego campo seleccionado
+  // Mismo cálculo que usa DetalleSolicitudJuridica para el badge de presupuesto aprobado
+  const esDirecta = String(sol?.modalidad || '').toLowerCase() === 'directa';
+
+  // Ganador: primero desde la evaluación (fuente de verdad, solo aplica a Invitación/TDR,
+  // donde hay varios proponentes en competencia), luego el campo "seleccionado". En modalidad
+  // Directa no existe evaluación de proponentes (solo hay un candidato, elegido por la causal
+  // de contratación, no por comparación) — sin este último fallback, esta sección quedaba
+  // vacía aunque el único proponente registrado en el estudio de mercado sí tuviera datos.
   const ev = calificacion?.evaluacion;
   const ganadorEmail = ev?.ganador_email;
   const ganadorNombre = ev?.ganador_nombre;
@@ -232,10 +239,8 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
   const proveedorGanador = sol?.proponentes?.find((p: any) =>
     (ganadorEmail && p.email === ganadorEmail) ||
     (ganadorNumero != null && Number(p.numero) === Number(ganadorNumero))
-  ) ?? sol?.proponentes?.find((p: any) => p.seleccionado);
-
-  // Mismo cálculo que usa DetalleSolicitudJuridica para el badge de presupuesto aprobado
-  const esDirecta = String(sol?.modalidad || '').toLowerCase() === 'directa';
+  ) ?? sol?.proponentes?.find((p: any) => p.seleccionado)
+  ?? (esDirecta ? sol?.proponentes?.[0] : undefined);
   const montoCOP = Number(sol?.presupuesto_aprobado || sol?.valor_en_cop || sol?.valor_estimado || 0);
   const monedaSol = String(sol?.moneda || 'COP').toUpperCase();
   const valorOriginalMoneda =
@@ -452,7 +457,10 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
         </div>
 
         {/* ── EVALUACIÓN DEL PROCESO ─────────────────────────────────── */}
-        {calificacion?.evaluacion && (
+        {/* No aplica a Directa: ahí hay un único proponente (ver "Contratista / Proveedor"
+            arriba, ya resuelto más abajo), no una comparación entre varios con estado de
+            evaluación. */}
+        {!esDirecta && calificacion?.evaluacion && (
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
             <SectionHeader title="Evaluación de Proponentes" icon={Scale} />
             <Row label="Proponente recomendado" value={
