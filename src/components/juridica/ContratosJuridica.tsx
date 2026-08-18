@@ -10,6 +10,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 interface Contrato {
   id: string;
   codigo: string;
+  titulo_contrato: string | null;
   objeto: string;
   estado: string;
   moneda: string | null;
@@ -93,6 +94,7 @@ export function ContratosJuridica({ onSelect }: ContratosJuridicaProps = {}) {
   const filtered = contratos.filter(c =>
     !search ||
     (c.codigo || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c.titulo_contrato || '').toLowerCase().includes(search.toLowerCase()) ||
     (c.objeto || '').toLowerCase().includes(search.toLowerCase()) ||
     (c.nombre_proveedor || '').toLowerCase().includes(search.toLowerCase())
   );
@@ -238,7 +240,7 @@ export function ContratosJuridica({ onSelect }: ContratosJuridicaProps = {}) {
                       </div>
 
                       <p className="font-semibold text-gray-900 truncate" style={{ fontFamily: 'Gabarito, sans-serif' }}>
-                        {c.objeto || 'Sin objeto'}
+                        {c.titulo_contrato || c.objeto || 'Sin objeto'}
                       </p>
 
                       <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-sm text-gray-600" style={{ fontFamily: 'Gabarito, sans-serif' }}>

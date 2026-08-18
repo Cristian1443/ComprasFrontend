@@ -2,7 +2,7 @@ import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, ExternalLink, Loader2, FileText, CheckCircle2,
-  Clock, XCircle, User, Calendar, Building2, DollarSign,
+  Clock, XCircle, User, Building2,
   Paperclip, Scale, AlertTriangle, Download, Save
 } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
@@ -10,6 +10,8 @@ import { loginRequest } from '../../authConfig';
 import { getGraphClient } from '../../lib/graphService';
 import { cargarUsuariosDirectorio, CandidatoDirectorio } from '../../lib/directorioUsuarios';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
+import { DetallePlaneacionContractualParte1, DetallePlaneacionContractualParte2 } from '../shared/DetallePlaneacionContractual';
+import { SeccionPresupuestoLectura } from '../shared/SeccionPresupuestoLectura';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -232,6 +234,18 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
     (ganadorNumero != null && Number(p.numero) === Number(ganadorNumero))
   ) ?? sol?.proponentes?.find((p: any) => p.seleccionado);
 
+  // Mismo cálculo que usa DetalleSolicitudJuridica para el badge de presupuesto aprobado
+  const esDirecta = String(sol?.modalidad || '').toLowerCase() === 'directa';
+  const montoCOP = Number(sol?.presupuesto_aprobado || sol?.valor_en_cop || sol?.valor_estimado || 0);
+  const monedaSol = String(sol?.moneda || 'COP').toUpperCase();
+  const valorOriginalMoneda =
+    monedaSol === 'USD' ? sol?.valor_moneda_usd_texto :
+    monedaSol === 'EUR' ? sol?.valor_moneda_eur_texto :
+    sol?.valor_moneda_cop_texto;
+  const presupuestoTexto = valorOriginalMoneda
+    ? `${monedaSol} ${valorOriginalMoneda}`
+    : formatCurrency(montoCOP, monedaSol);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -286,88 +300,43 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{spError}</div>
         )}
 
-        {/* ── I. INFORMACIÓN GENERAL ─────────────────────────────────── */}
+        {/* ── INFORMACIÓN GENERAL (resumen; el detalle completo va en el Formato de Planeación Contractual de abajo) ── */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-          <SectionHeader title="I. Información General del Contrato" icon={Scale} />
-          <Row label="Código de solicitud" value={sol.codigo} />
-          <Row label="Modalidad" value={sol.modalidad?.toUpperCase()} />
-          <Row label="Estado" value={<BadgeEstado estado={sol.estado} />} />
-          <Row label="Gerencia solicitante" value={nombreGerenciaCompleto(sol.gerencia_nombre)} />
+          <SectionHeader title="Información General del Contrato" icon={Scale} />
           <Row label="Solicitante" value={sol.solicitante_nombre} />
-          <Row label="Fecha aprobación jurídica" value={formatDate(sol.fecha_respuesta_juridica)} last />
+          <Row label="Fecha aprobación jurídica" value={formatDate(sol.fecha_respuesta_juridica)} />
+          <Row label="Fecha estimada de finalización" value={fechaFin ? formatDate(fechaFin) : null} last />
         </div>
 
-        {/* ── II. OBJETO Y DESCRIPCIÓN ───────────────────────────────── */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-          <SectionHeader title="II. Objeto y Descripción" icon={FileText} />
-          <Row label="Objeto del contrato" value={sol.objeto} />
-          <Row label="Justificación" value={sol.justificacion} />
-          <Row label="Descripción técnica" value={sol.descripcion} last />
+        {/* ── FORMATO DE PLANEACIÓN CONTRACTUAL ──────────────────────────
+            Mismo componente compartido que usan Gerente, Financiera y
+            Secretaría — depende de la modalidad (Directa/Invitación/TDR)
+            para mostrar las secciones correctas, en vez de un formato
+            genérico distinto al que se diligenció en el resto del flujo. */}
+        <div className="space-y-6 mb-6">
+          <DetallePlaneacionContractualParte1 solicitud={sol} />
+          <SeccionPresupuestoLectura
+            solicitud={sol}
+            esDirecta={esDirecta}
+            rubroFinanciera={sol.rubro}
+            presupuestoAprobado={sol.presupuesto_aprobado ? (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center',
+                padding: '4px 12px', borderRadius: 8,
+                backgroundColor: '#EFF6FF', color: '#1e3a5f',
+                fontWeight: 800, fontSize: '0.95rem', border: '1px solid #BFDBFE',
+              }}>
+                {presupuestoTexto}
+              </span>
+            ) : undefined}
+          />
+          <DetallePlaneacionContractualParte2 solicitud={sol} />
         </div>
 
-        {/* ── III. CONTRATISTA / PROVEEDOR ──────────────────────────── */}
+        {/* ── REASIGNAR SUPERVISOR ───────────────────────────────────── */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-          <SectionHeader title="III. Contratista / Proveedor (Ganador)" icon={User} />
-          <Row label="Nombre del proveedor" value={
-            proveedorGanador?.nombre_proveedor || ganadorNombre
-              ? <span className="font-semibold text-green-700">★ {proveedorGanador?.nombre_proveedor || ganadorNombre}</span>
-              : null
-          } />
-          <Row label="Datos de contacto" value={proveedorGanador?.datos_contacto || ganadorEmail} />
-          <Row label="Valor ofertado" value={
-            (() => {
-              const v = proveedorGanador?.valor_con_impuestos;
-              const n = Number(v);
-              if (v == null || v === '' || isNaN(n)) return null;
-              return formatCurrency(n, sol.moneda);
-            })()
-          } last />
-        </div>
-
-        {/* ── IV. VALOR Y CONDICIONES ECONÓMICAS ────────────────────── */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-          <SectionHeader title="IV. Valor y Condiciones Económicas" icon={DollarSign} />
-          <Row label="Moneda" value={sol.moneda || 'COP'} />
-          <Row label="Valor estimado" value={
-            sol.valor_estimado ? formatCurrency(sol.valor_estimado, sol.moneda) : null
-          } />
-          {sol.moneda === 'USD' && sol.valor_moneda_usd_texto && (
-            <Row label="Valor en USD (texto)" value={`USD ${sol.valor_moneda_usd_texto}`} />
-          )}
-          {sol.moneda === 'EUR' && sol.valor_moneda_eur_texto && (
-            <Row label="Valor en EUR (texto)" value={`EUR ${sol.valor_moneda_eur_texto}`} />
-          )}
-          <Row label="Valor en COP" value={
-            sol.valor_en_cop ? formatCurrency(sol.valor_en_cop, 'COP') : (sol.valor_moneda_cop_texto ? `COP ${sol.valor_moneda_cop_texto}` : null)
-          } />
-          <Row label="Forma de pago" value={sol.forma_pago} />
-          <Row label="Fuente de financiación" value={sol.fuente_financiacion} last />
-        </div>
-
-        {/* ── V. PLAZO DE EJECUCIÓN ─────────────────────────────────── */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-          <SectionHeader title="V. Plazo de Ejecución" icon={Calendar} />
-          <Row label="Fecha de inicio (aprobación)" value={formatDate(sol.fecha_respuesta_juridica)} />
-          <Row label="Plazo" value={
-            [sol.plazo_ejecucion_meses ? `${sol.plazo_ejecucion_meses} meses` : null,
-             sol.plazo_ejecucion_dias ? `${sol.plazo_ejecucion_dias} días` : null]
-              .filter(Boolean).join(', ') || null
-          } />
-          <Row label="Fecha estimada de finalización" value={fechaFin ? formatDate(fechaFin) : null} />
-          <Row label="Lugar de ejecución" value={sol.lugar_ejecucion} last />
-        </div>
-
-        {/* ── VI. SUPERVISIÓN ───────────────────────────────────────── */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-          <SectionHeader title="VI. Supervisión y Responsables" icon={Building2} />
-          <Row label="Supervisor asignado" value={sol.supervision_nombre || sol.solicitante_nombre} />
-          <Row label="Cargo supervisor" value={sol.supervision_cargo} />
-          <Row label="Entregables principales" value={sol.entregables} last />
-
-          <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', backgroundColor: '#fafafa' }}>
-            <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wide">
-              {sol.supervision_nombre ? 'Reasignar supervisor' : 'Asignar supervisor'}
-            </p>
+          <SectionHeader title={sol.supervision_nombre ? 'Reasignar Supervisor' : 'Asignar Supervisor'} icon={Building2} />
+          <div style={{ padding: '16px' }}>
             <div className="flex gap-3 flex-wrap items-end">
               <div className="flex-1 min-w-[240px]">
                 <select
@@ -408,9 +377,28 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
           </div>
         </div>
 
-        {/* ── VII. DOCUMENTOS JURÍDICOS ─────────────────────────────── */}
+        {/* ── CONTRATISTA / PROVEEDOR ────────────────────────────────── */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-          <SectionHeader title="VII. Documentos del Expediente" icon={Paperclip} />
+          <SectionHeader title="Contratista / Proveedor (Ganador)" icon={User} />
+          <Row label="Nombre del proveedor" value={
+            proveedorGanador?.nombre_proveedor || ganadorNombre
+              ? <span className="font-semibold text-green-700">★ {proveedorGanador?.nombre_proveedor || ganadorNombre}</span>
+              : null
+          } />
+          <Row label="Datos de contacto" value={proveedorGanador?.datos_contacto || ganadorEmail} />
+          <Row label="Valor ofertado" value={
+            (() => {
+              const v = proveedorGanador?.valor_con_impuestos;
+              const n = Number(v);
+              if (v == null || v === '' || isNaN(n)) return null;
+              return formatCurrency(n, sol.moneda);
+            })()
+          } last />
+        </div>
+
+        {/* ── DOCUMENTOS DEL EXPEDIENTE ──────────────────────────────── */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
+          <SectionHeader title="Documentos del Expediente" icon={Paperclip} />
 
           {/* Carpetas SharePoint */}
           <div style={{ padding: '16px', borderBottom: '1px solid #e5e7eb' }}>
@@ -457,10 +445,10 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
           </div>
         </div>
 
-        {/* ── VIII. EVALUACIÓN DEL PROCESO ──────────────────────────── */}
+        {/* ── EVALUACIÓN DEL PROCESO ─────────────────────────────────── */}
         {calificacion?.evaluacion && (
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-            <SectionHeader title="VIII. Evaluación de Proponentes" icon={Scale} />
+            <SectionHeader title="Evaluación de Proponentes" icon={Scale} />
             <Row label="Proponente recomendado" value={
               (proveedorGanador?.nombre_proveedor || calificacion.evaluacion.ganador_nombre)
                 ? <span className="font-semibold text-green-700">★ {proveedorGanador?.nombre_proveedor || calificacion.evaluacion.ganador_nombre}</span>
@@ -474,10 +462,10 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
           </div>
         )}
 
-        {/* ── IX. INFORMACIÓN ADICIONAL ─────────────────────────────── */}
+        {/* ── INFORMACIÓN ADICIONAL ──────────────────────────────────── */}
         {(sol.riesgos || sol.criterios_ambientales || sol.comite_contratacion) && (
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm mb-6">
-            <SectionHeader title="IX. Información Adicional" icon={AlertTriangle} />
+            <SectionHeader title="Información Adicional" icon={AlertTriangle} />
             {sol.riesgos && <Row label="Riesgos identificados" value={sol.riesgos} />}
             {sol.criterios_ambientales && <Row label="Criterios ambientales / SST" value={sol.criterios_ambientales} />}
             {sol.comite_contratacion && <Row label="Requiere comité de contratación" value={sol.comite_contratacion ? 'Sí' : 'No'} />}
