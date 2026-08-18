@@ -47,6 +47,10 @@ const ROL_LABEL: Record<string, { titulo: string; sub: string }> = {
     titulo: 'Secretaria del Comité',
     sub: 'Firma el acta del Comité de Contratación (firma 2).',
   },
+  directora_ejecutiva: {
+    titulo: 'Directora Ejecutiva',
+    sub: 'Firma el Acta de Designación de Supervisor de cada contrato (firma 1; firma 2 es el supervisor designado en ese contrato).',
+  },
 };
 
 export function ConfiguracionFirmas() {
@@ -91,7 +95,7 @@ export function ConfiguracionFirmas() {
       if (r1.ok) {
         const todos = await r1.json();
         setFirmantes(todos.filter((f: FirmanteConfig) =>
-          ['directora_comite', 'secretaria_comite'].includes(f.rol_firma)
+          ['directora_comite', 'secretaria_comite', 'directora_ejecutiva'].includes(f.rol_firma)
         ));
       }
       if (r2.ok) {

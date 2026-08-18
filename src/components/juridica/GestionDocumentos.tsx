@@ -5,6 +5,7 @@ import { FolderOpen, Upload, FileText, Trash2, Loader2, ArrowLeft, CheckCircle2,
 import { TipoDocumentoFinal } from '../../lib/flujoJuridico';
 import { cargarUsuariosDirectorio, CandidatoDirectorio } from '../../lib/directorioUsuarios';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
+import { BloqueFirma } from '../shared/BloqueFirma';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -128,6 +129,28 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
     if (!selectedId) return;
     await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/documentos/${docId}`, { method: 'DELETE' });
     await loadDocs(selectedId);
+  };
+
+  /** Cuando el Acta de Designación de Supervisor queda firmada, la registra
+   * como documento "acta_supervision" (apuntando al PDF ya firmado en Adobe
+   * Sign) para que aparezca en la lista igual que un archivo cargado a mano. */
+  const registrarActaSupervisorFirmada = async (firma: { firma_id: string }) => {
+    if (!selectedId) return;
+    try {
+      await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/documentos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: 'Acta de Designación de Supervisor (firmada).pdf',
+          tipo: 'acta_supervision',
+          url_storage: `/api/firmas/${firma.firma_id}/pdf-firmado`,
+          descripcion: 'Generada y firmada electrónicamente desde el portal',
+        }),
+      });
+      await loadDocs(selectedId);
+    } catch (e) {
+      console.error('No se pudo registrar el acta de supervisión firmada:', e);
+    }
   };
 
   const guardarSupervisor = async () => {
@@ -437,6 +460,17 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
                             </div>
                           </div>
                         ))}
+                      </div>
+                    )}
+
+                    {tipo === 'acta_supervision' && selectedId && (
+                      <div className="mt-4">
+                        <BloqueFirma
+                          solicitudId={selectedId}
+                          etapa="supervision"
+                          descripcion="Genera el Acta de Designación de Supervisor con los datos de este contrato y envíala a firma electrónica: la firma la Directora Ejecutiva y el supervisor designado. Al completarse, el PDF firmado queda registrado arriba como acta de supervisión."
+                          onFirmaCompleta={registrarActaSupervisorFirmada}
+                        />
                       </div>
                     )}
                   </div>

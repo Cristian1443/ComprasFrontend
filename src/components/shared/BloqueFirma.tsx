@@ -7,7 +7,7 @@ import {
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
-export type EtapaFirma = 'gerente' | 'financiera' | 'comite' | 'juridica' | 'proveedor';
+export type EtapaFirma = 'gerente' | 'financiera' | 'comite' | 'juridica' | 'proveedor' | 'supervision';
 
 interface FirmanteAPI {
   orden: number;
