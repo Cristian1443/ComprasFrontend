@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, ExternalLink, Loader2, FileText, CheckCircle2,
   Clock, XCircle, User, Calendar, Building2, DollarSign,
-  Paperclip, Scale, AlertTriangle, Download
+  Paperclip, Scale, AlertTriangle, Download, Save
 } from 'lucide-react';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
@@ -83,24 +83,68 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
   const [spLoading, setSpLoading] = useState(false);
   const [spError, setSpError] = useState<string | null>(null);
 
+  // Reasignar supervisor
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [supervisionIdSel, setSupervisionIdSel] = useState('');
+  const [savingSuper, setSavingSuper] = useState(false);
+  const [superMsg, setSuperMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const [rSol, rDocs, rCal] = await Promise.allSettled([
+        const [rSol, rDocs, rCal, rUsuarios] = await Promise.allSettled([
           apiFetch(`${API_URL}/api/solicitudes/${contratoId}`).then(r => r.json()),
           apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/documentos`).then(r => r.json()),
           apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/calificacion`).then(r => r.json()),
+          apiFetch(`${API_URL}/api/usuarios`).then(r => r.json()),
         ]);
         if (rSol.status === 'fulfilled') setSol(rSol.value);
         if (rDocs.status === 'fulfilled') setDocs(Array.isArray(rDocs.value) ? rDocs.value : []);
         if (rCal.status === 'fulfilled') setCalificacion(rCal.value);
+        if (rUsuarios.status === 'fulfilled') setUsuarios(Array.isArray(rUsuarios.value) ? rUsuarios.value : []);
       } finally {
         setLoading(false);
       }
     };
     load();
   }, [contratoId]);
+
+  const reasignarSupervisor = async () => {
+    if (!supervisionIdSel) return;
+    const nuevoNombre = usuarios.find(u => u.id === supervisionIdSel)?.nombre || 'este usuario';
+    const supervisorActual = sol?.supervision_nombre;
+    if (supervisorActual && supervisorActual !== nuevoNombre) {
+      const confirmado = window.confirm(
+        `¿Reasignar la supervisión de este contrato de "${supervisorActual}" a "${nuevoNombre}"?\n\n` +
+        `Los entregables, informes, documentos y facturas ya registrados NO se pierden — quedan disponibles tal cual para el nuevo supervisor. Se le notificará por correo.`
+      );
+      if (!confirmado) return;
+    }
+    setSavingSuper(true);
+    setSuperMsg(null);
+    try {
+      const resp = await apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/supervisor`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ supervision_id: supervisionIdSel }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.error || 'Error al actualizar supervisor');
+      setSol((prev: any) => ({ ...prev, supervision_nombre: data.supervisor?.nombre, supervision_cargo: data.supervisor?.cargo }));
+      setSupervisionIdSel('');
+      setSuperMsg({
+        ok: true,
+        text: data.reasignado
+          ? `Reasignado de "${data.supervisorAnterior?.nombre || 'sin asignar'}" a "${data.supervisor?.nombre}". El nuevo supervisor conserva todo lo ya registrado del contrato y fue notificado por correo.`
+          : `Asignado a "${data.supervisor?.nombre}".`,
+      });
+    } catch (e: any) {
+      setSuperMsg({ ok: false, text: e.message || 'Error al guardar supervisor' });
+    } finally {
+      setSavingSuper(false);
+    }
+  };
 
   const abrirSharePoint = async (carpeta?: string) => {
     setSpError(null);
@@ -313,6 +357,49 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
           <Row label="Supervisor asignado" value={sol.supervision_nombre || sol.solicitante_nombre} />
           <Row label="Cargo supervisor" value={sol.supervision_cargo} />
           <Row label="Entregables principales" value={sol.entregables} last />
+
+          <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', backgroundColor: '#fafafa' }}>
+            <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wide">
+              {sol.supervision_nombre ? 'Reasignar supervisor' : 'Asignar supervisor'}
+            </p>
+            <div className="flex gap-3 flex-wrap items-end">
+              <div className="flex-1 min-w-[240px]">
+                <select
+                  value={supervisionIdSel}
+                  onChange={(e) => { setSupervisionIdSel(e.target.value); setSuperMsg(null); }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  <option value="">— Seleccione un usuario —</option>
+                  {usuarios.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nombre}{u.cargo ? ` · ${u.cargo}` : ''}{u.gerencia_nombre ? ` (${nombreGerenciaCompleto(u.gerencia_nombre)})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={reasignarSupervisor}
+                disabled={savingSuper || !supervisionIdSel}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
+                style={{ backgroundColor: 'var(--brand-secondary)' }}
+              >
+                {savingSuper ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                {sol.supervision_nombre ? 'Reasignar supervisor' : 'Asignar supervisor'}
+              </button>
+            </div>
+            {superMsg && (
+              <div
+                className={`mt-3 flex items-start gap-2 text-sm font-semibold rounded-lg px-3 py-2 border ${
+                  superMsg.ok
+                    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                    : 'text-red-700 bg-red-50 border-red-200'
+                }`}
+              >
+                {superMsg.ok ? <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" /> : <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />}
+                {superMsg.text}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── VII. DOCUMENTOS JURÍDICOS ─────────────────────────────── */}
