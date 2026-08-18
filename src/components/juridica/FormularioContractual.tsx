@@ -12,6 +12,7 @@ import { cargarUsuariosDirectorio, CandidatoDirectorio } from '../../lib/directo
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
 import { DetallePlaneacionContractualParte1, DetallePlaneacionContractualParte2 } from '../shared/DetallePlaneacionContractual';
 import { SeccionPresupuestoLectura } from '../shared/SeccionPresupuestoLectura';
+import { BloqueFirma } from '../shared/BloqueFirma';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
 
@@ -151,6 +152,26 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
       setSuperMsg({ ok: false, text: e.message || 'Error al guardar supervisor' });
     } finally {
       setSavingSuper(false);
+    }
+  };
+
+  /** Cuando el Acta de Designación/Asignación de Supervisor queda firmada, la
+   * registra como documento "acta_supervision" (apuntando al PDF ya firmado
+   * en Adobe Sign) — mismo comportamiento que en Documentos finales. */
+  const registrarActaSupervisorFirmada = async (firma: { firma_id: string }) => {
+    try {
+      await apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/documentos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: 'Acta de Designación/Asignación de Supervisor (firmada).pdf',
+          tipo: 'acta_supervision',
+          url_storage: `/api/firmas/${firma.firma_id}/pdf-firmado`,
+          descripcion: 'Generada y firmada electrónicamente desde el portal',
+        }),
+      });
+    } catch (e) {
+      console.error('No se pudo registrar el acta de supervisión firmada:', e);
     }
   };
 
@@ -385,6 +406,15 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
                 {superMsg.text}
               </div>
             )}
+
+            <div className="mt-4">
+              <BloqueFirma
+                solicitudId={contratoId}
+                etapa="supervision"
+                descripcion="Genera el Acta de Designación/Asignación de Supervisor con los datos de este contrato y envíala a firma electrónica: firman la Directora Ejecutiva y el supervisor. Si este contrato ya tuvo un supervisor con acta firmada antes, el acta se genera como Asignación (reemplazo); si no, como Designación."
+                onFirmaCompleta={registrarActaSupervisorFirmada}
+              />
+            </div>
           </div>
         </div>
 
