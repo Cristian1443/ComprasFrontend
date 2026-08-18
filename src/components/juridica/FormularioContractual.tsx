@@ -8,6 +8,7 @@ import {
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../../authConfig';
 import { getGraphClient } from '../../lib/graphService';
+import { cargarUsuariosDirectorio, CandidatoDirectorio } from '../../lib/directorioUsuarios';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
@@ -83,8 +84,9 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
   const [spLoading, setSpLoading] = useState(false);
   const [spError, setSpError] = useState<string | null>(null);
 
-  // Reasignar supervisor
-  const [usuarios, setUsuarios] = useState<any[]>([]);
+  // Reasignar supervisor — candidatos traídos del directorio de Azure AD
+  // (todo el grupo, no solo quienes ya iniciaron sesión en el portal)
+  const [usuarios, setUsuarios] = useState<CandidatoDirectorio[]>([]);
   const [supervisionIdSel, setSupervisionIdSel] = useState('');
   const [savingSuper, setSavingSuper] = useState(false);
   const [superMsg, setSuperMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -93,30 +95,29 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
     const load = async () => {
       setLoading(true);
       try {
-        const [rSol, rDocs, rCal, rUsuarios] = await Promise.allSettled([
+        const [rSol, rDocs, rCal] = await Promise.allSettled([
           apiFetch(`${API_URL}/api/solicitudes/${contratoId}`).then(r => r.json()),
           apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/documentos`).then(r => r.json()),
           apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/calificacion`).then(r => r.json()),
-          apiFetch(`${API_URL}/api/usuarios`).then(r => r.json()),
         ]);
         if (rSol.status === 'fulfilled') setSol(rSol.value);
         if (rDocs.status === 'fulfilled') setDocs(Array.isArray(rDocs.value) ? rDocs.value : []);
         if (rCal.status === 'fulfilled') setCalificacion(rCal.value);
-        if (rUsuarios.status === 'fulfilled') setUsuarios(Array.isArray(rUsuarios.value) ? rUsuarios.value : []);
       } finally {
         setLoading(false);
       }
     };
     load();
+    cargarUsuariosDirectorio(instance, accounts).then(setUsuarios);
   }, [contratoId]);
 
   const reasignarSupervisor = async () => {
-    if (!supervisionIdSel) return;
-    const nuevoNombre = usuarios.find(u => u.id === supervisionIdSel)?.nombre || 'este usuario';
+    const candidato = usuarios.find(u => u.id === supervisionIdSel);
+    if (!candidato) return;
     const supervisorActual = sol?.supervision_nombre;
-    if (supervisorActual && supervisorActual !== nuevoNombre) {
+    if (supervisorActual && supervisorActual !== candidato.nombre) {
       const confirmado = window.confirm(
-        `¿Reasignar la supervisión de este contrato de "${supervisorActual}" a "${nuevoNombre}"?\n\n` +
+        `¿Reasignar la supervisión de este contrato de "${supervisorActual}" a "${candidato.nombre}"?\n\n` +
         `Los entregables, informes, documentos y facturas ya registrados NO se pierden — quedan disponibles tal cual para el nuevo supervisor. Se le notificará por correo.`
       );
       if (!confirmado) return;
@@ -127,7 +128,12 @@ export function FormularioContractual({ contratoId, onBack }: Props) {
       const resp = await apiFetch(`${API_URL}/api/juridica/solicitudes/${contratoId}/supervisor`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supervision_id: supervisionIdSel }),
+        body: JSON.stringify({
+          azure_id: candidato.id,
+          email: candidato.email,
+          nombre: candidato.nombre,
+          cargo: candidato.cargo,
+        }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(data?.error || 'Error al actualizar supervisor');

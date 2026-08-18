@@ -1,7 +1,9 @@
 import { apiFetch } from '../../lib/apiClient';
 import React, { useEffect, useState } from 'react';
+import { useMsal } from '@azure/msal-react';
 import { FolderOpen, Upload, FileText, Trash2, Loader2, ArrowLeft, CheckCircle2, User, Save, ExternalLink, Hash, Lock, AlertCircle } from 'lucide-react';
 import { TipoDocumentoFinal } from '../../lib/flujoJuridico';
+import { cargarUsuariosDirectorio, CandidatoDirectorio } from '../../lib/directorioUsuarios';
 import { nombreGerenciaCompleto } from '../../lib/gerencias';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:3001';
@@ -25,6 +27,7 @@ interface GestionDocumentosProps {
 }
 
 export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProps) {
+  const { instance, accounts } = useMsal();
   const [solicitudes, setSolicitudes] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string>(solicitudId || '');
   const [detalle, setDetalle] = useState<any>(null);
@@ -32,8 +35,9 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
   const [adding, setAdding] = useState<TipoDocumentoFinal | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Supervisor
-  const [usuarios, setUsuarios] = useState<any[]>([]);
+  // Supervisor — candidatos traídos del directorio de Azure AD (todo el grupo,
+  // no solo quienes ya iniciaron sesión en el portal)
+  const [usuarios, setUsuarios] = useState<CandidatoDirectorio[]>([]);
   const [supervisionId, setSupervisionId] = useState<string>('');
   const [savingSuper, setSavingSuper] = useState(false);
   const [superOk, setSuperOk] = useState(false);
@@ -55,10 +59,7 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
     };
     loadSolicitudes().catch(console.error);
 
-    apiFetch(`${API_URL}/api/usuarios`)
-      .then(r => r.json())
-      .then(d => setUsuarios(Array.isArray(d) ? d : []))
-      .catch(console.error);
+    cargarUsuariosDirectorio(instance, accounts).then(setUsuarios);
   }, []);
 
   useEffect(() => {
@@ -132,10 +133,11 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
   const guardarSupervisor = async () => {
     if (!selectedId || !supervisionId) return;
 
-    const nuevoNombre = usuarios.find(u => u.id === supervisionId)?.nombre || 'este usuario';
-    if (supervisorActual && supervisorActual !== nuevoNombre) {
+    const candidato = usuarios.find(u => u.id === supervisionId);
+    if (!candidato) return;
+    if (supervisorActual && supervisorActual !== candidato.nombre) {
       const confirmado = window.confirm(
-        `¿Reasignar la supervisión de este contrato de "${supervisorActual}" a "${nuevoNombre}"?\n\n` +
+        `¿Reasignar la supervisión de este contrato de "${supervisorActual}" a "${candidato.nombre}"?\n\n` +
         `Los entregables, informes, documentos y facturas ya registrados NO se pierden — quedan disponibles tal cual para el nuevo supervisor. Se le notificará por correo.`
       );
       if (!confirmado) return;
@@ -148,7 +150,12 @@ export function GestionDocumentos({ solicitudId, onBack }: GestionDocumentosProp
       const resp = await apiFetch(`${API_URL}/api/juridica/solicitudes/${selectedId}/supervisor`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ supervision_id: supervisionId }),
+        body: JSON.stringify({
+          azure_id: candidato.id,
+          email: candidato.email,
+          nombre: candidato.nombre,
+          cargo: candidato.cargo,
+        }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
