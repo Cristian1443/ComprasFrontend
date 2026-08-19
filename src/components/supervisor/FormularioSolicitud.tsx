@@ -325,6 +325,10 @@ export function FormularioSolicitud({
   const { instance, accounts } = useMsal();
   const [listaEmpleados, setListaEmpleados] = useState<{ id: string; nombre: string; cargo: string; email: string }[]>([]);
   const [errorCargaEmpleados, setErrorCargaEmpleados] = useState<string>('');
+  // Regla real Invitación/TDR: la fija el Administrador en Parámetros
+  // (GET /api/configuracion/reglas-modalidad). Estos valores son solo el
+  // fallback mientras carga o si la petición falla.
+  const [reglasModalidad, setReglasModalidad] = useState<{ smlv: number; umbralTdrSmlv: number }>({ smlv: 1423500, umbralTdrSmlv: 50 });
   const [tabActual, setTabActual] = useState<Tab>('planeacion');
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [estadoActualSolicitud, setEstadoActualSolicitud] = useState<string>('borrador');
@@ -409,6 +413,25 @@ export function FormularioSolicitud({
     }
     loadUsers();
   }, [instance, accounts]);
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const res = await apiFetch(`${API_URL}/api/configuracion/reglas-modalidad`);
+        if (res.ok && !cancelado) {
+          const data = await res.json();
+          setReglasModalidad({
+            smlv: Number(data.smlv) || 1423500,
+            umbralTdrSmlv: Number(data.umbralTdrSmlv) || 50,
+          });
+        }
+      } catch (err) {
+        console.error('No fue posible cargar la regla de modalidad Invitación/TDR, se usa el valor por defecto.', err);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, []);
 
   // Cargar detalle real desde la API cuando entramos desde "Mis Solicitudes"
   useEffect(() => {
@@ -1162,14 +1185,16 @@ export function FormularioSolicitud({
   const procesarEnvio = async () => {
     const proponentesValidos = proponentes.filter(p => (p.nombreProveedor || '').trim().length > 0);
 
-    // 1. Validar SMLV — Invitación < 25 SMLV, TDR >= 25 SMLV.
+    // 1. Validar SMLV — Invitación < umbral, TDR >= umbral (umbral = UMBRAL_TDR_SMLV × SMLV_2025,
+    // configurables por el Administrador en Parámetros; ver reglasModalidad).
     // El umbral está en pesos, así que un contrato en USD/EUR debe convertirse
     // antes de comparar (si no, un valor grande en dólares parece "pequeño" en
     // pesos y nunca alcanza el umbral). Se usa una tasa aproximada fija — no
     // una TRM configurable ni un servicio externo — solo para ubicar el
     // contrato en el lado correcto del umbral de SMLV.
-    const smlv = 2000000;
-    const umbralSMLVTexto = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(25 * smlv);
+    const { smlv, umbralTdrSmlv } = reglasModalidad;
+    const umbralValor = umbralTdrSmlv * smlv;
+    const umbralSMLVTexto = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(umbralValor);
     const TASA_APROX_COP: Record<string, number> = { COP: 1, USD: 4000, EUR: 4300 };
     const valorEnCopAprox = (): number => {
       if (datosPlaneacion.moneda === 'COMBINADA') {
@@ -1182,12 +1207,12 @@ export function FormularioSolicitud({
       return valorValidacion * (TASA_APROX_COP[datosPlaneacion.moneda] ?? 1);
     };
     const valor = valorEnCopAprox();
-    if (esInvitacion && valor >= (25 * smlv)) {
-      alert(`Error: La modalidad Invitación solo permite valores menores a 25 SMLV (${umbralSMLVTexto}). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a TDR o ajuste el presupuesto.`);
+    if (esInvitacion && valor >= umbralValor) {
+      alert(`Error: La modalidad Invitación solo permite valores menores a ${umbralTdrSmlv} SMLV (${umbralSMLVTexto}). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a TDR o ajuste el presupuesto.`);
       return;
     }
-    if (esTDR && valor < (25 * smlv)) {
-      alert(`Error: La modalidad TDR solo permite valores iguales o superiores a 25 SMLV (${umbralSMLVTexto}). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a Invitación o ajuste el presupuesto.`);
+    if (esTDR && valor < umbralValor) {
+      alert(`Error: La modalidad TDR solo permite valores iguales o superiores a ${umbralTdrSmlv} SMLV (${umbralSMLVTexto}). El valor actual equivale aproximadamente a ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(valor)}. Por favor cambie la modalidad a Invitación o ajuste el presupuesto.`);
       return;
     }
 
